@@ -386,7 +386,7 @@ index 47dcfd7..db16d30 100644
  skyward-install = { path = "../skyward-install" }
  skyward-net = { path = "../skyward-net" }
 diff --git a/crates/skyward-ui/src/app.rs b/crates/skyward-ui/src/app.rs
-index fe3a1b6..eb2314b 100644
+index fe3a1b6..f81ffa6 100644
 --- a/crates/skyward-ui/src/app.rs
 +++ b/crates/skyward-ui/src/app.rs
 @@ -33,8 +33,18 @@ use skyward_vab::{BootSlots, Hold, Slot, SnapshotState, Standing};
@@ -905,7 +905,7 @@ index fe3a1b6..eb2314b 100644
                  let side = if x < edge {
                      Some(true)
                  } else if x > m.w as f32 - edge {
-@@ -6090,6 +6406,22 @@ impl App {
+@@ -6090,7 +6406,33 @@ impl App {
                  };
              }
              Touch::Move(x, y) => match std::mem::replace(&mut self.drag, Drag::Idle) {
@@ -926,9 +926,20 @@ index fe3a1b6..eb2314b 100644
 +                    self.drag = Drag::ShadeClose { start_y };
 +                }
                  Drag::Press { x: x0, y: y0, action, edge: at_edge, at } => {
++                    // A pull up on the control centre puts it away, from
++                    // anywhere on the panel but its sliders.
++                    if self.screen() == Screen::Control
++                        && y0 - y > m.dp(80.0)
++                        && !matches!(action, Some(Action::Slider(_)) | Some(Action::Confirm(_)))
++                    {
++                        self.back(now);
++                        self.drag = Drag::Idle;
++                        return Vec::new();
++                    }
                      self.tracker.add(now, y);
                      let (dx, dy) = (x - x0, y - y0);
-@@ -6570,6 +6902,8 @@ impl App {
+                     self.drag = match at_edge {
+@@ -6570,6 +6912,8 @@ impl App {
                      self.refresh();
                  }
              }
@@ -937,7 +948,7 @@ index fe3a1b6..eb2314b 100644
          }
          fx
      }
-@@ -9768,6 +10102,26 @@ mod tests {
+@@ -9768,6 +10112,26 @@ mod tests {
          assert_eq!(first.arrive(), vec![Effect::OpenData], "a recovery that starts on the page opens it as well");
      }
  

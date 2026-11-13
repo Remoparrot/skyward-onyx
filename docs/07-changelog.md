@@ -13,11 +13,11 @@
 | 项 | 值 |
 | --- | --- |
 | 镜像 | `recovery.img` · 104,857,600 字节 |
-| SHA-256 | `59f1f439993f793bca23a75b169ca7aedf6736f1214311d3f4aee27bd34a88d8` |
-| 内含 skyward | 8,655,096 字节 · `d12d6bb963283c5c82b15b5a8b9de0cd40bf22440a6d88e98950d0a30d19f65e` |
-| ramdisk | 50,631,040 字节 · 1062 条 |
+| SHA-256 | `fe567d23c77e0cf30bdee64e1dc317b88ef0f7a613a97d3326fc4a0879f036d3` |
+| 内含 skyward | 8,655,096 字节 · `f4c63b76cc502c6419324157265c7b2d027e1e283441cf7e3e7c71710c6c1cf3` |
+| ramdisk | 50,631,043 字节 · 1062 条 |
 | 底包 | OS4.0.2.0.XOLCNXM（Android 17） |
-| zip | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,807,668 字节 · `0d0c2f03…4dbb5` |
+| zip | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,807,784 字节 · `0d0c2f03…4dbb5` |
 | 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · `ce538507…cd3357` |
 
 ### 改了什么
@@ -36,6 +36,7 @@
 - WLAN 扫描 CMCC-A9s7-5G（5 GHz / SAE），`wpa_state=COMPLETED`；重启后自动连接，`192.168.1.227/24`；
 - 振动驱动：`awinic_haptic` 进入 RAM 模式，`level=0x40`，`duration=16`；
 - 锁屏启动：无 recovery 密码时为滑动锁屏，`/data` 不打开；种入 4 位锁后为键盘，UI 存活。
+- 注入触摸：从滑锁轨道左到右拖动后 `/data` 挂载、进入解密页；顶部下滑打开控制中心，WLAN 磁贴能关/开，上滑能关闭。
 - user 0 CE：`skyward data --credential <用户锁屏密码>` 后 `/data/media/0` 真实文件名，`DCIM/Camera` 的 JPEG 可读；user 999 仍锁。
 
 ### 已知限制

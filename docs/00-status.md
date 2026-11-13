@@ -14,10 +14,10 @@
 | 版本 | `v0.3.0-onyx.1`（OS4 底包 + WLAN / 振动 / UI） |
 | 构建日期 | 2026-11-13 |
 | 镜像 | `recovery.img` · 104,857,600 字节 |
-| 镜像 SHA-256 | `59f1f439993f793bca23a75b169ca7aedf6736f1214311d3f4aee27bd34a88d8` |
-| ramdisk | 50,631,040 字节（LZ4）· 1062 个 cpio 条目 |
-| 内含 skyward | 8,655,096 字节 · `d12d6bb963283c5c82b15b5a8b9de0cd40bf22440a6d88e98950d0a30d19f65e` |
-| zip（在线更新用） | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,807,668 字节 · `fa0edbcfd6966388fc9d1bdb369498c3f73469caa56d087fee87c0b006c0610a` |
+| 镜像 SHA-256 | `fe567d23c77e0cf30bdee64e1dc317b88ef0f7a613a97d3326fc4a0879f036d3` |
+| ramdisk | 50,631,043 字节（LZ4）· 1062 个 cpio 条目 |
+| 内含 skyward | 8,655,096 字节 · `f4c63b76cc502c6419324157265c7b2d027e1e283441cf7e3e7c71710c6c1cf3` |
+| zip（在线更新用） | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,807,784 字节 · `bd4a8b7ecac7f3ff413ebfcb008ede92a9b881fcee27fc5a0a5c94a16a837dcb` |
 | 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · 104,857,600 字节 · `ce53850714fe2ca9ab22600a00e71813df2775dc94244192c83a224d7ecd3357` |
 | 上游 | `kirklin/skyward` @ `ff1668fdb72a46f22152a6540f49728c42081aba`（v0.2.0）+ 0001–0004 |
 | 真机 | ✅ 已刷入 onyx：触摸服务、`/data` 自动挂载、WLAN 自动连接、振动驱动、自动进入解密页；锁屏/控制中心/双击亮屏已实现，见第 3 节 |
@@ -51,6 +51,8 @@
 | WLAN 自动连接 | 重启 recovery 后自动连上，`ifconfig wlan0`：`192.168.1.227/24`，IPv6 全局地址；密码由 `/metadata/skyward/settings.json` 保存（0600） |
 | 振动 | `skyward haptic --config /skyward/device.toml`：驱动 `awinic_haptic` 进入 RAM 模式，`level=0x40`，`duration=16`；实际振感待用户确认 |
 | recovery 锁屏（启动） | 无 recovery 密码时为图 1 的滑动锁屏（日期 / 时钟 / 电量 / 滑动解锁）；种入 4 位恢复密码后为数字键盘；启动时 `/data` 不打开，滑动/解锁后才进「解密」 |
+| 锁屏滑动（注入触摸） | 用 `sendevent` 往 `/dev/input/event7` 注入从滑锁轨道左到右的拖动：`/data` 挂载、进入解密页 |
+| 控制中心（注入触摸） | 顶部下滑打开面板；点 WLAN 磁贴能关/开 WLAN；面板上滑关闭（用再次点 WLAN 磁贴不变来验证已关闭） |
 | 自动连接持久化 | 自动连接之后 settings 中的 `wlan.password` 仍为原密码（修复了首次自动连接会把密码写空的问题） |
 
 > 早期测试中两次黑屏重启，均对应执行了 `setprop ctl.stop recovery`；之后不再使用该命令。
@@ -64,7 +66,7 @@
 | user 0 CE（相册 / 微信） | ✅ | 用用户锁屏密码通过 `skyward data --credential` 验证：`/data/media/0` 真实文件名，`DCIM/Camera` 的 JPEG 可读 |
 | user 999（第二空间 / 应用分身） | ❌ | 只有 weaver 绑定的 protector；recovery 没有 eSE 通道 |
 | recovery 锁屏（输入解锁） | ⚠️ | 图 1 的滑动锁屏与「未解锁不打开 data」已验；滑动解锁后自动进解密页；没有真机触摸注入，未手动滑过 |
-| 控制中心 | ⚠️ | 图 2 样式：顶部下滑、网格磁贴 + 亮度/振动滑杆；背景是当前页的模糊副本，卡片半透明；底部把手上滑/点按关闭；已按用户反馈修过背景黑与滑不走，未在自动环境手动滑 |
+| 控制中心 | ✅ | 图 2 样式：顶部下滑、网格磁贴 + 亮度/振动滑杆；背景是当前页的模糊副本，卡片半透明；上滑/底部把手/返回关闭。已用注入触摸验证打开、WLAN 磁贴、上滑关闭；截图/重启/熄屏/滑杆未逐项点 |
 | 双击亮屏 | ⚠️ | 已实现（息屏 400 ms 内两次点击）；本次没有可注入真机触摸的手段，未手动验证 |
 | 禁用 AVB 2.0 | ⚠️ | 页面与 `avbctl` 调用已实现；**按要求未测试** |
 | Skyward 在线更新 | ⚠️ | 已指向 `Remoparrot/skyward-onyx`，asset 命名与版本比较已改；没有「更新到更高版本」可测，未跑完整下载/写入 |
@@ -107,7 +109,7 @@
 ## 6. 发布检查单
 
 - [x] 镜像大小 104,857,600
-- [x] 头部 v4 / kernel 0 / ramdisk 50,631,040
+- [x] 头部 v4 / kernel 0 / ramdisk 50,631,043
 - [x] `system/bin/recovery`、`skyward/system-init`、`skyward/device.toml`、`skyward/wpa-aidl-shim.so` 存在
 - [x] 镜像内二进制与编译产物 sha256 一致
 - [x] 原厂 recovery 的 sha256 与配置 `[stock] recovery` 一致（`ce538507…`）
