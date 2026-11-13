@@ -1,8 +1,8 @@
 # 当前状态
 
 > 状态：**现行**
-> 最后更新：2026-11-13
-> 对应版本：`v0.3.0-onyx.3`
+> 最后更新：2026-11-14
+> 对应版本：`v0.3.0-onyx.4`
 > 设备：Redmi Turbo 4 Pro（`onyx`）· 底包 OS4.0.2.0.XOLCNXM（Android 17）
 
 ---
@@ -11,15 +11,15 @@
 
 | 项 | 值 |
 | --- | --- |
-| 版本 | `v0.3.0-onyx.3`（OS4 底包 + WLAN / 振动 / UI + 并行更新下载） |
-| 构建日期 | 2026-11-13 |
+| 版本 | `v0.3.0-onyx.4`（OS4 底包 + WLAN / 振动 / UI + 图形浏览器 + 并行下载） |
+| 构建日期 | 2026-11-14 |
 | 镜像 | `recovery.img` · 104,857,600 字节 |
-| 镜像 SHA-256 | `d0a67128ee1fbc54033dadae2cf9c55b429733c4b163e1528dedbaca370360c5` |
-| ramdisk | 50,681,746 字节（LZ4）· 1062 个 cpio 条目 |
-| 内含 skyward | 8,753,632 字节 · `bb75d7e4aef48a3a5f3b986e6b0974ad7daf531ed5e25d7fbb88611fc942ba44` |
-| zip（在线更新用） | `skyward-v0.3.0-onyx.3-onyx-OS4.0.2.0.XOLCNXM.zip` · 46,347,671 字节 · `9f41916f651927de297222832a2f3295f2a445fdc87e44f16480957fdbbeb874` |
+| 镜像 SHA-256 | `239d0fbb38c2dbde16595c1335ffe038df3ff48001d167bf3a9c2cfd4020f3ea` |
+| ramdisk | 51,185,270 字节（LZ4）· 1062 个 cpio 条目 |
+| 内含 skyward | 9,532,768 字节 · `84342335344898eda01fd9977a3b1be272c49a1cb92945d2be21bfb0a7fc6a85` |
+| zip（在线更新用） | `skyward-v0.3.0-onyx.4-onyx-OS4.0.2.0.XOLCNXM.zip` · 46,292,174 字节 · `bdbff7e77664d1e5471ebb32d2cbc1fecd64083504568bdfbc949ebbc8de5935` |
 | 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · 104,857,600 字节 · `ce53850714fe2ca9ab22600a00e71813df2775dc94244192c83a224d7ecd3357` |
-| 上游 | `kirklin/skyward` @ `ff1668fdb72a46f22152a6540f49728c42081aba`（v0.2.0）+ 0001–0006 |
+| 上游 | `kirklin/skyward` @ `ff1668fdb72a46f22152a6540f49728c42081aba`（v0.2.0）+ 0001–0007 |
 | 真机 | ✅ 已刷入 onyx：触摸服务、`/data` 自动挂载、WLAN 自动连接、振动驱动、自动进入解密页；锁屏（每次息屏点亮）已实现，见第 3 节 |
 
 发布资产在 [Releases](https://github.com/Remoparrot/skyward-onyx/releases)；仓库内只有源码、补丁、配置和文档。
@@ -34,7 +34,8 @@
 | v4 | `b41bee5b…f83f` | user 0 CE 解开；OS3.0.306.0 底包 |
 | v0.3.0-onyx.1 | `714dfc27…0ba5` | OS4.0.2.0 底包；WLAN / 振动 / 锁屏（每次亮屏）/ 双击亮屏 / 自动解密页 / AVB 页；控制中心已按用户要求删除 |
 | v0.3.0-onyx.2 | `ebed2df2…3060` | 首页机型卡片四列读数；在线更新接受裸 `recovery.img`、支持本地刷入 |
-| v0.3.0-onyx.3 | `d0a67128…60c5` | **当前**；更新下载最多 512 连接并行；可用空间读数在解密后补齐；更新页对本地刷入显示进度/结果 |
+| v0.3.0-onyx.3 | `d0a67128…60c5` | 更新下载最多 512 连接并行；可用空间读数在解密后补齐；更新页对本地刷入显示进度/结果 |
+| v0.3.0-onyx.4 | `239d0fbb…f3ea` | **当前**；「下载」页改成图形浏览器（HTML/CSS 子集 + 图片 + 链接）；URL 下载走 512 并行；关于本机署名加上 Remoparrot |
 
 ---
 

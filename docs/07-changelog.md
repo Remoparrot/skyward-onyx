@@ -6,6 +6,45 @@
 
 ---
 
+## v0.3.0-onyx.4 · 2026-11-14
+
+**主题：「下载」页改成图形浏览器（自带 HTML/CSS 排版与图片，不跑 JavaScript）+ 浏览器里的下载走 512 并行 + 关于本机署名**
+
+| 项 | 值 |
+| --- | --- |
+| 镜像 | `recovery.img` · 104,857,600 字节 |
+| SHA-256 | `239d0fbb38c2dbde16595c1335ffe038df3ff48001d167bf3a9c2cfd4020f3ea` |
+| 内含 skyward | 9,532,768 字节 · `84342335344898eda01fd9977a3b1be272c49a1cb92945d2be21bfb0a7fc6a85` |
+| ramdisk | 51,185,270 字节 · 1062 条 |
+| 底包 | OS4.0.2.0.XOLCNXM（Android 17） |
+| zip | `skyward-v0.3.0-onyx.4-onyx-OS4.0.2.0.XOLCNXM.zip` · 46,292,174 字节 · `bdbff7e77664d1e5471ebb32d2cbc1fecd64083504568bdfbc949ebbc8de5935` |
+| 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · `ce538507…cd3357`（未改动） |
+
+### 改了什么
+
+- **浏览器**（新模块 `skyward-ui/src/web/`，约 2,700 行）：自带的小排版引擎——HTML 容错解析、CSS 子集（display / 颜色 / 字号 / 粗细 / 对齐 / 边距 / 行高 / 背景色 / 列表 / 宽度）、块与行内排版与折行（中文逐字可断行）、`<img>` 图片（PNG / JPEG / WebP / GIF，线性缩放）、链接命中与跳转、后退/刷新、地址栏 + 屏幕键盘、触摸滚动、按屏幕分批绘制（长页不占内存）；字符集按 `Content-Type` / `<meta charset>`，中文站常见 GBK 也能读。
+- **只由脚本生成的页面**（原神/星穹铁道等官网）：页面本身没有内容时，浏览器改用页面自报的信息渲染——`<title>`、`meta description`、`og:image` 与内联样式里的图片、页面里的链接，并给出提示而不是一片空白。
+- **浏览器内下载**：地址栏「下载」或点到非 HTML 的链接即开始下载，进度卡（网速 / 暂停 / 继续 / 停止）留在浏览器页里；`skyward-net/download.rs` 新增 `save_fast`：先用 `Range: bytes=0-0` 问长度，服务端支持分段就走与更新同一套「64 KiB 分段、最多 512 连接」的并行下载，不支持就退回单连接。
+- **修复**：页面读取完成后的后续动作（如自动下载）原来被丢弃，现在与按键动作走同一条 effect 队列；二维码回传的 URL 会被截断的问题属已知项（页面读取只取一次 head）。
+- **关于本机**：署名由「© 2026 Kirk Lin」改为「© 2026 Kirk Lin & Remoparrot」。
+- **版本号**：`0.3.0-onyx.4`；新增 `patches/0007-onyx.4-browser.patch`（0001–0007 用干净上游重建，295 个文件逐字一致）。
+
+### 真机验证
+
+- `fastboot flash recovery` 写入 `0.3.0-onyx.4`；`dmesg`：`onyx 0.3.0-onyx.4 recovery up`；`/system/bin/recovery` 的 sha256 与镜像内一致。
+- Bing 搜索页（`cn.bing.com/search?q=skyward+recovery`）：约 600 ms 取回，排版后 700+ 文本段 / 250+ 链接；截图确认标题、摘要、链接、颜色都对，点链接可跳转，`后退` 能回来。
+- `bilibili.com`：SSR 的文字与 12 张封面图都渲染出来（导航、分类、卡片标题、横幅图）。
+- `ys.mihoyo.com/main/`（纯脚本页）：显示官网标题、2.3 版本简介与页面自带的图，不再是白屏。
+- 本机测试页（标题/段落/背景色/图片/列表/链接）：全部正常；点「去第二页」跳转、`后退` 回第一页。
+- 下载：`/sdcard/Download/photo.png`（33 KB）与 `/sdcard/Download/x.img`（104,857,600 字节）都经浏览器下载完成；后者走 512 并行，本机 range 服务器约 12 秒（≈8.7 MB/s），与 Skyward 更新同一套速度。
+- 关于本机：署名显示「© 2026 Kirk Lin & Remoparrot」。
+
+### 已知限制
+
+- 不运行 JavaScript，也没有 flex/grid 版式（按块排版）：脚本应用类站点（原神官网的动效、B 站的播放器、Bing 首页）只能显示静态内容；视频、WebGL 不予支持。
+- 图片按页面里 `<img>` 与内联样式取，CSS 外部样式表里的背景图不取；HTTPS 只走系统内置根证书。
+- 二维码回传的 URL 偶发被截短（服务器只读一次请求头）；地址栏直接输入或用 `keyboard` 不受影响。
+
 ## v0.3.0-onyx.3 · 2026-11-13
 
 **主题：更新下载改为最多 512 连接并行（GitHub 45.85 MB 从约 17 分钟降到 17.2 秒）+ 首页读数在解密后补齐 + 更新页对本地刷入的进度/结果反馈**

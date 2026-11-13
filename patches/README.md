@@ -154,9 +154,29 @@ git -C vendor/skyward apply --check patches/0003-onyx-ce-fallback.patch
 git -C vendor/skyward apply --check patches/0004-onyx-v0.3.0-wifi-ui.patch
 git -C vendor/skyward apply --check patches/0005-onyx-readings.patch
 git -C vendor/skyward apply --check patches/0006-onyx.3-fast-download.patch
+git -C vendor/skyward apply --check patches/0007-onyx.4-browser.patch
 ```
 
-六个都过，且应用后 `crates/` 与发布镜像对应的源码一致（v0.3.0-onyx.3 用 `diff -r --strip-trailing-cr` 对过，除 `.git` / `target` / `.onyx-patched` 外完全一致）。
+七个都过，且应用后 `crates/` 与发布镜像对应的源码一致（v0.3.0-onyx.4 用 295 个文件逐个比对，除 `.git` / `target` / `.onyx-patched` 外完全一致）。
+
+---
+
+## 0007-onyx.4-browser.patch
+
+**文件**：
+
+- `Cargo.toml`、`Cargo.lock`（版本号与 `image` / `encoding_rs` 依赖）
+- `crates/skyward-ui/Cargo.toml`、`src/lib.rs`
+- `crates/skyward-ui/src/web/`（新：`mod.rs` / `html.rs` / `css.rs` / `layout.rs` / `image.rs`）
+- `crates/skyward-ui/src/app.rs`、`src/pages.rs`
+- `crates/skyward-net/src/download.rs`、`crates/skyward-net/examples/fetch.rs`（新）
+- `crates/skyward/src/ui.rs`
+
+**行数**：约 4,300
+
+把「下载」页改成图形浏览器：`web/` 里是自带的 HTML 解析、CSS 子集、块/行内排版与图片绘制，`app.rs` 里是浏览器页的状态机（地址栏、前进后退、刷新、编辑态键盘、链接命中、下载卡），`ui.rs` 里是读取网页的后台线程（读页面与图片），`download.rs` 的 `save_fast` 让普通 URL 下载也走 512 并行分段（服务端不支持 `Range` 时退回单连接）。只有脚本才生成的页面改渲染页面自报的标题、简介、图片与链接。
+
+顺带把「关于本机」的署名改成 `© 2026 Kirk Lin & Remoparrot`。
 
 ## 修改 / 新增补丁
 

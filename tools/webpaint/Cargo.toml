@@ -1,0 +1,15 @@
+[package]
+name = "webpaint"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+anyhow = "1"
+skyward-info = { path = "../../vendor/skyward/crates/skyward-info" }
+skyward-net = { path = "../../vendor/skyward/crates/skyward-net" }
+skyward-ui = { path = "../../vendor/skyward/crates/skyward-ui" }
+skyward-vab = { path = "../../vendor/skyward/crates/skyward-vab" }
+
+[profile.release]
+opt-level = 3

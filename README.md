@@ -14,13 +14,13 @@
 
 | 项 | 值 |
 | --- | --- |
-| 最新 release | [`v0.3.0-onyx.3`](https://github.com/Remoparrot/skyward-onyx/releases/tag/v0.3.0-onyx.3) |
+| 最新 release | [`v0.3.0-onyx.4`](https://github.com/Remoparrot/skyward-onyx/releases/tag/v0.3.0-onyx.4) |
 | 镜像 | `recovery.img` · **104,857,600 字节**（整分区） |
-| SHA-256 | `d0a67128ee1fbc54033dadae2cf9c55b429733c4b163e1528dedbaca370360c5` |
-| ramdisk | 50,681,746 字节（LZ4）· 1062 个 cpio 条目 |
-| 内含 skyward | 8,753,632 字节 · `bb75d7e4aef48a3a5f3b986e6b0974ad7daf531ed5e25d7fbb88611fc942ba44` |
+| SHA-256 | `239d0fbb38c2dbde16595c1335ffe038df3ff48001d167bf3a9c2cfd4020f3ea` |
+| ramdisk | 51,185,270 字节（LZ4）· 1062 个 cpio 条目 |
+| 内含 skyward | 9,532,768 字节 · `84342335344898eda01fd9977a3b1be272c49a1cb92945d2be21bfb0a7fc6a85` |
 | 底包 | HyperOS **OS4.0.2.0.XOLCNXM**（Android 17） |
-| 上游 | `kirklin/skyward` @ `ff1668f`（v0.2.0）+ 6 个补丁 |
+| 上游 | `kirklin/skyward` @ `ff1668f`（v0.2.0）+ 7 个补丁 |
 | 真机 | ✅ 已刷入 onyx 并验证：触摸服务、`/data` 自动挂载、user 0 CE（`/data/media/0` 与相册 JPEG 可读）、WLAN 自动连接（`CMCC-A9s7-5G`，`192.168.1.227`）、振动驱动；用 `sendevent` 注入触摸验证滑动锁屏；电源键注入验证息屏/点亮后先显示滑动锁屏；唤醒黑屏已修（面板不再 rest/off，息屏只关背光） |
 | 风险 | ⚠️ 需要解锁 bootloader；只刷 recovery 分区，详见[安装](docs/04-install.md) |
 
@@ -44,8 +44,9 @@
 | 振动 | ✅ | AW8697（`awinic_haptic`，i2c 5-005a）的 `activate` / `duration` / `gain`；设置页滑杆与触摸反馈走同一路径 |
 | recovery 锁屏 | ✅ | 每次息屏再点亮都先显示图 1 的滑动锁屏（日期 / 时钟 / 电量 / 滑动解锁），解锁回原页面；开机首屏滑动后进解密页；设置 4–8 位 recovery 密码后改为数字键盘；只存 salt + SHA-256 |
 | 双击亮屏 | ✅ | 息屏后 400 ms 内两次点击点亮；设置页可关 |
-| 下载 | ✅ | 主界面「下载」：输入 URL 或用 `/sdcard/Download/link.txt`；键盘「确定」打开网页，「开始下载」才下载；文件存 `/sdcard/Download`，名字取 URL 最后一段；进度显示网速，可暂停/继续/停止；二维码打开本机网页，另一台手机可扫码回传 URL |
-| 网页（文本） | ⚠️ | 「确定」打开内置文本浏览器：HTTP/HTTPS、重定向、HTML 取字/标题，支持触摸滚动；**不运行 JavaScript/CSS，不显示图片**，不是 Chromium。已打开 `ys.mihoyo.com` 并显示标题/文本 |
+| 浏览器 | ✅ | 主界面「浏览器」：图形化网页，**不运行 JavaScript**。自带 HTML/CSS 子集引擎：标题/正文/列表/表格/颜色/背景/图片（PNG / JPEG / WebP / GIF）、链接点按、后退/刷新、地址栏与屏幕键盘、触摸滚动；只有脚本才生成的页面（如原神官网）显示其标题、简介、页面自带的图片和链接。已实测 Bing 搜索页、`bilibili.com`（封面图与卡片文字）、`ys.mihoyo.com/main/`（官方简介与图）、本地测试页 |
+| 下载（浏览器内） | ✅ | 地址栏「下载」直接下载，或在页面里点到文件链接（非 HTML 的响应自动转下载）；URL 下载与 Skyward 更新共用同一套 512 连接并行分段下载（服务端支持 `Range` 时），进度卡显示网速，可暂停/继续/停止；文件存 `/sdcard/Download`，名字取 URL 最后一段。实测本机 range 服务器 100 MB 用约 12 秒（≈8.7 MB/s）下完 |
+| 二维码回传链接 | ✅ | 浏览器页的「二维码」显示本机 8080 网页，另一台手机扫码输入 URL，回传到地址栏 |
 | 禁用 AVB 2.0 | ⚠️ | 高级 → 「禁用 AVB 2.0」页，写入当前槽位 vbmeta；**按要求未在真机点过** |
 | 自动打开解密页 | ✅ | 正常进 recovery 首屏即「解密」，自动打开 `/data`；有 recovery 锁屏时先锁屏 |
 | 记住解锁密码 | ✅ | 解密页「记住密码，下次自动解密」打开后，成功解锁即保存；下次开机自动解密 user 0。密码明文存 `/metadata/skyward/settings.json`（0600），换机/共享镜像前删掉 |
