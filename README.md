@@ -1,11 +1,11 @@
 # Skyward for onyx · 红米 Turbo 4 Pro
 
-> 把 [Skyward](https://github.com/kirklin/skyward)（Rust 从零写的第三方 recovery）移植到 **Redmi Turbo 4 Pro（onyx）**：触摸可用、`/data` 自动解密、**user 0 的 CE 存储（相册 / 微信）能用锁屏密码解开**，且只改写 recovery 分区、不动用户数据。
+> 把 [Skyward](https://github.com/kirklin/skyward)（Rust 从零写的第三方 recovery）移植到 **Redmi Turbo 4 Pro（onyx）**：触摸可用、`/data` 自动解密、**user 0 的 CE 存储（相册 / 微信）能用锁屏密码解开**，并补上 WLAN 自动连接、振动、recovery 锁屏、控制中心、双击亮屏和 Skyward 在线更新；只改写 recovery 分区、不动用户数据。
 
 [![Release](https://img.shields.io/github/v/release/Remoparrot/skyward-onyx?label=release&color=1f6feb)](https://github.com/Remoparrot/skyward-onyx/releases)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 [![Device](https://img.shields.io/badge/device-onyx%20%C2%B7%20Redmi%20Turbo%204%20Pro-green)](#设备)
-[![Base](https://img.shields.io/badge/base-OS3.0.306.0.WOLCNXM-orange)](#当前状态)
+[![Base](https://img.shields.io/badge/base-OS4.0.2.0.XOLCNXM-orange)](#当前状态)
 [![Upstream](https://img.shields.io/badge/upstream-kirklin%2Fskyward-8a2be2)](https://github.com/kirklin/skyward)
 
 ---
@@ -14,14 +14,14 @@
 
 | 项 | 值 |
 | --- | --- |
-| 最新 release | [`v0.2.0-onyx.4`](https://github.com/Remoparrot/skyward-onyx/releases/tag/v0.2.0-onyx.4) |
+| 最新 release | [`v0.3.0-onyx.1`](https://github.com/Remoparrot/skyward-onyx/releases/tag/v0.3.0-onyx.1) |
 | 镜像 | `recovery.img` · **104,857,600 字节**（整分区） |
-| SHA-256 | `b41bee5b5342e5a2f0f32ba01e9a0cca3c0ab69b520799e4e29ee49957f1f83f` |
-| ramdisk | 49,643,317 字节（LZ4）· 996 个 cpio 条目 |
-| 内含 skyward | 8,619,216 字节 · `51e902f6995918df4ff430c2acccdbaaa29ee00e8963588029a1f7423e86c7e5` |
-| 底包 | HyperOS **OS3.0.306.0.WOLCNXM**（Android 16） |
-| 上游 | `kirklin/skyward` @ `ff1668f`（v0.2.0） |
-| 真机 | ✅ 已刷入 onyx 并验证：触摸、`/data` 自动挂载、user 0 CE 解锁 |
+| SHA-256 | `baf93862fc3f8eebf04a82b4d250c985c5b3e77523e14e6358e82c6d947078b0` |
+| ramdisk | 50,625,278 字节（LZ4）· 1062 个 cpio 条目 |
+| 内含 skyward | 8,655,096 字节 · `a39596f82ea13411436da953fc664dac0a6504ae13181abf56ad64762ac8cd70` |
+| 底包 | HyperOS **OS4.0.2.0.XOLCNXM**（Android 17） |
+| 上游 | `kirklin/skyward` @ `ff1668f`（v0.2.0）+ 4 个补丁 |
+| 真机 | ✅ 已刷入 onyx 并验证：触摸、`/data` 自动挂载、WLAN 自动连接（`CMCC-A9s7-5G`，DHCP 到 `192.168.1.227`）、振动、自动进入解密页 |
 | 风险 | ⚠️ 需要解锁 bootloader；只刷 recovery 分区，详见[安装](docs/04-install.md) |
 
 > **一句话结论**：不需要 weaver，也不需要 OMAPI 桥。onyx 的 user 0 有两份 protector，其中一份绑在 gatekeeper 上；weaver 不可用时回退到它，用同一个锁屏密码即可拿到合成密码（SP），解开 CE。详细原理见[设计思路](docs/05-design-notes.md)。
@@ -37,8 +37,14 @@
 | adb root | ✅ | recovery 内 adb 是 root，无需手机授权 |
 | 备份 / 安装 / 文件管理 / 终端 | ⚠️ | 上游能力，随镜像提供；未逐项真机验证 |
 | MTP | ⚠️ | 已带 `skyward-mtp.rc`，未逐项验证 |
-| WLAN | ❌ | `onyx.toml` 未配置 `[wlan]`，设置页不出现 |
-| 振动 | ❌ | 未核实 sysfs，未配置 |
+| WLAN | ✅ | `qca_cld3_wcn7750` + `rfkill` 从 vendor_dlkm 加载；wpa_supplicant 用 `skyward/wpa-aidl-shim.so` 跳过 recovery 不认的 AIDL 注册；开机自动连接上次网络（密码存 `/metadata`，0600） |
+| Skyward 在线更新 | ✅ | 查 `Remoparrot/skyward-onyx` 的 Release，按 `onyx` 取 zip；需要 WLAN |
+| 振动 | ✅ | AW8697（`awinic_haptic`，i2c 5-005a）的 `activate` / `duration` / `gain`；设置页滑杆与触摸反馈走同一路径 |
+| recovery 锁屏 | ✅ | 4–8 位数字，只存 salt + SHA-256；开机先锁屏，解锁后才自动打开 `/data` |
+| 控制中心 | ✅ | 首页「控制中心」：WLAN、自动连接、亮度、双击亮屏、锁屏、重启/关机 |
+| 双击亮屏 | ✅ | 息屏后 400 ms 内两次点击点亮；设置页可关 |
+| 禁用 AVB 2.0 | ⚠️ | 控制中心/设置里的「禁用 AVB 2.0」页，写入当前槽位 vbmeta；**按要求未在真机点过** |
+| 自动打开解密页 | ✅ | 正常进 recovery 首屏即「解密」，自动打开 `/data`；有 recovery 锁屏时先锁屏 |
 | 双系统 / OTA / fastbootd | ⚠️ | 未在 onyx 上验证，不建议依赖 |
 
 ---
@@ -50,9 +56,10 @@ Skyward 不是 TWRP 的换皮，也不是 AOSP recovery：它用 Rust 从零写�
 本仓库是 onyx 的**设备移植**，包含：
 
 1. `devices/onyx.toml` —— 设备配置：屏幕、触摸服务、安全世界服务、底包信息；
-2. `patches/` —— 相对上游 v0.2.0 的三个补丁（Windows 宿主构建、OMAPI→SE 桥、onyx CE 回退）；
+2. `patches/` —— 相对上游 v0.2.0 的四个补丁（Windows 宿主构建、OMAPI→SE 桥、onyx CE 回退、v0.3.0 的 OS4/WLAN/UI）；
 3. `scripts/` —— 一条链的构建、取原厂镜像、打包、校验脚本；
-4. `docs/` —— 架构、构建、刷入、设计、踩坑、排错、版本记录与会话记录。
+4. `shim/` —— 让 vendor 的 AIDL `wpa_supplicant` 在 recovery 里跑起来的 `LD_PRELOAD` 小库（源码，构建时编进 ramdisk）；
+5. `docs/` —— 架构、构建、刷入、设计、踩坑、排错、版本记录与会话记录。
 
 镜像本身、原厂回滚镜像和 zip 在 [Releases](https://github.com/Remoparrot/skyward-onyx/releases) 里，不进仓库（单个 100 MB，超过 GitHub 单文件上限）。
 
@@ -65,7 +72,7 @@ Skyward 不是 TWRP 的换皮，也不是 AOSP recovery：它用 Rust 从零写�
 | SoC | 第四代骁龙 8s（SM8735） |
 | 屏幕 | 1280 × 2772，6.83"，density 512（400 dp 宽） |
 | 分区 | A/B；recovery 为独立分区，大小 100 MB |
-| 底包 | OS3.0.306.0.WOLCNXM（Android 16） |
+| 底包 | OS4.0.2.0.XOLCNXM（Android 17） |
 | 触摸 | Novatek NT38771 + 小米触摸层（raw 帧） |
 
 ---
@@ -96,15 +103,15 @@ Skyward 不是 TWRP 的换皮，也不是 AOSP recovery：它用 Rust 从零写�
 
 4. 第一次进入后：
 
-   - 首页能看到 `Redmi Turbo 4 Pro / onyx / OS3.0.306.0…`；
+   - 首屏是「解密」，自动打开 `/data`；首页能看到 `Redmi Turbo 4 Pro / onyx / OS4.0.2.0…`；
    - 触摸正常，说明 `touch_report_debug` 已拉起；
-   - 进「解密」，输入**锁屏密码**，`/data` 与 `/data/media/0` 出现真实文件名；
+   - 在「解密」页输入**锁屏密码**，`/data` 与 `/data/media/0` 出现真实文件名；
    - 相册、微信目录可读，即 user 0 CE 已解开。
 
 5. 回滚（随时可以）：
 
    ```sh
-   fastboot flash recovery recovery-stock-OS3.0.306.0.WOLCNXM.img
+   fastboot flash recovery recovery-stock-OS4.0.2.0.XOLCNXM.img
    ```
 
 刷 recovery 分区不会动 boot / system / userdata；即使 recovery 起不来，手机也能正常进系统，再用上面的命令刷回官方即可。完整步骤、风险与排错见 **[安装与回滚](docs/04-install.md)**。
@@ -131,7 +138,7 @@ Skyward 不是 TWRP 的换皮，也不是 AOSP recovery：它用 Rust 从零写�
 git clone https://github.com/Remoparrot/skyward-onyx.git
 cd skyward-onyx
 
-# 1) 取上游 v0.2.0 并打补丁（只需一次）
+# 1) 取上游 v0.2.0 并打 4 个补丁（只需一次）
 scripts/bootstrap.sh
 
 # 2) 指定 NDK 并自检
@@ -146,7 +153,7 @@ scripts/build-system-init.sh
 
 # 4) 打镜像并校验
 scripts/build-image.sh
-scripts/verify-image.sh out/skyward-v0.2.0-onyx-OS3.0.306.0.WOLCNXM.img
+scripts/verify-image.sh out/skyward-v0.3.0-onyx.1-OS4.0.2.0.XOLCNXM.img
 ```
 
 Windows 上有三个容易踩的点，脚本已经处理：`dlltool` 的系统临时目录不可写（改用仓库内 `tmp/`）、MSYS 的 `link.exe` 遮蔽 MSVC 链接器（强制 gnu 宿主工具链）、上游 `ramdisk.rs` 里有 Unix-only 代码（补丁 0001 用 `#[cfg(unix)]` 围起来）。
@@ -168,6 +175,8 @@ patches/                      相对上游 v0.2.0 的补丁（按顺序应用）
   0001-windows-host-build.patch
   0002-omapi-se-bridge.patch
   0003-onyx-ce-fallback.patch
+  0004-onyx-v0.3.0-wifi-ui.patch
+shim/wpa-aidl-shim.c          AIDL wpa_supplicant 的 LD_PRELOAD 小库（源码）
 scripts/                      bootstrap / 构建 / 取原厂镜像 / 打包 / 校验
 docs/                         文档（入口 docs/README.md）
 stock/                        原厂 recovery 的获取说明（镜像不进仓库）
@@ -206,8 +215,9 @@ out/                          本地构建输出（ignored）
 - **停 recovery 服务会重启整机**：不要 `setprop ctl.stop recovery`。
 - **偶发黑屏 / 重启**：两次对应上面停服务；其余原因未查清（`pstore` 为空）。出现时先看 `adb shell dmesg | tail` 与 `/sys/fs/pstore`。
 - **user 999 仍锁着**：只有 weaver 绑定的 protector，不影响 user 0。
-- **WLAN / 振动没有**：配置里未启用。
-- **不要把它当日常 recovery 用**：这是为 onyx + OS3.0.306.0 构建的移植，换底包后服务路径 / VINTF 可能变化。
+- **WLAN / 振动已启用**：WLAN 依赖 `skyward/wpa-aidl-shim.so`；换底包后要重新核对 `[wlan]` 的路径、服务名与 AIDL 行为。
+- **这是为 onyx + OS4.0.2.0 构建的移植**：换底包后服务路径 / VINTF 可能变化；刷前先确认 stock 回滚镜像。
+- **AVB 2.0 禁用页未实测**：改的是 vbmeta，误操作可能让系统起不来；没有回滚手段不要点。
 
 完整清单与处置见 **[排错](docs/08-troubleshooting.md)**。
 
@@ -227,4 +237,4 @@ out/                          本地构建输出（ignored）
 
 ## English
 
-A device port of [Skyward](https://github.com/kirklin/skyward) (a Rust recovery) for the **Redmi Turbo 4 Pro (`onyx`)**, built on HyperOS `OS3.0.306.0.WOLCNXM`. Touch works, `/data` auto-decrypts, and **user 0's credential-encrypted storage (photos, WeChat) unlocks with the lock-screen password** via a gatekeeper-bound fallback protector — no weaver/OMAPI bridge required. Only the recovery partition is written; roll back with the stock image from the release. See [`docs/`](docs/README.md) for the full build, design, and troubleshooting notes (Chinese).
+A device port of [Skyward](https://github.com/kirklin/skyward) (a Rust recovery) for the **Redmi Turbo 4 Pro (`onyx`)**, built on HyperOS `OS4.0.2.0.XOLCNXM`. Touch works, `/data` auto-decrypts, **user 0's credential-encrypted storage (photos, WeChat) unlocks with the lock-screen password**, and WLAN auto-connects, vibration, a recovery lock, a control centre and double-tap-to-wake are included. Only the recovery partition is written; roll back with the stock image from the release. See [`docs/`](docs/README.md) for the full build, design, and troubleshooting notes (Chinese).

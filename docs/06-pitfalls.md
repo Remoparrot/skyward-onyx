@@ -250,3 +250,56 @@ export PATH="$HOME/.cargo/bin:$PATH"
 **解法**：在 `vendor/skyward` 里改 → `git diff` 生成补丁 → 覆盖 `patches/` → 从干净源码重放验证。
 
 **如何避免**：agent.md 已把「不要直接改 vendor 后发版」列为禁止事项。
+
+---
+
+## 19. Windows 宿主上把手机路径当 Windows 路径校验
+
+**现象**：`[wlan] firmware: /vendor/... is not an absolute path`，`[haptics] resonance: /sys/... is not an absolute path`，宿主打不了镜像。
+
+**根因**：`Path::is_absolute()` 在 Windows 上要求盘符 / UNC；`/vendor` 在手机上是绝对路径，在 Windows 上不是。
+
+**解法**：手机侧绝对路径统一用 `Path::has_root()`（`/vendor` 在 Windows 上也以 `RootDir` 开头）。已改 `[[owners]]`、`[wlan] firmware`、`[haptics] resonance`。
+
+**如何避免**：配置里描述的是**手机**，不是宿主；校验用 `has_root`，不要用 `is_absolute`。
+
+## 20. vendor AIDL supplicant 的 `addService` 返回 -129
+
+**现象**：`wpa_supplicant` 打 `Starting AIDL supplicant` 后立刻 `Failed to initialize wpa_supplicant`；LD_PRELOAD 探针显示 `AServiceManager_addService(...) -> -129`。
+
+**根因**：`-129` 是 `EX_TRANSACTION_FAILED`；recovery 的 servicemanager / VINTF 不认这个 vendor AIDL 服务。
+
+**解法**：`shim/wpa-aidl-shim.c` 预加载，覆盖 `AServiceManager_addService` 返回 0；Skyward 只用 per-interface control socket。
+
+**如何避免**：先看 `addService` 返回值，不要先怀疑 SELinux / 库；换 vendor 后重新确认 supplicant 仍开 per-interface socket。
+
+## 21. wlan0 出现后立刻 `set_up` 报 EBUSY
+
+**现象**：`bring wlan0 up: Device or resource busy (os error 16)`，但 FW 日志还在初始化。
+
+**根因**：接口节点先出现，驱动还没准备好。
+
+**解法**：`bring_up` 对 `iface::set_up` 重试 10 秒（200 ms 一次）。
+
+**如何避免**：设备节点出现 ≠ 可用；驱动初始化要有重试。
+
+## 22. 自动连接把 WLAN 密码写空
+
+**现象**：首次自动连接成功，但 settings 的 `wlan.password` 变成空串，下一次启动连不上。
+
+**根因**：`set_wlan` 保存时只取 `state.wlan_password`；自动连接没有「用户刚输入的密码」。
+
+**解法**：保存时优先用本次输入的密码，否则沿用同一 SSID / 名字的已存密码。
+
+**如何避免**：手动连接和自动连接共用保存路径；测试「没有新密码时保留旧密码」。
+
+## 23. AW8697 的 FF 波形格式与 qcom 不同
+
+**现象**：qcom 上能用的 FF 点击，在 onyx 上不振动。
+
+**根因**：AW8697 的 `FF_PERIODIC` 自定义数据是 Awinic RTP / waveform，不是裸 i8 采样。
+
+**解法**：sysfs 后端（`activate` / `duration` / `effect_id` / `gain`）。
+
+**如何避免**：先查 `/proc/bus/input/devices`、`/sys/bus/i2c/devices/*` 和驱动日志，不要假设 FF 通用。
+

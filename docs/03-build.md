@@ -1,7 +1,7 @@
 # 构建
 
 > 状态：**现行**
-> 对应版本：`v0.2.0-onyx.4`
+> 对应版本：`v0.3.0-onyx.1`
 > 参考环境：Windows 10/11 + MSYS2 bash；Linux 理论可行但未实测。
 
 ---
@@ -57,7 +57,7 @@ scripts/bootstrap.sh
 
 1. `git clone https://github.com/kirklin/skyward.git vendor/skyward`；
 2. 检出固定 commit `ff1668fdb72a46f22152a6540f49728c42081aba`（v0.2.0）；
-3. 按顺序应用 `patches/0001`、`0002`、`0003`，并写 `vendor/skyward/.onyx-patched` 标记。
+3. 按顺序应用 `patches/0001`–`0004`，并写 `vendor/skyward/.onyx-patched` 标记。
 
 重来一遍：
 
@@ -77,6 +77,7 @@ export ANDROID_NDK=/path/to/android-ndk-r29
 
 scripts/build-pack.sh          # 宿主：build/host/release/skyward-pack[.exe]
 scripts/build-phone.sh         # 手机：build/phone/aarch64-linux-android/release/skyward
+                               # 同时编出 build/phone/wpa-aidl-shim.so（WLAN 的 LD_PRELOAD 小库）
 scripts/build-system-init.sh   # 手机：build/system-init/aarch64-linux-android/release/system-init
 ```
 
@@ -105,10 +106,10 @@ scripts/fetch-stock.sh
 
 `skyward-pack stock` 会读 `devices/onyx.toml` 的 `[stock]` 段，按 HTTP Range **只下载 recovery 分区那一段**（约 25 MB），下载完核对配置里的 `recovery` SHA-256，写到 `stock/recovery.img`。
 
-- 官方全量包：`onyx-ota_full-OS3.0.306.0.WOLCNXM-user-16.0-17ed95af98.zip`
+- 官方全量包：`onyx-ota_full-OS4.0.2.0.XOLCNXM-user-17.0-dbe344d29d.zip`
 - 期望 SHA-256：`99047b63a1b72e049617f9a2615778c0833899759ede92a7ec32454b722549a2`
 
-网络取不到时，直接从 Release 下载 `recovery-stock-OS3.0.306.0.WOLCNXM.img`，重命名成 `stock/recovery.img` 即可（哈希一致）。
+网络取不到时，直接从 Release 下载 `recovery-stock-OS4.0.2.0.XOLCNXM.img`，重命名成 `stock/recovery.img` 即可（哈希一致）。
 
 > 不要用别的底包的 recovery。换底包等于换服务路径、VINTF 和 AVB footer，本仓库的配置不保证适用。
 
@@ -134,7 +135,7 @@ scripts/build-image.sh
 输出：
 
 ```
-out/skyward-v0.2.0-onyx-OS3.0.306.0.WOLCNXM.img
+out/skyward-v0.3.0-onyx.1-OS4.0.2.0.XOLCNXM.img
 ```
 
 脚本会检查大小必须正好 `104857600`，并打印 SHA-256。
@@ -142,23 +143,23 @@ out/skyward-v0.2.0-onyx-OS3.0.306.0.WOLCNXM.img
 校验：
 
 ```sh
-scripts/verify-image.sh out/skyward-v0.2.0-onyx-OS3.0.306.0.WOLCNXM.img
+scripts/verify-image.sh out/skyward-v0.3.0-onyx.1-OS4.0.2.0.XOLCNXM.img
 ```
 
 它会检查：
 
 - 大小 104,857,600；
 - 头部 `header v4  kernel 0 bytes  ramdisk …`；
-- `system/bin/recovery`、`skyward/system-init`、`skyward/device.toml`、`skyward/MiSansVF.ttf` 存在；
+- `system/bin/recovery`、`skyward/system-init`、`skyward/device.toml`、`skyward/wpa-aidl-shim.so`、`skyward/MiSansVF.ttf` 存在；
 - 打印 ramdisk 条目数与 SHA-256；给第二个参数时与预期哈希比对。
 
 参考构建的输出：
 
 ```
 大小：104857600 字节
-header v4  kernel 0 bytes  ramdisk 49643317 bytes  OsVersionPatch(0.0.0, 2000-00)
-ramdisk 条目：996
-SHA-256：b41bee5b5342e5a2f0f32ba01e9a0cca3c0ab69b520799e4e29ee49957f1f83f
+header v4  kernel 0 bytes  ramdisk 50625278 bytes  OsVersionPatch(0.0.0, 2000-00)
+ramdisk 条目：1062
+SHA-256：baf93862fc3f8eebf04a82b4d250c985c5b3e77523e14e6358e82c6d947078b0
 ```
 
 ---
@@ -173,7 +174,8 @@ SHA-256：b41bee5b5342e5a2f0f32ba01e9a0cca3c0ab69b520799e4e29ee49957f1f83f
 4. 加 `system/bin/{7za,avbctl,resetprop,zstd}` 符号链接（都指向 recovery，按 argv[0] 分派）；
 5. 加 `skyward/{device.toml,system-init,字体,字体许可}`；
 6. 改 `prop.default`：`ro.secure=0`、`ro.adb.secure=0`、`ro.debuggable=1`、`ro.ota.allow_downgrade=true`；
-7. 重压 ramdisk（LZ4 legacy 帧），按原分区大小补齐，写未签名 AVB footer，`OriginalImageSize` 指向真正内容大小。
+7. `--extra RAMDISK_PATH=HOST_PATH` 额外加文件（本仓库用它把 `skyward/wpa-aidl-shim.so` 放进 ramdisk）；
+8. 重压 ramdisk（LZ4 legacy 帧），按原分区大小补齐，写未签名 AVB footer，`OriginalImageSize` 指向真正内容大小。
 
 对应源码（上游）：
 
@@ -234,7 +236,7 @@ Cannot create temporary file in C:\Users\...\AppData\Local\Temp\: Permission den
 ## 8. 可复现性
 
 - **镜像哈希**只对「同一份 stock + 同一份 skyward 二进制 + 同一份 system-init + 同一份字体」成立。打包步骤本身是确定的；
-- 实测：用发布镜像里的 `skyward`（`51e902f6…c7e5`）重新跑 `build-image.sh`，得到**完全相同**的 `b41bee5b…f1f83f`；
+- 实测：用发布镜像里的 `skyward`（`a39596f8…cd70`）重新跑 `build-image.sh`，得到**完全相同**的 `baf93862…78b0`；
 - 但**重新编译二进制**不一定逐字节一致：同一份源码在本机重编，`skyward` 大小仍是 8,619,216，逐字节比较只有 2 个字节不同（位于 build-id 附近），哈希变成 `0fdbee2a…`；整镜像哈希随之改变。这是 Rust / 链接器的正常现象，不是源码不同；
 - 因此「可复现」以**结构 + 行为**为准：大小、头部、ramdisk 条目、二进制大小、真机触摸 / 解密；不要拿整镜像哈希当唯一标准；
 - 字体、stock recovery 的字节必须与配置一致，否则镜像内容会变；
@@ -266,7 +268,7 @@ Cannot create temporary file in C:\Users\...\AppData\Local\Temp\: Permission den
 | `rusqlite` / `cc` 报错 | 缺 `CC_aarch64_linux_android` | 用 `scripts/env.sh` |
 | `aarch64-linux-android30-clang not found` | NDK 路径 / API 不对 | 检查 `ANDROID_NDK`，`ANDROID_API` 默认 30 |
 | `skyward-pack stock` 网络失败 | 官方 OTA 服务器不可达 | 用 Release 里的 stock 镜像改名 |
-| 镜像大小 ≠ 104857600 | 拿错 stock / 分区表不对 | 换回配置里的 OS3.0.306.0 stock |
+| 镜像大小 ≠ 104857600 | 拿错 stock / 分区表不对 | 换回配置里的 OS4.0.2.0 stock |
 | `verify-image.sh` 找不到条目 | 打包中断 / 二进制路径错 | 重跑 `build-image.sh`，看打包器输出 |
 
 ---
@@ -279,7 +281,7 @@ Cannot create temporary file in C:\Users\...\AppData\Local\Temp\: Permission den
 | system-init（手机） | `build/system-init/aarch64-linux-android/release/system-init` | ❌ |
 | skyward-pack（宿主） | `build/host/release/skyward-pack[.exe]` | ❌ |
 | 原厂 recovery | `stock/recovery.img` | ❌（Release 提供） |
-| 整分区镜像 | `out/skyward-v0.2.0-onyx-OS3.0.306.0.WOLCNXM.img` | ❌（Release 提供） |
+| 整分区镜像 | `out/skyward-v0.3.0-onyx.1-OS4.0.2.0.XOLCNXM.img` | ❌（Release 提供） |
 | zip | `out/*.zip`（可选，手动打） | ❌ |
 
 仓库只保留源码、补丁、配置、脚本、文档和 `SHA256SUMS`。

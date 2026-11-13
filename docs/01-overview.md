@@ -43,7 +43,7 @@
 **不是**：
 
 - 上游 Skyward 的官方仓库（上游是 [kirklin/skyward](https://github.com/kirklin/skyward)）；
-- 通用 recovery（只对 onyx + OS3.0.306.0.WOLCNXM 验证）；
+- 通用 recovery（只对 onyx + OS4.0.2.0.XOLCNXM 验证）；
 - 完整 HyperOS 固件包的分发渠道；
 - 数据恢复工具（它不会「找回」已删除的数据，只是让 recovery 能读已加密的 `/data`）。
 
@@ -57,7 +57,7 @@
 | 屏幕 | 6.83"，1280 × 2772，density 512（400 dp 宽） |
 | 触摸 | Novatek NT38771 + 小米触摸层；`/odm/bin/touch_report_debug` + `libtouchreport.so` |
 | 分区 | A/B；recovery 独立分区，104,857,600 字节 |
-| 底包 | HyperOS OS3.0.306.0.WOLCNXM（Android 16） |
+| 底包 | HyperOS OS4.0.2.0.XOLCNXM（Android 17） |
 | 安全芯片 | NXP eSE（weaver 插槽 1 绑 user 0 的第一份 protector） |
 
 ## 5. 能力边界
@@ -71,11 +71,15 @@
 | adb root | ✅ | recovery 内无需授权 |
 | 备份 / 安装 / 文件管理 / 终端 | ⚠️ | 上游能力，未逐项验证 |
 | MTP | ⚠️ | 带 rc，未逐项验证 |
-| WLAN | ❌ | 未配置 |
-| 振动 | ❌ | 未配置 |
+| WLAN | ✅ | 扫描 / 加入 / 重启自动连接；密码存 `/metadata`（0600） |
+| Skyward 在线更新 | ✅ | 查 `Remoparrot/skyward-onyx` 的 Release；需要 WLAN |
+| 振动 | ✅ | AW8697 sysfs；实际振感待用户确认 |
+| recovery 锁屏 / 控制中心 / 双击亮屏 | ✅ | 已实现；锁屏输入 / 控制中心 / 双击亮屏未手动逐项点过 |
+| 自动进入解密页 | ✅ | 正常进 recovery 首屏即解密 |
+| 禁用 AVB 2.0 | ⚠️ | 已实现；按要求未测试 |
 | 双系统 / OTA / fastbootd | ⚠️ | 未验证，不建议依赖 |
 
-「⚠️」表示二进制里有、上游也支持，但**没有在 onyx 上逐项跑过**。不要把它当成「已经能用」对外承诺。
+「⚠️」表示二进制里有、上游也支持，但**没有在 onyx 上逐项跑过**。不要把它当成「已经能用」对外承诺；v0.3.0-onyx.1 的诚实边界见 [`00-status.md`](00-status.md)。
 
 ## 6. 四次迭代
 
@@ -85,6 +89,7 @@
 | v2 | density 512；改拉起 `/odm/bin/touch_report`；加屏幕诊断 | 仍无触摸——onyx 没有 `touch_report`，只有 `_debug` |
 | v3 | 改 `touch_report_debug`；补 qseecomd / keymint / gatekeeper / secure_element / weaver / boot | 触摸正常，`/data` 自动解密；CE 仍锁 |
 | v4 | `data.rs` 在 weaver 不可用时回退到 gatekeeper 绑定的 protector | **user 0 CE 解开**；相册、微信可读 |
+| v0.3.0-onyx.1 | OS4 底包；WLAN + 自动连接；AW8697 振动；首屏自动解密；锁屏 / 控制中心 / 双击亮屏 / AVB 页 | 真机：`/data` 自动打开、WLAN 自动连、振动驱动；其余见状态页 |
 
 完整哈希与验证见 [`00-status.md`](00-status.md) 和 [`07-changelog.md`](07-changelog.md)。
 
@@ -98,7 +103,7 @@ sha256sum -c SHA256SUMS --ignore-missing
 fastboot flash recovery recovery.img
 fastboot reboot recovery
 # 3. 回滚
-fastboot flash recovery recovery-stock-OS3.0.306.0.WOLCNXM.img
+fastboot flash recovery recovery-stock-OS4.0.2.0.XOLCNXM.img
 ```
 
 ```sh

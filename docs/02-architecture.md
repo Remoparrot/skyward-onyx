@@ -1,7 +1,7 @@
 # 架构
 
 > 状态：**现行**
-> 对应版本：`v0.2.0-onyx.4`
+> 对应版本：`v0.3.0-onyx.1`
 > 读者：要改代码 / 要判断某个现象该看哪一层的人。
 
 ---
@@ -12,7 +12,7 @@ Skyward 的构建分两半：**宿主侧**把上游 Rust 源码编成打包器 `
 
 ```mermaid
 flowchart LR
-  OTA["官方全量包<br/>onyx-ota_full-OS3.0.306.0.WOLCNXM"] -->|"skyward-pack stock"| STOCK["stock/recovery.img<br/>104857600 B"]
+  OTA["官方全量包<br/>onyx-ota_full-OS4.0.2.0.XOLCNXM"] -->|"skyward-pack stock"| STOCK["stock/recovery.img<br/>104857600 B"]
   UP["kirklin/skyward @ ff1668f<br/>+ patches/*.patch"] -->|"build-phone"| BIN["skyward<br/>aarch64-linux-android"]
   UP -->|"build-system-init"| SYSINIT["system-init<br/>static aarch64"]
   STOCK --> PACK["skyward-pack recovery"]
@@ -35,11 +35,11 @@ flowchart LR
 | --- | --- |
 | boot header | v4 |
 | kernel | 0 字节（内核由 boot 分区提供，和原厂 recovery 一致） |
-| ramdisk | 49,643,317 字节，LZ4 legacy 帧 |
-| ramdisk 解压后 | 49,635,328 字节（`OriginalImageSize`） |
-| cpio 条目 | 996（原厂 984 + 新增 12） |
+| ramdisk | 50,625,278 字节，LZ4 legacy 帧 |
+| ramdisk 解压后 | 以 `verify-image.sh` / AVB footer 的实际值为准 |
+| cpio 条目 | 1062（原厂 1051 + 新增 11） |
 | 分区大小 | 104,857,600 字节（100 MiB） |
-| AVB footer | 未签名，`OriginalImageSize=49635328` |
+| AVB footer | 未签名，`OriginalImageSize` 指向真正内容大小 |
 
 ### ramdisk 里改了什么
 
@@ -47,10 +47,11 @@ flowchart LR
 
 | 条目 | 变化 | 说明 |
 | --- | --- | --- |
-| `system/bin/recovery` | 替换：3,353,048 → **8,619,216** 字节 | Skyward 本体（aarch64 PIE，解释器 `/system/bin/linker64`） |
+| `system/bin/recovery` | 替换：stock → **8,655,096** 字节 | Skyward 本体（aarch64 PIE，解释器 `/system/bin/linker64`） |
 | `skyward/` | 新增目录 | 设备配置、字体、system-init |
-| `skyward/device.toml` | 新增 6,117 字节 | `devices/onyx.toml` 的副本，运行时读 |
+| `skyward/device.toml` | 新增 8,367 字节 | `devices/onyx.toml` 的副本，运行时读 |
 | `skyward/system-init` | 新增 1,038,104 字节 | 静态可执行，安装第二系统时用 |
+| `skyward/wpa-aidl-shim.so` | 新增 5,312 字节 | `LD_PRELOAD` 给 vendor supplicant，应答 recovery 不认的 AIDL 注册 |
 | `skyward/MiSansVF.ttf` | 新增 20,093,424 字节 | UI 字体 |
 | `skyward/KirkMono-Regular.ttf` | 新增 270,456 字节 | 终端字体 |
 | `skyward/KirkMono-OFL.txt` | 新增 4,483 字节 | 终端字体许可 |
@@ -59,7 +60,7 @@ flowchart LR
 | `system/etc/task_profiles.json` | 新增 1,709 字节 | 性能配置 |
 | `prop.default` | 追加 | `ro.secure=0`、`ro.adb.secure=0`、`ro.debuggable=1`、`ro.ota.allow_downgrade=true` |
 
-> 原厂 stock ramdisk 是 29,211,202 字节 / 984 条；v4 是 49,643,317 字节 / 996 条。旧 README 里写的「998 条」是 v2 时期的数字，v3 之后实际为 996；以 `skyward-pack list` 为准。
+> OS4 原厂 stock ramdisk 是 30,175,673 字节 / 1051 条；v0.3.0-onyx.1 是 50,625,278 字节 / 1062 条。旧 README 里写的「998 / 996 条」是 v2/v3 时期的数字；以 `skyward-pack list` 为准。
 
 ---
 
@@ -213,6 +214,36 @@ flowchart LR
 
 ---
 
+## 6.5 WLAN 链路
+
+```
+[modules] sources（vendor_boot / vendor_dlkm / vendor / system_dlkm）
+  → rfkill（system_dlkm，cfg80211 的依赖）
+  → qca_cld3_wcn7750（vendor_dlkm，依赖 icnss2 / cnss_utils / cfg80211 …）
+  → 写 /sys/kernel/icnss/wlan_en_delay、wpss_boot
+  → 固件从 /vendor/firmware/wcn7750 由 ueventd 加载
+  → /etc/firmware/wlan/qca_cld/wcn7750/{WCNSS_qcom_cfg.ini,wlan_mac.bin}（从 vendor / persist 拷）
+  → wlan0
+  → /vendor/bin/hw/wpa_supplicant（LD_PRELOAD=skyward/wpa-aidl-shim.so）
+  → per-interface SOCK_DGRAM control socket（/skyward/run/supplicant/sockets/wlan0）
+  → SCAN / ADD_NETWORK / SET_NETWORK / SELECT_NETWORK / DHCP
+```
+
+`wpa-aidl-shim.so` 只覆盖 `AServiceManager_addService`，返回 0。recovery 的 servicemanager / VINTF 不认 vendor 的 AIDL 服务，原返回值是 `-129`（`EX_TRANSACTION_FAILED`）；Skyward 不使用 AIDL，所以只需要 supplicant 继续走到 per-interface socket。
+
+## 6.6 振动链路
+
+AW8697（`awinic_haptic`）在 i2c `5-005a`，input `event5` 有 FF，但它的自定义波形格式是 Awinic 的 RTP / waveform，不是 qcom 的裸 i8 采样。因此 `haptics.rs` 新增 sysfs 后端：
+
+```
+/sys/bus/i2c/devices/5-005a/effect_id  ← 0
+/sys/bus/i2c/devices/5-005a/duration   ← 16（点击）/ 10（熄屏 ticks）ms
+/sys/bus/i2c/devices/5-005a/gain       ← 0x00–0x80
+/sys/bus/i2c/devices/5-005a/activate   ← 1，睡 duration，再写 0
+```
+
+设置页的滑杆与触摸反馈都走 `Haptics::click`；`skyward haptic` 可直接测。
+
 ## 7. 补丁文件级说明
 
 | 补丁 | 文件 | 改了什么 | 为什么 |
@@ -222,8 +253,9 @@ flowchart LR
 |  | `crates/skyward/src/main.rs` | 加 `Omapi` / `Se` 两个子命令 | 手动起桥 / 探针，不进自动流程 |
 |  | `crates/skyward/src/omapi.rs`（新文件） | `android.se.omapi` 的最小子集，转发到 SE HAL | 让 NXP weaver 能在 recovery 里查 eSE 槽位 |
 | `0003-onyx-ce-fallback.patch` | `crates/skyward-crypto/src/data.rs` | 拆 `protector_ids` / `protector_named`；`open_user_files` 在 `WeaverUnusable` 时回退；抽出 `open_with_protector` | onyx user 0 有第二份 gatekeeper 绑定的 protector，不需要 weaver 就能拿 SP |
+| `0004-onyx-v0.3.0-wifi-ui.patch` | 16 个文件（config / net / pack / UI / skyward） | OS4 路径校验、WLAN preload + EBUSY 重试 + 自动连接、AW8697 sysfs 振动、锁屏 / 控制中心 / 双击亮屏 / AVB 页、Skyward 更新仓库、`--extra` | 本次 v0.3.0 的全部代码；细节见 `patches/README.md` |
 
-补丁顺序固定，`scripts/bootstrap.sh` 按 `0001 → 0002 → 0003` 应用。上游 commit 与每个补丁的说明见 [`patches/README.md`](../patches/README.md)。
+补丁顺序固定，`scripts/bootstrap.sh` 按 `0001 → 0002 → 0003 → 0004` 应用。上游 commit 与每个补丁的说明见 [`patches/README.md`](../patches/README.md)。
 
 ---
 
@@ -235,8 +267,10 @@ flowchart LR
 | `[display]` | 1280 × 2772、density **512**、6.83" | 400 dp 宽；按屏高反推 1109 会让 UI 溢出 |
 | `[modules]` | `sources = vendor_boot, vendor_dlkm, vendor, system_dlkm`；`load = nt38771_touch, xiaomi_touch` | 触摸与分区模块 |
 | `[[service]]` × 7 | 见第 3 节 | 触摸 + 安全世界 + boot control |
-| `[update]` | `https://update.miui.com/updates/miotaV3.php` | 原厂更新服务器 |
-| `[stock]` | `OS3.0.306.0.WOLCNXM`、全量包 URL、recovery SHA-256 | `skyward-pack stock` 用它按需取原厂 recovery |
+| `[update]` | MIUI 更新服务器 + `skyward = "Remoparrot/skyward-onyx"` | 系统更新 + Skyward 自身更新 |
+| `[wlan]` | `qca_cld3_wcn7750` + `rfkill`；`wpss_boot`；`preload`；系统优先的 `libraries` | WLAN 驱动、固件、supplicant |
+| `[haptics]` | AW8697 的 `activate` / `duration` / `effect_id` / `gain` | 振动 |
+| `[stock]` | `OS4.0.2.0.XOLCNXM`、全量包 URL、recovery SHA-256 | `skyward-pack stock` 用它按需取原厂 recovery |
 
 ---
 

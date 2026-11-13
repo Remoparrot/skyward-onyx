@@ -113,15 +113,58 @@ ready_service = "android.hardware.boot.IBootControl/default"
 user = "root"
 groups = ["root"]
 
+# WLAN: the WCN7750 on PCIe, driven by qca_cld3_wcn7750 over the icnss2
+# platform driver. The RF-kill module the driver's cfg80211 needs is one of
+# the kernel's own, in system_dlkm, and is loaded first. Once wpss_boot is
+# written, icnss2 powers the chip up and loads its firmware from the vendor
+# partition; wlan0 appears. The driver reads its settings and the MAC
+# address through the firmware loader: the settings from the vendor
+# partition, the address from persist. wpa_supplicant runs on the recovery's
+# own libraries, with the system's newer runtime libraries (Android 17's
+# recovery no longer carries libvndksupport / libdl_android) from the
+# installed system's /system, and the vendor interface's bundle. Whether a
+# network joined reaches the internet is asked of the page Xiaomi's Chinese
+# system asks.
+[wlan]
+modules = ["rfkill", "qca_cld3_wcn7750"]
+writes = [
+    { path = "/sys/kernel/icnss/wlan_en_delay", value = "1000" },
+    { path = "/sys/kernel/icnss/wpss_boot", value = "1" },
+]
+firmware = [
+    { name = "wlan/qca_cld/wcn7750/WCNSS_qcom_cfg.ini", path = "/vendor/etc/wifi/wcn7750/WCNSS_qcom_cfg.ini" },
+    { name = "wlan/qca_cld/wcn7750/wlan_mac.bin", partition = "persist", path = "wlan/wlan_mac.bin" },
+]
+interface = "wlan0"
+supplicant = "/vendor/bin/hw/wpa_supplicant"
+libraries = ["/mnt/system/system/lib64/bootstrap", "/mnt/system/system/lib64", "/vendor/lib64", "/system/lib64"]
+preload = "/skyward/wpa-aidl-shim.so"
+service = "android.hardware.wifi.supplicant.ISupplicant/default"
+probe = "http://connect.rom.miui.com/generate_204"
+
 # The update server the stock updater of the Chinese system asks.
 [update]
 server = "https://update.miui.com/updates/miotaV3.php"
+skyward = "Remoparrot/skyward-onyx"
+
+# The motor is the Awinic AW8697 on i2c 5-005a, behind the awinic_haptic
+# driver. The driver's own switch plays its kept waveform for `duration`
+# milliseconds at `gain`; `f0` says the motor swings at 169.6 Hz, in tenths
+# of a hertz. Its force-feedback interface takes a waveform format of its
+# own, so the click is played through these files instead.
+[haptics]
+activate = "/sys/bus/i2c/devices/5-005a/activate"
+duration = "/sys/bus/i2c/devices/5-005a/duration"
+effect = "/sys/bus/i2c/devices/5-005a/effect_id"
+gain = "/sys/bus/i2c/devices/5-005a/gain"
+resonance = "/sys/bus/i2c/devices/5-005a/f0"
+strength = { lightest = 0.35, strongest = 1.0 }
 
 # The stock build the recovery is made on: the Chinese system's
-# OS3.0.306.0, whose full update package on the phone maker's own download
+# OS4.0.2.0, whose full update package on the phone maker's own download
 # server holds the recovery partition the recovery is built on top of. The
 # recovery partition is 104857600 bytes, as its AVB footer ends it.
 [stock]
-version = "OS3.0.306.0.WOLCNXM"
-package = "https://bkt-sgp-miui-ota-update-alisgp.oss-ap-southeast-1.aliyuncs.com/OS3.0.306.0.WOLCNXM/onyx-ota_full-OS3.0.306.0.WOLCNXM-user-16.0-17ed95af98.zip"
-recovery = "99047b63a1b72e049617f9a2615778c0833899759ede92a7ec32454b722549a2"
+version = "OS4.0.2.0.XOLCNXM"
+package = "https://bkt-sgp-miui-ota-update-alisgp.oss-ap-southeast-1.aliyuncs.com/OS4.0.2.0.XOLCNXM/onyx-ota_full-OS4.0.2.0.XOLCNXM-user-17.0-dbe344d29d.zip"
+recovery = "ce53850714fe2ca9ab22600a00e71813df2775dc94244192c83a224d7ecd3357"

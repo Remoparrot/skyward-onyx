@@ -14,10 +14,11 @@ SKYWARD_BIN="${SKYWARD_BIN:-$ROOT/build/phone/aarch64-linux-android/release/skyw
 SYSTEM_INIT="${SYSTEM_INIT:-$ROOT/build/system-init/aarch64-linux-android/release/system-init}"
 PACK="${PACK:-$ROOT/build/host/release/skyward-pack}"
 [[ -x "$PACK" ]] || PACK="$PACK.exe"
-OUT="${OUT:-$ROOT/out/skyward-v0.2.0-onyx-OS3.0.306.0.WOLCNXM.img}"
+OUT="${OUT:-$ROOT/out/skyward-v0.3.0-onyx.1-OS4.0.2.0.XOLCNXM.img}"
 FONT="${FONT:-$ROOT/vendor/skyward/resources/fonts/MiSansVF.ttf}"
 MONO="${MONO:-$ROOT/vendor/skyward/resources/fonts/KirkMono-Regular.ttf}"
 MONO_LICENSE="${MONO_LICENSE:-$ROOT/vendor/skyward/resources/fonts/KirkMono-OFL.txt}"
+SHIM="${SHIM:-$ROOT/build/phone/wpa-aidl-shim.so}"
 
 for f in "$STOCK" "$SKYWARD_BIN" "$SYSTEM_INIT" "$PACK" "$FONT" "$MONO" "$MONO_LICENSE"; do
   if [[ ! -f "$f" ]]; then
@@ -25,6 +26,10 @@ for f in "$STOCK" "$SKYWARD_BIN" "$SYSTEM_INIT" "$PACK" "$FONT" "$MONO" "$MONO_L
     exit 1
   fi
 done
+if [[ -n "$SHIM" && ! -f "$SHIM" ]]; then
+  echo "缺少输入：$SHIM（先运行 scripts/build-phone.sh）" >&2
+  exit 1
+fi
 
 mkdir -p "$(dirname "$OUT")"
 echo "==> 打镜像"
@@ -36,6 +41,7 @@ echo "==> 打镜像"
   --font "$FONT" \
   --mono "$MONO" \
   --mono-license "$MONO_LICENSE" \
+  ${SHIM:+--extra "skyward/wpa-aidl-shim.so=$SHIM"} \
   --out "$OUT"
 
 size=$(stat -c%s "$OUT" 2>/dev/null || stat -f%z "$OUT")

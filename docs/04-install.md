@@ -1,7 +1,7 @@
 # 安装、解密与回滚
 
 > 状态：**现行**
-> 适用：Redmi Turbo 4 Pro（`onyx`）· 底包 OS3.0.306.0.WOLCNXM
+> 适用：Redmi Turbo 4 Pro（`onyx`）· 底包 OS4.0.2.0.XOLCNXM
 > 风险等级：**中**（只写 recovery 分区；但 recovery 内的 adb 是 root）
 
 ---
@@ -13,7 +13,7 @@
 - **第一次刷之前备份重要数据**。虽然本项目的验证过程没有改动 `/data`，但任何刷机都有风险。
 - recovery 里的 adb 是 **root 且无需手机授权**；手机处于 recovery 时，任何人拿到手机 + 数据线都能读存储。刷完请重启回系统。
 - **不要**执行 `setprop ctl.stop recovery`：本机实测两次都会导致整机重启（原因未查清）。
-- 只在 `OS3.0.306.0.WOLCNXM` 上验证过。换底包后服务路径 / VINTF 可能变化，不要直接套用。
+- 只在 `OS4.0.2.0.XOLCNXM` 上验证过。换底包后服务路径 / VINTF 可能变化，不要直接套用。
 
 ---
 
@@ -23,9 +23,9 @@
 
 | 文件 | 用途 | SHA-256 |
 | --- | --- | --- |
-| `recovery.img` | 要刷的 Skyward recovery | `b41bee5b5342e5a2f0f32ba01e9a0cca3c0ab69b520799e4e29ee49957f1f83f` |
-| `recovery-stock-OS3.0.306.0.WOLCNXM.img` | 回滚用官方 recovery | `99047b63a1b72e049617f9a2615778c0833899759ede92a7ec32454b722549a2` |
-| `skyward-v0.2.0-onyx-OS3.0.306.0.WOLCNXM.zip` | 官方格式 zip（内含同一个 img） | `667e01632ccfe06c2b85479d4907b2556b9ab87897a67699eb7812ce690abb87` |
+| `recovery.img` | 要刷的 Skyward recovery | `baf93862fc3f8eebf04a82b4d250c985c5b3e77523e14e6358e82c6d947078b0` |
+| `recovery-stock-OS4.0.2.0.XOLCNXM.img` | 回滚用官方 recovery | `ce53850714fe2ca9ab22600a00e71813df2775dc94244192c83a224d7ecd3357` |
+| `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` | 官方格式 zip（内含同一个 img，供在线更新） | `0d0c2f035b73189484b3bb8f44341dd70bf347018da2ab0a9ec60d732b54dbb5` |
 | `SHA256SUMS` | 校验和 | — |
 
 ```sh
@@ -75,14 +75,15 @@ fastboot reboot recovery
 
 正常情况下应该看到：
 
-- 标题 **Skyward**，首页有 `Redmi Turbo 4 Pro` / `onyx` / `OS3.0.306.0…` 的设备卡；
+- 首屏是 **解密**：Skyward 自动打开 `/data`；有 recovery 锁屏时先显示锁屏；
+- 解锁 / 打开后首页有 `Redmi Turbo 4 Pro` / `onyx` / `OS4.0.2.0…` 的设备卡；
 - 触摸可用（点击、滑动都正常）；
 - 顶部状态栏、深浅色切换正常；
 - 「安装」「备份」「文件」「终端」等入口在。
 
 ### 4.1 解密 `/data`
 
-1. 进「解密」（或首页的解锁入口）；
+1. 正常进 recovery 会**自动停在「解密」页**（也可从首页的解锁入口进）；
 2. 输入**与系统相同的锁屏密码 / PIN**；
 3. 等待挂载完成；
 4. 返回文件管理，`/data/media/0` 应出现真实文件名（相册、Download、微信目录）。
@@ -97,6 +98,19 @@ fastboot reboot recovery
 失败时不要连续试很多次；先看 [`08-troubleshooting.md`](08-troubleshooting.md)。
 
 > user 999（第二空间 / 应用分身）打不开是**已知限制**，不是密码错。
+
+### 4.1.1 WLAN 与自动连接
+
+- 开机自动打开 WLAN；连上过一次的网络会保存，下次启动自动加入；
+- 密码存在 `/metadata/skyward/settings.json`（0600）；换机 / 共享镜像前删掉这个文件；
+- 设置页的「WLAN」可扫描、加入、断开；「自动连接」开关控制下次启动是否自动加入。
+
+### 4.1.2 recovery 锁屏
+
+- 设置 → 安全 → 「恢复模式锁屏」可设 4–8 位数字；
+- 只保存 salt + SHA-256，不保存明文；
+- 开机先锁屏，解锁后才自动打开 `/data`；
+- 忘记密码时，可在 recovery 的 adb root 下删 `/metadata/skyward/settings.json` 的 `lock` 字段（或整个文件）。
 
 ### 4.2 用 adb（可选）
 
@@ -123,7 +137,7 @@ adb shell /tmp/skyward data --user 0   # 具体子命令以 --help 为准
 任何时候都可以刷回官方 recovery：
 
 ```sh
-fastboot flash recovery recovery-stock-OS3.0.306.0.WOLCNXM.img
+fastboot flash recovery recovery-stock-OS4.0.2.0.XOLCNXM.img
 fastboot reboot
 ```
 
@@ -157,7 +171,7 @@ fastboot flash recovery recovery-v3-backup.img
 严格说没有「安装」，只是换了 recovery 分区：
 
 ```sh
-fastboot flash recovery recovery-stock-OS3.0.306.0.WOLCNXM.img
+fastboot flash recovery recovery-stock-OS4.0.2.0.XOLCNXM.img
 ```
 
 刷回官方后，系统 OTA 可以正常覆盖 recovery。
@@ -171,7 +185,7 @@ fastboot flash recovery recovery-stock-OS3.0.306.0.WOLCNXM.img
 | 数据丢失 | 正常刷 recovery 不动 userdata；误操作 `wipe` / `mkfs` 会 | 不要执行不认识的命令；先备份 |
 | 隐私 | recovery 内 adb 是 root，无授权 | 用完重启回系统；不要把手机留在 recovery 借给别人 |
 | 变砖 | 只写 recovery 分区，boot/system 不动；最坏是进不了 recovery | 刷回 stock recovery |
-| 底包不匹配 | 服务路径 / VINTF 变化，可能起不来 | 只在 OS3.0.306.0.WOLCNXM 上用 |
+| 底包不匹配 | 服务路径 / VINTF 变化，可能起不来 | 只在 OS4.0.2.0.XOLCNXM 上用 |
 | 黑屏重启 | 停 recovery 服务会触发；其他原因未查清 | 不要停服务；看 `dmesg` / `pstore` |
 
 ---
@@ -181,7 +195,7 @@ fastboot flash recovery recovery-stock-OS3.0.306.0.WOLCNXM.img
 ```markdown
 - [ ] `fastboot flash recovery` 输出 OKAY
 - [ ] `fastboot reboot recovery` 后能看到 Skyward 首页
-- [ ] 设备卡显示 onyx / OS3.0.306.0
+- [ ] 设备卡显示 onyx / OS4.0.2.0
 - [ ] 触摸可点、可滑
 - [ ] 「解密」输入锁屏密码后 `/data/media/0` 有真实文件名
 - [ ] 相册 JPEG 能打开

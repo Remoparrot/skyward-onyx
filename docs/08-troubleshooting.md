@@ -50,10 +50,10 @@ fastboot reboot recovery
 | --- | --- |
 | 刷错分区 / 刷到旧 slot | 确认 `fastboot flash recovery` 输出 `OKAY`；A/B 设备可试 `fastboot --set-active=a` 后再刷 |
 | 镜像损坏 | 重新下载，核对 SHA-256 |
-| 底包不是 OS3.0.306.0 | 换回匹配底包，或刷 stock |
+| 底包不是 OS4.0.2.0 | 换回匹配底包，或刷 stock |
 | recovery 分区大小不对 | `verify-image.sh` 必须显示 104,857,600 |
 
-**兜底**：刷回 `recovery-stock-OS3.0.306.0.WOLCNXM.img`，手机照常进系统。
+**兜底**：刷回 `recovery-stock-OS4.0.2.0.XOLCNXM.img`，手机照常进系统。
 
 ---
 
@@ -207,14 +207,49 @@ sha256sum recovery.img
 
 ---
 
-## 10. 没有 WLAN / 振动
+## 10. WLAN / 振动
 
-**原因**：`devices/onyx.toml` 没有 `[wlan]` / 振动段，Skyward 的设置页就不会出现对应入口。
+### 10.1 WLAN 打不开
 
-**处置**：
+按顺序看：
 
-- 需要真机核对固件路径 / sysfs 后再补配置；
-- 不要凭别的机型抄 `[wlan]`，路径不对会让服务起不来，甚至中断启动。
+```sh
+adb shell dmesg | grep -E "the WLAN|icnss2|qca_cld3|wlan0"
+adb shell ls /sys/class/net | grep wlan
+adb shell ps -A | grep wpa_supplicant
+adb shell ls -l /skyward/run/supplicant/sockets
+```
+
+- 没有 `wlan0`：看 `rfkill` / `qca_cld3_wcn7750` 是否加载、`/sys/kernel/icnss/wpss_boot` 是否写入；
+- `wpa_supplicant` 不在：看 `dmesg` 的 `the WLAN did not come up`；若 `Failed to initialize wpa_supplicant`，先确认 `skyward/wpa-aidl-shim.so` 在 ramdisk 里、`[wlan].preload` 对；
+- 有 socket 但不连接：用 `wpa_state` / 扫描结果确认密码、频段、SAE；`CMCC-A9s7-5G` 是 5 GHz + SAE，密码 `[redacted]` 已验证；
+- 自动连接没生效：看 `/metadata/skyward/settings.json` 的 `wlan.auto` / `ssid` / `password`；密码可能被旧版本写空。
+
+### 10.2 振动没有
+
+```sh
+adb shell /tmp/skyward haptic --config /skyward/device.toml
+adb shell cat /sys/bus/i2c/devices/5-005a/state
+adb shell dmesg | grep -i awinic | tail
+```
+
+- `Haptics::open` 报 `[haptics] ...`：配置路径不对；
+- 报 `no input device takes force-feedback effects`：说明走的是 FF 后端，不是 AW8697 sysfs（检查 `[haptics].activate`）；
+- 驱动日志有 `activate` 但没振感：确认电机硬件 / `gain`，用 `effect_id 0` + `duration 50` 手动试。
+
+### 10.3 recovery 锁屏 / 自动解密
+
+- 首屏不是解密：`settings.json` 有 `lock`，先解锁；或 `[wlan]` / UI 初始化失败导致首屏没起来，看 `dmesg`。
+- 忘记锁屏密码：recovery 的 root adb 下把 `/metadata/skyward/settings.json` 的 `lock` 删掉，或删整个文件。
+- 自动解密后 `/data/media/0` 仍不可读：这是 user 0 CE 还锁着，需在「解密」页输入**手机锁屏密码**。
+
+### 10.4 Skyward 在线更新
+
+需要 WLAN；`[update].skyward` 必须是 `Remoparrot/skyward-onyx`，Release 的 asset 必须是 `skyward-<tag>-onyx-*.zip`。GitHub API 被限流时看 `dmesg` 的 `GitHub answered 403`。
+
+### 10.5 AVB 2.0
+
+本版本只实现页面，**没有测试**。不要在没有 `vbmeta` / boot 备份的情况下点。
 
 ---
 
@@ -231,7 +266,7 @@ sha256sum recovery.img
 ## 12. 需要回滚时
 
 ```sh
-fastboot flash recovery recovery-stock-OS3.0.306.0.WOLCNXM.img
+fastboot flash recovery recovery-stock-OS4.0.2.0.XOLCNXM.img
 fastboot reboot
 ```
 

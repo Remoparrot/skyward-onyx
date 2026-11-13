@@ -6,6 +6,47 @@
 
 ---
 
+## v0.3.0-onyx.1 · 2026-11-13
+
+**主题：OS4 底包 + WLAN 自动连接 + 振动 + 锁屏 / 控制中心 / 双击亮屏 + 自动解密页**
+
+| 项 | 值 |
+| --- | --- |
+| 镜像 | `recovery.img` · 104,857,600 字节 |
+| SHA-256 | `baf93862fc3f8eebf04a82b4d250c985c5b3e77523e14e6358e82c6d947078b0` |
+| 内含 skyward | 8,655,096 字节 · `a39596f82ea13411436da953fc664dac0a6504ae13181abf56ad64762ac8cd70` |
+| ramdisk | 50,625,278 字节 · 1062 条 |
+| 底包 | OS4.0.2.0.XOLCNXM（Android 17） |
+| zip | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,803,240 字节 · `0d0c2f03…4dbb5` |
+| 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · `ce538507…cd3357` |
+
+### 改了什么
+
+- **底包**：`[stock]` 从 OS3.0.306.0 换到 OS4.0.2.0.XOLCNXM；版本号改为 `0.3.0-onyx.1`；`has_root` 代替 `is_absolute` 以兼容 Windows 宿主校验。
+- **WLAN**：`[wlan]` 配置 `qca_cld3_wcn7750` + `rfkill`，`wpss_boot` / `wlan_en_delay`，固件从 vendor 与 persist 取；`wlan.rs` 对 `EBUSY` 重试、启动自动开 WLAN；`wpa-aidl-shim` 让 AIDL supplicant 跳过 recovery 不认的 `addService`；UI 保存上次网络并在下次启动自动加入。
+- **振动**：AW8697 的 sysfs 后端（`activate` / `duration` / `effect_id` / `gain`），`skyward haptic` 可测。
+- **UI**：首屏自动进入解密页；recovery 锁屏（4–8 位数字，salt + SHA-256）；控制中心（WLAN / 亮度 / 双击亮屏 / 锁屏 / 重启）；双击亮屏；AVB 2.0 禁用页（未测）。
+- **Skyward 更新**：检查 `Remoparrot/skyward-onyx` 的 Release，asset 命名 `skyward-<tag>-onyx-*.zip`；版本比较按 `0.3.0-onyx.N`。
+- **打包**：`skyward-pack recovery --extra RAMDISK=HOST`；`build-phone.sh` 编 shim，`build-image.sh` 把 shim 放进 `skyward/`。
+
+### 真机验证
+
+- 刷入后 `dmesg`：`onyx 0.3.0-onyx.1 recovery up`；
+- `/data` 自动打开：`/dev/block/dm-9 holds f2fs at /data`；
+- WLAN 扫描 CMCC-A9s7-5G（5 GHz / SAE），`wpa_state=COMPLETED`；重启后自动连接，`192.168.1.227/24`；
+- 振动驱动：`awinic_haptic` 进入 RAM 模式，`level=0x40`，`duration=16`；
+- 锁屏启动：种入 4 位锁后重启，`/data` 不挂载，UI 存活；移除锁后恢复自动解密。
+
+### 已知限制
+
+- user 0 CE 在 OS4 上未重新输入密码验证（逻辑沿用 v4）；
+- 锁屏解锁输入、控制中心、双击亮屏未手动点过；
+- AVB 2.0 按要求未测试；
+- WLAN 密码明文存 `/metadata`（0600）；
+- Skyward 在线更新只验证到配置/API，缺更高版本可测完整写入。
+
+---
+
 ## v0.2.0-onyx.4 · 2026-11-12
 
 **主题：user 0 的 CE 数据解开（gatekeeper 回退）**

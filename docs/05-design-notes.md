@@ -1,7 +1,7 @@
 # 设计思路
 
 > 状态：**现行**
-> 对应版本：`v0.2.0-onyx.4`
+> 对应版本：`v0.3.0-onyx.1`
 > 读者：想理解「为什么这样做、为什么不那样做」的人。
 
 ---
@@ -167,7 +167,7 @@ v1 用 `1109 = 2772 ÷ 400 × 160`，是按**高度**反推的，导致布局宽
 
 以下任一变化都可能让 v4 的回退失效：
 
-- 底包不是 OS3.0.306.0.WOLCNXM；
+- 底包不是 OS4.0.2.0.XOLCNXM；
 - 用户在系统里改过锁屏方式，第二份 protector 被清理；
 - `.pwd` 的 salt / scrypt 参数与 `.spblob` 不再匹配；
 - 系统把「当前 protector」记录改成了另一份；
@@ -177,6 +177,35 @@ v1 用 `1109 = 2772 ÷ 400 × 160`，是按**高度**反推的，导致布局宽
 出现这些情况时，回退会报明确的错误（而不是静默失败）；按 [`08-troubleshooting.md`](08-troubleshooting.md) 收集 `spblob` 列表、`locksettings` 记录和日志，再决定是否走 OMAPI 桥。
 
 ---
+
+## 9. v0.3.0 的设计补充
+
+### 9.1 为什么换 OS4 底包
+
+手机实际运行 OS4.0.2.0（Android 17），而 v4 的 recovery 是 OS3（Android 16）的 ramdisk。vendor 的 `wpa_supplicant` 与 OS3 的 `/system/lib64` 在 libc++ / `libvndksupport` / `libdl_android` 上错位，换多少库顺序都不稳。把 recovery 也换到 OS4 的官方 recovery 后，libs 同代，WLAN 才能继续。WLAN 的 sysfs / 固件路径也按用户这台机器核对。
+
+### 9.2 为什么 AIDL 用 shim
+
+vendor supplicant 带 AIDL；recovery 的 servicemanager 不认它的注册，`AServiceManager_addService` 返回 `-129`，它在打开 per-interface socket 前就退出。Skyward 的 WLAN 只用 per-interface `SOCK_DGRAM` control socket，不需要 AIDL。`shim/wpa-aidl-shim.c` 只覆盖这一个符号，把注册应答为 0；风险限于 supplicant 子进程。
+
+### 9.3 为什么保存 WLAN 密码
+
+「自动连接」要跨重启，supplicant 的 `update_config=0` 不保存网络，所以密码只能由 Skyward 保存。放在 `/metadata/skyward/settings.json`，目录 0700、文件 0600；recovery 内 adb 本来就是 root，这个锁只防「误看」，不防「拿到手机的人」。换机 / 共享镜像前删除。
+
+### 9.4 锁屏与自动解密
+
+- 开机读 settings，有锁屏则首屏 `Lock`，否则 `Decrypt`；
+- `Decrypt` 的 `arrive()` 发 `Effect::OpenData`，所以「进入 recovery 自动进入解密页」不需要额外入口；
+- 锁屏只存 salt + SHA-256（4–8 位数字）；解锁后才把栈换成 `Decrypt` 并 `open_data()`；
+- 锁屏不是安全边界：recovery 的 root adb 仍能改 settings / 读分区。
+
+### 9.5 双击亮屏
+
+`App::touch` 在 `display_on == false` 时记录最后一次 `Down` 的时间与坐标；400 ms 内第二次 `Down` 落在 80 px 内就 `wake()`。设置页可关。输入设备在息屏时仍然打开（`Wakeful` 持有），所以触摸能唤醒 CPU。
+
+### 9.6 版本与在线更新
+
+上游 `github.rs` 硬编码 `kirklin/skyward`；onyx 的资产在 `Remoparrot/skyward-onyx`。用 `[update].skyward` 配置仓库，workspace 版本改成 `0.3.0-onyx.N`，asset 名 `skyward-v0.3.0-onyx.N-onyx-OS4.0.2.0.XOLCNXM.zip`，`semver` 才能正确比较 `onyx.N` 的前后。
 
 ## 9. 相关记录
 

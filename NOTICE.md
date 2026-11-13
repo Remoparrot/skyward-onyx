@@ -28,11 +28,15 @@
 
 ## 设备固件
 
-- 原厂 recovery 提取自小米官方全量包 `onyx-ota_full-OS3.0.306.0.WOLCNXM-user-16.0-17ed95af98.zip`，仅用于重打包；
+- 原厂 recovery 提取自小米官方全量包 `onyx-ota_full-OS4.0.2.0.XOLCNXM-user-17.0-dbe344d29d.zip`，仅用于重打包；
 - 原厂 recovery 镜像作为回滚资产随 Release 提供，不放入 git 仓库；
 - 本项目**不**分发完整 HyperOS 固件包。
 
 Xiaomi、Redmi、HyperOS 是小米通讯技术有限公司的商标。本项目与小米无隶属关系，也未获其背书。
+
+## WLAN AIDL shim
+
+`shim/wpa-aidl-shim.c` 是本仓库自己的代码（GPL-3.0），只定义一个覆盖 `AServiceManager_addService` 的符号，让 vendor 的 `wpa_supplicant` 在 recovery 的 servicemanager 前继续启动；不包含 vendor 库或 AOSP 头文件。
 
 ## 第三方代码
 

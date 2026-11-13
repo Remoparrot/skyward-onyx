@@ -1,6 +1,6 @@
 # 补丁
 
-相对上游 **Skyward v0.2.0** 的设备补丁，按编号顺序应用。
+相对上游 **Skyward v0.2.0** 的设备补丁，按编号顺序应用；0004 起是 v0.3.0 的 OS4 / WLAN / UI 改动。
 
 | 项 | 值 |
 | --- | --- |
@@ -75,6 +75,23 @@ skyward se      # 只探 SE HAL
 
 ---
 
+## 0004-onyx-v0.3.0-wifi-ui.patch
+
+**文件**：16 个（`Cargo.toml` / `Cargo.lock` / `skyward-config` / `skyward-net` / `skyward-pack` / `skyward-ui` / `skyward`）
+
+**内容**：v0.3.0-onyx.1 的全部代码改动，按主题分四组：
+
+1. **OS4 底包**：`[stock]` 换成 OS4.0.2.0；`Path::is_absolute` 改成 `has_root`，让宿主（Windows）也能校验手机侧绝对路径；版本号 `0.3.0-onyx.1`。
+2. **WLAN + 自动连接**：`[wlan]` 的 `preload`、`wlan.rs` 的 `LD_PRELOAD` 与 `EBUSY` 重试、启动时自动开 WLAN / 加入上次网络、UI 的「自动连接」开关与保存网络（密码只写 `/metadata/skyward/settings.json`，0600）。
+3. **Skyward 更新**：`[update].skyward = "Remoparrot/skyward-onyx"`，`github.rs` 的仓库地址由配置给出，版本对比用 `0.3.0-onyx.N`。
+4. **UI**：锁屏 / 设置锁屏、控制中心、双击亮屏、AVB 2.0 禁用页、`skyward-pack --extra`（把 AIDL shim 装进 ramdisk）。
+
+**WLAN shim**：vendor 的 `wpa_supplicant` 带 AIDL，recovery 的 servicemanager 不认它的注册（`AServiceManager_addService` 返回 `-129`，`EX_TRANSACTION_FAILED`），supplicant 在打开 per-interface socket 前就退出。`shim/wpa-aidl-shim.c` 把这次注册应答成 0；Skyward 只用 supplicant 的 per-interface control socket，不需要 AIDL 真的可用。shim 由 `scripts/build-phone.sh` 用 NDK 编译，`build-image.sh` 通过 `--extra` 放进 `skyward/wpa-aidl-shim.so`。
+
+**注意**：AVB 页只实现、未在真机点过（用户明确要求不测试）。WLAN 密码在 `/metadata` 明文保存，文件权限 0600；recovery 内 adb 本来就是 root，这一点没有额外提高攻击面，但换机/共享镜像前应清掉。
+
+---
+
 ## 应用
 
 ```sh
@@ -100,9 +117,10 @@ done
 git -C vendor/skyward apply --check patches/0001-windows-host-build.patch
 git -C vendor/skyward apply --check patches/0002-omapi-se-bridge.patch
 git -C vendor/skyward apply --check patches/0003-onyx-ce-fallback.patch
+git -C vendor/skyward apply --check patches/0004-onyx-v0.3.0-wifi-ui.patch
 ```
 
-三个都过，且应用后 `crates/` 与发布镜像对应的源码一致。
+四个都过，且应用后 `crates/` 与发布镜像对应的源码一致。
 
 ## 修改 / 新增补丁
 
