@@ -1,0 +1,11 @@
+* text=auto eol=lf
+
+*.sh    text eol=lf
+*.patch text eol=lf
+*.md    text eol=lf
+*.toml  text eol=lf
+
+*.img  binary
+*.zip  binary
+*.ttf  binary
+*.jar  binary

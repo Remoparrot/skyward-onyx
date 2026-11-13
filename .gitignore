@@ -1,0 +1,20 @@
+# 构建产物
+/build/
+/vendor/
+/out/
+/tmp/
+/stock/*.img
+
+# 发布产物：只放 GitHub Release，不进仓库（单个 100 MB，超过 GitHub 文件上限）
+/*.img
+/*.zip
+
+# 系统 / 编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+
+# 本机工具链
+/toolchain/

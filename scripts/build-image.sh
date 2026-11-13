@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# 把编译好的 skyward / system-init / 原厂 recovery 打成整分区镜像。
+#
+#   STOCK         原厂 recovery，默认 stock/recovery.img
+#   SKYWARD_BIN   手机侧 skyward，默认 build/phone/aarch64-linux-android/release/skyward
+#   SYSTEM_INIT   手机侧 system-init，默认 build/system-init/aarch64-linux-android/release/system-init
+#   PACK          宿主侧 skyward-pack，默认 build/host/release/skyward-pack[.exe]
+#   OUT           输出镜像，默认 out/skyward-v0.2.0-onyx-OS3.0.306.0.WOLCNXM.img
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+STOCK="${STOCK:-$ROOT/stock/recovery.img}"
+SKYWARD_BIN="${SKYWARD_BIN:-$ROOT/build/phone/aarch64-linux-android/release/skyward}"
+SYSTEM_INIT="${SYSTEM_INIT:-$ROOT/build/system-init/aarch64-linux-android/release/system-init}"
+PACK="${PACK:-$ROOT/build/host/release/skyward-pack}"
+[[ -x "$PACK" ]] || PACK="$PACK.exe"
+OUT="${OUT:-$ROOT/out/skyward-v0.2.0-onyx-OS3.0.306.0.WOLCNXM.img}"
+FONT="${FONT:-$ROOT/vendor/skyward/resources/fonts/MiSansVF.ttf}"
+MONO="${MONO:-$ROOT/vendor/skyward/resources/fonts/KirkMono-Regular.ttf}"
+MONO_LICENSE="${MONO_LICENSE:-$ROOT/vendor/skyward/resources/fonts/KirkMono-OFL.txt}"
+
+for f in "$STOCK" "$SKYWARD_BIN" "$SYSTEM_INIT" "$PACK" "$FONT" "$MONO" "$MONO_LICENSE"; do
+  if [[ ! -f "$f" ]]; then
+    echo "缺少输入：$f" >&2
+    exit 1
+  fi
+done
+
+mkdir -p "$(dirname "$OUT")"
+echo "==> 打镜像"
+"$PACK" recovery \
+  --stock "$STOCK" \
+  --binary "$SKYWARD_BIN" \
+  --system-init "$SYSTEM_INIT" \
+  --config "$ROOT/devices/onyx.toml" \
+  --font "$FONT" \
+  --mono "$MONO" \
+  --mono-license "$MONO_LICENSE" \
+  --out "$OUT"
+
+size=$(stat -c%s "$OUT" 2>/dev/null || stat -f%z "$OUT")
+if [[ "$size" != "104857600" ]]; then
+  echo "镜像大小 $size，不是分区大小 104857600" >&2
+  exit 1
+fi
+
+echo
+echo "==> 完成：$OUT"
+ls -l "$OUT"
+sha256sum "$OUT"
+echo
+echo "下一步：scripts/verify-image.sh \"$OUT\""

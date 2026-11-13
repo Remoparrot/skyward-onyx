@@ -1,0 +1,1129 @@
+diff --git a/crates/skyward-binder/src/driver.rs b/crates/skyward-binder/src/driver.rs
+index 82afc1e..e880c69 100644
+--- a/crates/skyward-binder/src/driver.rs
++++ b/crates/skyward-binder/src/driver.rs
+@@ -1,5 +1,8 @@
+-use crate::parcel::{Payload, Reader};
++use crate::parcel::{Parcel, Payload, Reader};
+ use anyhow::{bail, Context, Result};
++use std::cell::{Cell, RefCell};
++use std::collections::HashMap;
++use std::rc::Rc;
+ use std::fs::File;
+ use std::os::fd::AsRawFd;
+ use std::path::Path;
+@@ -155,14 +158,17 @@ impl Binder {
+         };
+         // A call that hands over addresses is sent the way that tells the
+         // driver how much room to set aside for what they point at.
+-        let mut write = match addresses.is_empty() {
+-            true => BC_TRANSACTION.to_ne_bytes().to_vec(),
+-            false => BC_TRANSACTION_SG.to_ne_bytes().to_vec(),
+-        };
+-        write.extend_from_slice(bytes_of(&td));
+-        if !addresses.is_empty() {
+-            write.extend_from_slice(&data.pointed().to_ne_bytes());
++        match addresses.is_empty() {
++            true => self.deliver(BC_TRANSACTION, &td, &[]),
++            false => self.deliver(BC_TRANSACTION_SG, &td, &data.pointed().to_ne_bytes()),
+         }
++    }
++
++    /// Send one call and wait for what it answers.
++    fn deliver(&self, note: u32, td: &TransactionData, extra: &[u8]) -> Result<Reply<'_>> {
++        let mut write = note.to_ne_bytes().to_vec();
++        write.extend_from_slice(bytes_of(td));
++        write.extend_from_slice(extra);
+         // The driver answers a call with a handful of short notices; what
+         // the other side sent lands in the mapped room, not here.
+         let mut read = [0u8; 256];
+@@ -209,6 +215,17 @@ impl Binder {
+                     let data = unsafe { std::slice::from_raw_parts(td.buffer as *const u8, td.data_size as usize) };
+                     return Ok(Some(Reply { binder: self, buffer: td.buffer, data }));
+                 }
++                BR_TRANSACTION => {
++                    // A program that serves objects as well as calling them
++                    // is called back while it waits for an answer: the
++                    // hardware service asks the callback it is handed what
++                    // it is before it answers the call that handed it over.
++                    let raw = skip(size_of::<TransactionData>());
++                    let call: TransactionData = unsafe { std::ptr::read_unaligned(raw.as_ptr().cast()) };
++                    let data = unsafe { std::slice::from_raw_parts(call.buffer as *const u8, call.data_size as usize) };
++                    dispatch(self, call.target, call.code, call.flags, data)?;
++                    self.free(call.buffer)?;
++                }
+                 BR_DEAD_REPLY => bail!("the other side is gone"),
+                 BR_FAILED_REPLY => bail!("the driver refused the call"),
+                 BR_FROZEN_REPLY => bail!("the other side is frozen"),
+@@ -238,6 +255,25 @@ impl Binder {
+     fn free(&self, buffer: u64) -> Result<()> {
+         self.tell(BC_FREE_BUFFER, &buffer.to_ne_bytes())
+     }
++
++    /// Write `parcel` back as what a call answered, whether it was one this
++    /// program took from the driver's room or one it took while it waited
++    /// for an answer of its own.
++    fn reply(&self, parcel: &Parcel) -> Result<()> {
++        let offsets: Vec<u8> = parcel.objects().iter().flat_map(|o| o.to_ne_bytes()).collect();
++        let td = TransactionData {
++            data_size: parcel.bytes().len() as u64,
++            offsets_size: offsets.len() as u64,
++            buffer: parcel.bytes().as_ptr() as u64,
++            offsets: if offsets.is_empty() { 0 } else { offsets.as_ptr() as u64 },
++            ..TransactionData::default()
++        };
++        // The offsets are read from where the note points at them, not
++        // written after it: anything after the note would be taken as the
++        // next note of the same write, which is not one.
++        let _ = &offsets;
++        self.tell(BC_REPLY, bytes_of(&td)).context("answer a call")
++    }
+ }
+ 
+ impl Drop for Binder {
+@@ -269,6 +305,10 @@ pub struct Handle<'a> {
+ }
+ 
+ impl<'a> Handle<'a> {
++    /// The number the driver knows this object by.
++    pub fn raw(&self) -> u32 {
++        self.handle
++    }
+     /// Take a share of an object the driver has just named, so it outlives
+     /// the reply that carried it.
+     pub fn hold(binder: &'a Binder, handle: u32) -> Result<Handle<'a>> {
+@@ -279,6 +319,12 @@ impl<'a> Handle<'a> {
+     pub fn transact(&self, code: u32, data: &impl Payload) -> Result<Reply<'a>> {
+         self.binder.transact(self.handle, code, data)
+     }
++
++    /// Make a call that carries objects, as [`Binder::transact_carrying`]
++    /// does.
++    pub fn transact_carrying(&self, code: u32, data: &Parcel) -> Result<Reply<'a>> {
++        self.binder.transact_carrying(self.handle, code, data)
++    }
+ }
+ 
+ impl Drop for Handle<'_> {
+@@ -318,6 +364,283 @@ impl Drop for Reply<'_> {
+     }
+ }
+ 
++/// The note that a call has arrived for an object this program serves.
++const BR_TRANSACTION: u32 = ioc(READ, b'r', 2, size_of::<TransactionData>());
++/// The note that another program has let an object of this one go.
++const BR_DEAD_BINDER: u32 = ioc(READ, b'r', 15, 8);
++/// Answer a call.
++const BC_REPLY: u32 = ioc(WRITE, b'c', 1, size_of::<TransactionData>());
++/// Tell the driver this thread takes calls rather than only making them.
++const BC_ENTER_LOOPER: u32 = ioc(0, b'c', 12, 0);
++
++/// The call is one-way, so nothing is written back for it.
++const TF_ONE_WAY: u32 = 0x1;
++
++/// The status an answer opens with when the call ended in an error, in the
++/// newer layout's own numbering; what went wrong follows it in words.
++const EXCEPTION_UNKNOWN: i32 = -1;
++
++/// Ask any object whether it is still there, which carries nothing at all.
++const PING: u32 = u32::from_be_bytes(*b"_PNG");
++
++/// The mark libbinder writes into the header of every call it makes, which
++/// this side steps over before the interface's name.
++const CALL_HEADER: i32 = i32::from_be_bytes(*b"RECO");
++
++/// What one call answers: the values the other side reads back, which open
++/// with the status the call ended with, and at most one object it is handed.
++pub struct Answer {
++    parcel: Parcel,
++    /// The address the object handed over, if one is, is served at.
++    address: u64,
++    given: Option<Box<dyn Served>>,
++    /// Whether the answer is one libbinder itself writes for the objects it
++    /// serves, which opens with the value rather than with a status.
++    bare: bool,
++}
++
++impl Answer {
++    /// Answer the way libbinder answers for itself: the value alone, with
++    /// no status in front of it.
++    pub fn bare(&mut self) {
++        self.parcel = Parcel::default();
++        self.bare = true;
++    }
++
++    pub fn i32(&mut self, v: i32) {
++        self.parcel.i32(v);
++    }
++
++    pub fn bool(&mut self, v: bool) {
++        self.parcel.bool(v);
++    }
++
++    pub fn blob(&mut self, v: &[u8]) {
++        self.parcel.blob(v);
++    }
++
++    pub fn string(&mut self, v: &str) {
++        self.parcel.string(v);
++    }
++
++    /// A run of strings, as the newer layout writes one: the count, then
++    /// each.
++    pub fn strings(&mut self, v: &[String]) {
++        self.parcel.i32(v.len() as i32);
++        for s in v {
++            self.parcel.string(s);
++        }
++    }
++
++    /// Nothing where a value may be left out.
++    pub fn none(&mut self) {
++        self.parcel.none();
++    }
++
++    /// Hand `object` over as what this call answers with, served from here
++    /// on at the address this answer was given.
++    pub fn give(&mut self, object: Box<dyn Served>) {
++        self.parcel.object(self.address);
++        self.given = Some(object);
++    }
++}
++
++/// An object this program serves: what takes the calls that arrive for it.
++pub trait Served {
++    fn serve(&mut self, code: u32, data: &mut Reader<'_>, answer: &mut Answer) -> Result<()>;
++}
++
++/// The objects served here, by the address the driver hands a call back
++/// with. One table per thread: a program that both takes calls and makes
++/// them waits and answers on the same thread, so a call that arrives while
++/// it waits for an answer of its own is answered from the same table.
++type ServedHere = Rc<RefCell<Box<dyn Served>>>;
++
++thread_local! {
++    static OBJECTS: RefCell<HashMap<u64, ServedHere>> = RefCell::new(HashMap::new());
++    static NEXT: Cell<u64> = const { Cell::new(1) };
++}
++
++/// The address the next object handed over is served at.
++fn next_address() -> u64 {
++    NEXT.with(|next| {
++        let address = next.get();
++        next.set(address + 1);
++        address
++    })
++}
++
++/// The object served at `address`, if any, so a call can be answered
++/// without holding the table itself while the object runs.
++fn served(address: u64) -> Option<ServedHere> {
++    OBJECTS.with(|objects| objects.borrow().get(&address).cloned())
++}
++
++/// Serve `object` at `address` from now on.
++fn serve_here(address: u64, object: Box<dyn Served>) {
++    OBJECTS.with(|objects| objects.borrow_mut().insert(address, Rc::new(RefCell::new(object))));
++}
++
++/// What a program that takes calls holds: its one end of the driver, which
++/// both takes calls and makes them. An object is served on the end that
++/// sent it, so a callback handed to another service only comes back here.
++pub struct Server {
++    binder: &'static Binder,
++}
++
++impl Server {
++    /// A program that takes calls, before any object is served.
++    pub fn new() -> Result<Server> {
++        let binder: &'static Binder =
++            Box::leak(Box::new(Binder::open().context("open the driver to take calls")?));
++        Ok(Server { binder })
++    }
++
++    /// The end of the driver this server holds, for calls it makes of its
++    /// own while answering.
++    pub fn binder(&self) -> &'static Binder {
++        self.binder
++    }
++
++    /// Serve `object` from now on, at an address of its own: a call that
++    /// names that address is answered here.
++    pub fn keep(&mut self, object: Box<dyn Served>) -> u64 {
++        let address = next_address();
++        serve_here(address, object);
++        address
++    }
++
++    /// Take `name` in the service directory for the object served at
++    /// `address`, so others reach it by that name.
++    pub fn register(&self, name: &str, address: u64) -> Result<()> {
++        crate::service::publish(self.binder, name, address).with_context(|| format!("serve {name}"))
++    }
++
++    /// Start taking calls on this thread.
++    pub fn enter(&self) -> Result<()> {
++        self.binder.tell(BC_ENTER_LOOPER, &[]).context("start taking calls")
++    }
++
++    /// Wait for a call and answer it, for as long as the program runs.
++    pub fn serve(&mut self) -> Result<()> {
++        let mut read = [0u8; 512];
++        loop {
++            let mut bwr = WriteRead { read_size: read.len() as u64, read_buffer: read.as_mut_ptr() as u64, ..WriteRead::default() };
++            unsafe { call(&self.binder.file, BINDER_WRITE_READ, &mut bwr as *mut WriteRead as *mut libc::c_void) }
++                .context("wait for a call")?;
++            self.take(&read[..bwr.read_consumed as usize])?;
++        }
++    }
++
++    /// What the driver said back: a call to answer, or a notice to step
++    /// over.
++    fn take(&mut self, mut said: &[u8]) -> Result<()> {
++        while said.len() >= 4 {
++            let note = u32::from_ne_bytes(said[..4].try_into().expect("four bytes"));
++            said = &said[4..];
++            let mut skip = |n: usize| {
++                let (head, rest) = said.split_at(n.min(said.len()));
++                said = rest;
++                head
++            };
++            match note {
++                BR_NOOP | BR_TRANSACTION_COMPLETE | BR_SPAWN_LOOPER | BR_DEAD_REPLY | BR_FAILED_REPLY | BR_FROZEN_REPLY => {}
++                BR_INCREFS | BR_ACQUIRE | BR_RELEASE | BR_DECREFS => {
++                    skip(16);
++                }
++                BR_DEAD_BINDER => {
++                    skip(8);
++                }
++                BR_ERROR => {
++                    let raw = skip(4);
++                    let code = i32::from_ne_bytes(raw.try_into().unwrap_or([0; 4]));
++                    bail!("the driver reported error {code} while taking calls");
++                }
++                BR_TRANSACTION => {
++                    let raw = skip(size_of::<TransactionData>());
++                    let td: TransactionData = unsafe { std::ptr::read_unaligned(raw.as_ptr().cast()) };
++                    let data = unsafe { std::slice::from_raw_parts(td.buffer as *const u8, td.data_size as usize) };
++                    dispatch(self.binder, td.target, td.code, td.flags, data)?;
++                    self.binder.free(td.buffer)?;
++                }
++                other => bail!("the driver said {other:#x}, which Skyward does not know"),
++            }
++        }
++        Ok(())
++    }
++}
++
++/// Answer the call `code` made on the object served at `target`, whether it
++/// came in to a thread waiting for calls or to one waiting for an answer of
++/// its own: the hardware service asks a callback what it is as it is
++/// started, before it answers the call that started it.
++fn dispatch(binder: &Binder, target: u64, code: u32, flags: u32, data: &[u8]) -> Result<()> {
++    let address = next_address();
++    let mut answer = Answer { parcel: Parcel::default(), address, given: None, bare: false };
++    answer.parcel.i32(0);
++    // The driver's own ping asks only whether the object is still there:
++    // it carries nothing and is answered with nothing.
++    if data.is_empty() && code == PING {
++        return match flags & TF_ONE_WAY != 0 {
++            true => Ok(()),
++            false => binder.reply(&answer.parcel),
++        };
++    }
++    let mut read = Reader::new(data);
++    // Every call opens with the header libbinder writes, then the name
++    // of the interface it is for.
++    let opened = (|| -> Result<()> {
++        read.i32().context("read a call's header")?;
++        read.i32().context("read a call's header")?;
++        let header = read.i32().context("read a call's header")?;
++        if header != CALL_HEADER {
++            read.go(8).context("go back to the interface's name")?;
++        }
++        read.string().context("read the interface a call is for")?;
++        Ok(())
++    })();
++    if opened.is_err() {
++        read = Reader::new(data);
++    }
++    let outcome = match served(target) {
++        Some(object) => object.borrow_mut().serve(code, &mut read, &mut answer),
++        None => bail!("a call came for {target}, which this program does not serve"),
++    };
++    if let Err(e) = outcome {
++        answer.parcel = Parcel::default();
++        answer.bare = false;
++        answer.parcel.i32(EXCEPTION_UNKNOWN);
++        answer.parcel.string(&format!("{e:#}"));
++        answer.given = None;
++    }
++    if flags & TF_ONE_WAY != 0 {
++        return Ok(());
++    }
++    if let Some(object) = answer.given.take() {
++        serve_here(answer.address, object);
++    }
++    binder.reply(&answer.parcel)
++}
++
++impl Binder {
++    /// Make a call that carries objects, which [`Binder::transact`] does
++    /// not: the driver is told where among the values they sit.
++    pub fn transact_carrying(&self, handle: u32, code: u32, data: &Parcel) -> Result<Reply<'_>> {
++        let offsets: Vec<u64> = data.objects().to_vec();
++        let td = TransactionData {
++            target: handle as u64,
++            code,
++            flags: TF_ACCEPT_FDS,
++            data_size: data.bytes().len() as u64,
++            offsets_size: (offsets.len() * 8) as u64,
++            buffer: data.bytes().as_ptr() as u64,
++            offsets: if offsets.is_empty() { 0 } else { offsets.as_ptr() as u64 },
++            ..TransactionData::default()
++        };
++        self.deliver(BC_TRANSACTION, &td, &[])
++    }
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+diff --git a/crates/skyward-binder/src/parcel.rs b/crates/skyward-binder/src/parcel.rs
+index c23605b..fc796da 100644
+--- a/crates/skyward-binder/src/parcel.rs
++++ b/crates/skyward-binder/src/parcel.rs
+@@ -15,6 +15,18 @@ const UNSET_WORK_SOURCE: i32 = -1;
+ /// An object in the sending process, as a transaction carries it.
+ const BINDER_TYPE_HANDLE: u32 = u32::from_be_bytes([b's', b'h', b'*', 0x85]);
+ 
++/// An object the sending process itself serves.
++const BINDER_TYPE_BINDER: u32 = u32::from_be_bytes([b's', b'b', b'*', 0x85]);
++
++/// How far an object's interface is meant to travel. Only a few numbers are
++/// known: an object that says none at all, or a number that is not one of
++/// them, is turned away by whoever reads it.
++pub const LOCAL_ONLY: i32 = 3;
++
++/// The one the service directory takes a service with, which is as far as
++/// an interface travels.
++pub const ACROSS_THE_PHONE: i32 = 3;
++
+ /// What a call carries. The values themselves are most of it; a call that
+ /// hands over an address says where among the values that address sits, and
+ /// how much room the far side needs for everything the addresses point at.
+@@ -35,6 +47,9 @@ pub trait Payload {
+ #[derive(Default)]
+ pub struct Parcel {
+     data: Vec<u8>,
++    /// Where among the values the objects this parcel carries sit, in the
++    /// order the driver reads them.
++    objects: Vec<u64>,
+ }
+ 
+ impl Payload for Parcel {
+@@ -71,6 +86,29 @@ impl Parcel {
+         self.i32(v as i32);
+     }
+ 
++    /// An object this program serves, named by the address the driver is
++    /// given for it: every call the other side makes on it comes back with
++    /// that address as its target, and is answered here.
++    pub fn object(&mut self, address: u64) {
++        self.object_with(address, LOCAL_ONLY);
++    }
++
++    /// The same, saying how far its interface is meant to travel, which a
++    /// service registered with the directory has to say.
++    pub fn object_with(&mut self, address: u64, stability: i32) {
++        self.objects.push(self.data.len() as u64);
++        self.i32(BINDER_TYPE_BINDER as i32);
++        self.i32(0);
++        self.i64(address as i64);
++        self.i64(0);
++        self.i32(stability);
++    }
++
++    /// Where among the values the objects this parcel carries sit.
++    pub fn objects(&self) -> &[u64] {
++        &self.objects
++    }
++
+     /// A byte array: its length, its bytes, then padding to the next four.
+     pub fn blob(&mut self, v: &[u8]) {
+         self.i32(v.len() as i32);
+@@ -78,6 +116,18 @@ impl Parcel {
+         self.pad();
+     }
+ 
++    /// A byte array this layout writes where a value follows it in the
++    /// same call: its length, then its bytes, with nothing between them.
++    pub fn blob_tight(&mut self, v: &[u8]) {
++        self.i32(v.len() as i32);
++        self.data.extend_from_slice(v);
++    }
++
++    /// One byte, wherever the value before it ended.
++    pub fn byte(&mut self, v: u8) {
++        self.data.push(v);
++    }
++
+     /// Where a byte array may be left out, `None` is written as a length of
+     /// -1 rather than as an empty one.
+     pub fn opt_blob(&mut self, v: Option<&[u8]>) {
+@@ -170,6 +220,12 @@ impl<'a> Reader<'a> {
+         Ok(self.i32()? != 0)
+     }
+ 
++    /// One byte, as the newer layout writes it where a whole value cannot
++    /// sit, such as the P2 of a channel being opened.
++    pub fn byte(&mut self) -> Result<u8> {
++        Ok(self.take(1)?[0])
++    }
++
+     pub fn blob(&mut self) -> Result<Vec<u8>> {
+         let len = self.i32()?;
+         if len < 0 {
+diff --git a/crates/skyward-binder/src/service.rs b/crates/skyward-binder/src/service.rs
+index 95c5d0d..6577e97 100644
+--- a/crates/skyward-binder/src/service.rs
++++ b/crates/skyward-binder/src/service.rs
+@@ -11,12 +11,14 @@ use anyhow::{Context, Result};
+ const DIRECTORY: &str = "android.os.IServiceManager";
+ 
+ /// What the directory numbers the methods it is asked by here. It numbers
+-/// its methods in the order its interface declares them, and Android 16
+-/// declared two lookups of its own ahead of the rest; the directory is the
+-/// recovery's own program, so the version the recovery was built as says
+-/// which numbering it keeps.
++/// its methods in the order its interface declares them, from one rather
++/// than from none, and Android 16 declared two lookups of its own ahead of
++/// the rest; the directory is the recovery's own program, so the version
++/// the recovery was built as says which numbering it keeps.
+ #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+ struct Methods {
++    /// Take a name for an object this program serves.
++    add_service: u32,
+     /// Ask for a service without waiting for one that has not registered
+     /// yet.
+     check_service: u32,
+@@ -34,8 +36,8 @@ const LOOKUPS_DECLARED: u32 = 36;
+ /// its methods.
+ fn methods_of(sdk: u32) -> Methods {
+     match sdk >= LOOKUPS_DECLARED {
+-        true => Methods { check_service: 3, list_services: 6, is_declared: 9 },
+-        false => Methods { check_service: 2, list_services: 4, is_declared: 7 },
++        true => Methods { add_service: 4, check_service: 3, list_services: 6, is_declared: 9 },
++        false => Methods { add_service: 3, check_service: 2, list_services: 4, is_declared: 7 },
+     }
+ }
+ 
+@@ -50,6 +52,26 @@ fn methods() -> Result<Methods> {
+ /// Every dump priority a service can register at.
+ const DUMP_PRIORITY_ALL: i32 = 0b1111;
+ 
++/// The priority a service that keeps nothing for a dump registers at.
++const DUMP_PRIORITY_DEFAULT: i32 = 0;
++
++/// The service this program serves at `address`, registered under `name`
++/// with the service directory, so others reach it by name.
++#[cfg(target_os = "android")]
++pub fn publish(binder: &crate::driver::Binder, name: &str, address: u64) -> Result<()> {
++    let directory = binder.directory()?;
++    let mut call = Parcel::call(DIRECTORY);
++    call.string(name);
++    call.object_with(address, crate::parcel::ACROSS_THE_PHONE);
++    call.bool(false);
++    call.i32(DUMP_PRIORITY_DEFAULT);
++    let what = format!("register {name}");
++    let reply = directory.transact_carrying(methods()?.add_service, &call).with_context(|| what.clone())?;
++    let mut read = reply.read();
++    status::ok(&mut read).with_context(|| what)?;
++    Ok(())
++}
++
+ /// Ask any object which process serves it. libbinder answers this itself,
+ /// for every object, before any interface sees the call.
+ const DEBUG_PID: u32 = u32::from_be_bytes(*b"_PID");
+diff --git a/crates/skyward/src/main.rs b/crates/skyward/src/main.rs
+index 1a4c1f0..d10fec8 100644
+--- a/crates/skyward/src/main.rs
++++ b/crates/skyward/src/main.rs
+@@ -18,6 +18,8 @@ mod input;
+ #[cfg(target_os = "android")]
+ mod merge;
+ #[cfg(target_os = "android")]
++mod omapi;
++#[cfg(target_os = "android")]
+ mod partwork;
+ #[cfg(target_os = "android")]
+ mod pty;
+@@ -177,6 +179,15 @@ enum Cmd {
+     /// changes nothing.
+     #[cfg(target_os = "android")]
+     Weaver,
++    /// Serve the service the secure element is reached through, which a
++    /// running system keeps in its system server and a recovery does not
++    /// have: the weaver reaches its slot in the secure element over it.
++    #[cfg(target_os = "android")]
++    Omapi,
++    /// Ask the secure element's own hardware service what it is and what it
++    /// answers, which takes no credential and changes nothing.
++    #[cfg(target_os = "android")]
++    Se,
+     /// Open the data partition with the key the phone keeps for it, check
+     /// it and mount it writable as the phone does, and open each user's
+     /// files that open; the owner's shared storage then shows at /sdcard.
+@@ -377,6 +388,10 @@ fn main() -> Result<()> {
+             Ok(())
+         }
+         #[cfg(target_os = "android")]
++        Cmd::Omapi => omapi::serve(),
++        #[cfg(target_os = "android")]
++        Cmd::Se => omapi::probe(),
++        #[cfg(target_os = "android")]
+         Cmd::Data { close: true, .. } => {
+             wipe::release_data()?;
+             println!("the data partition is closed");
+diff --git a/crates/skyward/src/omapi.rs b/crates/skyward/src/omapi.rs
+new file mode 100644
+index 0000000..00e00d2
+--- /dev/null
++++ b/crates/skyward/src/omapi.rs
+@@ -0,0 +1,536 @@
++//! The service the phone's secure element is reached through, which a
++//! recovery does not have. The weaver, in the secure element, keeps each
++//! user's secret in a slot, and the only way the phone's own program
++//! reaches that slot is OMAPI: it asks the service registered as
++//! `omapiSeService` for a reader, opens a channel on it, and sends the
++//! applet's own bytes down that channel.
++//!
++//! In a running system that service is part of the system server, which a
++//! recovery never starts. So the recovery serves the few calls the weaver
++//! makes and passes them on to the secure element's own hardware service,
++//! which the recovery does run: `android.hardware.secure_element.
++//! ISecureElement/eSE1`.
++
++use anyhow::{bail, Context, Result};
++use skyward_binder::driver::{Answer, Binder, Handle, Server, Served};
++use skyward_binder::parcel::{Parcel, Reader};
++use skyward_binder::service;
++use skyward_binder::status;
++use std::cell::Cell;
++
++/// The name the weaver looks the service up by: not the one a running
++/// system's own programs use, but the one the phone's description of its
++/// interfaces names, which is the only one a look-up from a vendor process
++/// finds.
++pub const NAME: &str = "android.se.omapi.ISecureElementService/default";
++
++/// The secure element's own hardware service, as it is registered here.
++const ELEMENTS: &str = "android.hardware.secure_element.ISecureElement/eSE1";
++
++/// The interface that service serves, which is what a call to it is made
++/// out to: the registered name is not it.
++const SE_IFACE: &str = "android.hardware.secure_element.ISecureElement";
++
++/// The interface the hardware service tells this program how it stands
++/// through: it is handed one object as it is started, and calls it.
++const SE_CALLBACK: &str = "android.hardware.secure_element.ISecureElementCallback";
++
++/// The reader the service offers: the secure element the phone carries,
++/// which its own system names eSE1 as well.
++const READER: &str = "eSE1";
++
++/// The names the interfaces are known by in a call's header.
++const SERVICE: &str = "android.se.omapi.ISecureElementService";
++const READER_IFACE: &str = "android.se.omapi.ISecureElementReader";
++const SESSION_IFACE: &str = "android.se.omapi.ISecureElementSession";
++const CHANNEL_IFACE: &str = "android.se.omapi.ISecureElementChannel";
++
++/// What the directory and libbinder ask of every object: which process
++/// serves it, which interface it serves, which version of it, and which
++/// hash that version was frozen at.
++const WHICH_PROCESS: u32 = u32::from_be_bytes(*b"_PID");
++const WHICH_INTERFACE: u32 = u32::from_be_bytes(*b"_NTF");
++const WHICH_VERSION: u32 = 0x00ff_ffff;
++const WHICH_HASH: u32 = 0xf0ff_ffff;
++
++/// How the service's own methods are numbered, in the order the interface
++/// declares them, from one rather than from none.
++const GET_READERS: u32 = 1;
++const GET_READER: u32 = 2;
++const IS_PRESENT: u32 = 3;
++
++/// The reader's.
++const READER_PRESENT: u32 = 1;
++const OPEN_SESSION: u32 = 2;
++const CLOSE_SESSIONS: u32 = 3;
++
++/// A session's.
++const SESSION_ATR: u32 = 1;
++const SESSION_CLOSE: u32 = 2;
++const SESSION_IS_CLOSED: u32 = 3;
++const SESSION_OPEN_BASIC: u32 = 4;
++const SESSION_OPEN_LOGICAL: u32 = 5;
++
++/// A channel's.
++const CHANNEL_CLOSE: u32 = 1;
++const CHANNEL_IS_CLOSED: u32 = 2;
++const CHANNEL_IS_BASIC: u32 = 3;
++const CHANNEL_SELECT_RESPONSE: u32 = 4;
++const CHANNEL_TRANSMIT: u32 = 5;
++
++/// How the hardware service's own methods are numbered: the order its own
++/// proxy lays them out in, which is not the order this program would
++/// guess.
++const SE_CLOSE_CHANNEL: u32 = 1;
++const SE_ATR: u32 = 2;
++const SE_INIT: u32 = 3;
++const SE_PRESENT: u32 = 4;
++const SE_OPEN_BASIC: u32 = 5;
++const SE_OPEN_LOGICAL: u32 = 6;
++const SE_TRANSMIT: u32 = 8;
++
++/// What the hardware service calls its callback with: whether the card is
++/// there, and why it is not.
++const CALLBACK_STATE: u32 = 1;
++
++/// The address this program serves its callback at, and whether the
++/// hardware service has taken it and so may be asked anything.
++thread_local! {
++    static CALLBACK: Cell<u64> = const { Cell::new(0) };
++    static READY: Cell<bool> = const { Cell::new(false) };
++}
++
++/// Every call this program has answered, in the kernel log, so a weaver
++/// that still will not come up can be followed.
++fn tell(what: &str) {
++    let _ = skyward_sys::kmsg(&format!("omapi: {what}"));
++}
++
++/// The end of the driver the hardware service is reached through. It
++/// outlives every object served here, and it is the same end the service
++/// itself is served on: the driver hands a callback back only to the end
++/// that sent it.
++thread_local! {
++    static OUT: Cell<Option<&'static Binder>> = const { Cell::new(None) };
++}
++
++fn out() -> Result<&'static Binder> {
++    OUT.with(|slot| match slot.get() {
++        Some(binder) => Ok(binder),
++        None => {
++            let binder: &'static Binder =
++                Box::leak(Box::new(Binder::open().context("open the driver the hardware services are reached through")?));
++            slot.set(Some(binder));
++            Ok(binder)
++        }
++    })
++}
++
++/// The hardware service's own handle, looked up afresh for each call: it
++/// registers before this program starts, and a look-up is one call.
++fn elements() -> Result<Handle<'static>> {
++    let binder = out()?;
++    service::find(binder, ELEMENTS)?.with_context(|| format!("{ELEMENTS} has not registered, so the secure element cannot be reached"))
++}
++
++/// Ask the hardware service for one thing, and give back what it answered
++/// once the status in front of it is read.
++fn ask<T>(code: u32, call: &Parcel, read: impl FnOnce(&mut Reader<'_>) -> Result<T>) -> Result<T> {
++    ready()?;
++    let handle = elements()?;
++    let reply = match call.objects().is_empty() {
++        true => out()?.transact(handle.raw(), code, call)?,
++        false => out()?.transact_carrying(handle.raw(), code, call)?,
++    };
++    let mut reader = reply.read();
++    status::ok(&mut reader).with_context(|| format!("the hardware service answered method {code}"))?;
++    read(&mut reader)
++}
++
++/// Make sure the hardware service has taken this program's callback, which
++/// is what it waits for before it answers anything else.
++fn ready() -> Result<()> {
++    if READY.with(Cell::get) {
++        return Ok(());
++    }
++    let callback = CALLBACK.with(Cell::get);
++    let handle = elements()?;
++    let mut call = Parcel::call(SE_IFACE);
++    call.object(callback);
++    let reply = out()?.transact_carrying(handle.raw(), SE_INIT, &call)?;
++    let mut read = reply.read();
++    status::ok(&mut read).context("the hardware service took the callback it is started with")?;
++    READY.with(|r| r.set(true));
++    tell("the hardware service is ready");
++    Ok(())
++}
++
++/// What is served here: the service itself, and what it hands out.
++enum Object {
++    /// The service, which knows the one reader.
++    Service,
++    /// The reader, through which sessions are opened.
++    Reader,
++    /// What the hardware service tells this program how it stands through.
++    Callback,
++    /// A session on the secure element, with the card's own answer.
++    Session { atr: Vec<u8> },
++    /// A channel on that session, held by the hardware service under its
++    /// own number.
++    Channel { number: u8, basic: bool, select: Vec<u8> },
++}
++
++impl Served for Object {
++    fn serve(&mut self, code: u32, data: &mut Reader<'_>, answer: &mut Answer) -> Result<()> {
++        if code != WHICH_INTERFACE && code != WHICH_VERSION && code != WHICH_HASH && code != WHICH_PROCESS {
++            tell(&format!("call {code} arrived for {}", self.name()));
++        }
++        let outcome = match self {
++            Object::Service => serve_service(code, data, answer),
++            Object::Reader => serve_reader(code, answer),
++            Object::Callback => serve_callback(code, data, answer),
++            Object::Session { atr } => serve_session(code, data, atr, answer),
++            Object::Channel { number, basic, select } => serve_channel(code, data, *number, *basic, select, answer),
++        };
++        if let Err(e) = &outcome {
++            tell(&format!("call {code} for {} failed: {e:#}", self.name()));
++        }
++        outcome
++    }
++}
++
++impl Object {
++    fn name(&self) -> &'static str {
++        match self {
++            Object::Service => "the service",
++            Object::Reader => "the reader",
++            Object::Callback => "the callback",
++            Object::Session { .. } => "a session",
++            Object::Channel { .. } => "a channel",
++        }
++    }
++}
++
++/// Answer what the directory and libbinder ask of every object before any
++/// interface sees the call.
++fn answer_everything(code: u32, interface: &str, answer: &mut Answer) -> bool {
++    match code {
++        WHICH_INTERFACE => {
++            answer.bare();
++            answer.string(interface);
++            true
++        }
++        WHICH_VERSION => {
++            answer.bare();
++            answer.i32(1);
++            true
++        }
++        WHICH_HASH => {
++            answer.bare();
++            answer.string("");
++            true
++        }
++        WHICH_PROCESS => {
++            answer.bare();
++            answer.i32(std::process::id() as i32);
++            true
++        }
++        _ => false,
++    }
++}
++
++fn serve_service(code: u32, data: &mut Reader<'_>, answer: &mut Answer) -> Result<()> {
++    if answer_everything(code, SERVICE, answer) {
++        return Ok(());
++    }
++    match code {
++        GET_READERS => {
++            tell("the service is asked for its readers");
++            answer.strings(&[READER.to_string()]);
++            Ok(())
++        }
++        IS_PRESENT => {
++            let name = data.string().context("read which reader is asked about")?;
++            tell(&format!("the service is asked whether {name} is present"));
++            answer.bool(name == READER && card_present()?);
++            Ok(())
++        }
++        GET_READER => {
++            let name = data.string().context("read which reader is asked for")?;
++            tell(&format!("the service is asked for the reader {name}"));
++            match name == READER {
++                true => {
++                    answer.give(Box::new(Object::Reader));
++                    Ok(())
++                }
++                false => {
++                    answer.none();
++                    Ok(())
++                }
++            }
++        }
++        other => bail!("the service has no method {other}"),
++    }
++}
++
++fn serve_reader(code: u32, answer: &mut Answer) -> Result<()> {
++    if answer_everything(code, READER_IFACE, answer) {
++        return Ok(());
++    }
++    match code {
++        READER_PRESENT => {
++            answer.bool(card_present()?);
++            Ok(())
++        }
++        OPEN_SESSION => {
++            tell("a session is opened on the secure element");
++            let atr = ask(SE_ATR, &Parcel::call(SE_IFACE), |r| r.blob().context("read the card's ATR"))?;
++            tell(&format!("the secure element answered an ATR of {} bytes: {}", atr.len(), hex(&atr)));
++            answer.give(Box::new(Object::Session { atr }));
++            Ok(())
++        }
++        CLOSE_SESSIONS => {
++            tell("every session on the secure element is closed");
++            Ok(())
++        }
++        other => bail!("the reader has no method {other}"),
++    }
++}
++
++fn serve_callback(code: u32, data: &mut Reader<'_>, answer: &mut Answer) -> Result<()> {
++    if answer_everything(code, SE_CALLBACK, answer) {
++        return Ok(());
++    }
++    match code {
++        CALLBACK_STATE => {
++            let there = data.bool().unwrap_or(false);
++            let why = data.string().unwrap_or_default();
++            tell(&format!("the hardware service says the card is {}: {why}", if there { "there" } else { "not there" }));
++            Ok(())
++        }
++        other => bail!("the callback has no method {other}"),
++    }
++}
++
++fn serve_session(code: u32, data: &mut Reader<'_>, atr: &[u8], answer: &mut Answer) -> Result<()> {
++    if answer_everything(code, SESSION_IFACE, answer) {
++        return Ok(());
++    }
++    match code {
++        SESSION_ATR => {
++            answer.blob(atr);
++            Ok(())
++        }
++        SESSION_IS_CLOSED => {
++            answer.bool(false);
++            Ok(())
++        }
++        SESSION_CLOSE => Ok(()),
++        SESSION_OPEN_BASIC | SESSION_OPEN_LOGICAL => {
++            let aid = data.blob().context("read which applet a channel is asked for")?;
++            let p2 = data.byte().context("read the P2 the channel opens with")?;
++            // The byte after an array is one byte wide, not a whole word.
++            let basic = code == SESSION_OPEN_BASIC;
++            tell(&format!("a{} channel is asked for applet {} with p2 {p2}", if basic { " basic" } else { " logical" }, hex(&aid)));
++            let mut call = Parcel::call(SE_IFACE);
++            call.blob_tight(&aid);
++            call.byte(p2);
++            let select = ask(if basic { SE_OPEN_BASIC } else { SE_OPEN_LOGICAL }, &call, |r| {
++                r.blob().with_context(|| {
++                    if basic {
++                        "read what the card answered the channel it opened"
++                    } else {
++                        "read the logical channel the card opened"
++                    }
++                })
++            })?;
++            tell(&format!("the card answered the channel with {} bytes: {}", select.len(), hex(&select)));
++            answer.give(Box::new(Object::Channel { number: 0, basic, select }));
++            Ok(())
++        }
++        other => bail!("the session has no method {other}"),
++    }
++}
++
++fn serve_channel(
++    code: u32,
++    data: &mut Reader<'_>,
++    number: u8,
++    basic: bool,
++    select: &[u8],
++    answer: &mut Answer,
++) -> Result<()> {
++    if answer_everything(code, CHANNEL_IFACE, answer) {
++        return Ok(());
++    }
++    match code {
++        CHANNEL_TRANSMIT => {
++            let sent = data.blob().context("read what is sent down the channel")?;
++            tell(&format!("{} bytes are sent down the channel: {}", sent.len(), hex(&sent)));
++            let mut call = Parcel::call(SE_IFACE);
++            call.blob(&sent);
++            let back = ask(SE_TRANSMIT, &call, |r| r.blob().context("read what came back down the channel"))?;
++            tell(&format!("{} bytes came back: {}", back.len(), hex(&back)));
++            answer.blob(&back);
++            Ok(())
++        }
++        CHANNEL_IS_BASIC => {
++            answer.bool(basic);
++            Ok(())
++        }
++        CHANNEL_IS_CLOSED => {
++            answer.bool(false);
++            Ok(())
++        }
++        CHANNEL_SELECT_RESPONSE => {
++            answer.blob(select);
++            Ok(())
++        }
++        CHANNEL_CLOSE => {
++            let mut call = Parcel::call(SE_IFACE);
++            call.byte(number);
++            let _ = ask(SE_CLOSE_CHANNEL, &call, |_| Ok(()));
++            Ok(())
++        }
++        other => bail!("the channel has no method {other}"),
++    }
++}
++
++/// Ask the hardware service whether a card is there.
++fn card_present() -> Result<bool> {
++    ask(SE_PRESENT, &Parcel::call(SE_IFACE), |r| r.bool().context("read whether the card is there"))
++}
++
++/// Serve the service until the program ends.
++pub fn serve() -> Result<()> {
++    let mut server = Server::new()?;
++    // Everything this program says to the hardware service goes through the
++    // same end of the driver it takes calls on, so the callback it hands
++    // over comes back here rather than to a place nothing reads.
++    OUT.with(|slot| slot.set(Some(server.binder())));
++    let callback = server.keep(Box::new(Object::Callback));
++    CALLBACK.with(|c| c.set(callback));
++    READY.with(|r| r.set(false));
++    // Start the hardware service before offering the service: the weaver
++    // reads a service whose reader is not started as a service that cannot
++    // reach the card at all.
++    match ready() {
++        Ok(()) => tell("the hardware service is started before the service is offered"),
++        Err(e) => tell(&format!("the hardware service will not start yet: {e:#}")),
++    }
++    let address = server.keep(Box::new(Object::Service));
++    server.register(NAME, address)?;
++    tell("the service is registered");
++    server.enter()?;
++    server.serve()
++}
++
++/// Ask the hardware service what it is, and what it answers when called:
++/// what a recovery reaches before any of this is built on.
++pub fn probe() -> Result<()> {
++    let binder = out()?;
++    let handle = elements()?;
++    println!("{ELEMENTS} is up");
++    match service::pid(&handle) {
++        Ok(pid) => println!("it is served by process {pid}"),
++        Err(e) => println!("nothing says which process serves it: {e:#}"),
++    }
++    if let Ok(interface) = service::interface(&handle) {
++        println!("it serves {interface}");
++    }
++    match service::version(&handle, SE_IFACE) {
++        Ok(v) => println!("it serves version {v} of that interface"),
++        Err(e) => println!("it will not say which version it serves: {e:#}"),
++    }
++    for (what, code) in [("isCardPresent", SE_PRESENT), ("getAtr", SE_ATR)] {
++        let call = Parcel::call(SE_IFACE);
++        let _ = binder;
++        match binder.transact(handle.raw(), code, &call) {
++            Ok(reply) => {
++                let mut read = reply.read();
++                match status::ok(&mut read) {
++                    Ok(()) => {
++                        let left = reply.bytes().len() - read.here();
++                        println!("{what} (method {code}) answered; {left} bytes left: {}", hex(&reply.bytes()[read.here()..]));
++                    }
++                    Err(e) => println!("{what} (method {code}): {e:#}"),
++                }
++            }
++            Err(e) => println!("{what} (method {code}): {e:#}"),
++        }
++    }
++    println!("whether it is ready: {:?}", ready().map_err(|e| format!("{e:#}")));
++    // The look-up the weaver makes, made from its own account as well: a
++    // vendor process is not shown every service the phone has.
++    look(name_of_the_searcher());
++    Ok(())
++}
++
++/// The account the weaver's own program runs as, which its look-ups are
++/// made from.
++fn name_of_the_searcher() -> u32 {
++    2911
++}
++
++/// Ask for the service from this account and from the weaver's own.
++fn look(uid: u32) {
++    println!("--- asking for {NAME}");
++    for (what, code) in [("getService", 1u32), ("checkService", 2)] {
++        let mut call = Parcel::call("android.os.IServiceManager");
++        call.string(NAME);
++        match out().and_then(|b| b.transact(0, code, &call)) {
++            Ok(reply) => {
++                let mut read = reply.read();
++                match status::ok(&mut read) {
++                    Ok(()) => match read.object() {
++                        Ok(Some(handle)) => println!("  as root {what}: found it, handle {handle}"),
++                        Ok(None) => println!("  as root {what}: nothing"),
++                        Err(e) => println!("  as root {what}: {e:#}"),
++                    },
++                    Err(e) => println!("  as root {what}: {e:#}"),
++                }
++            }
++            Err(e) => println!("  as root {what}: {e:#}"),
++        }
++    }
++    unsafe {
++        let pid = libc::fork();
++        if pid == 0 {
++            if libc::setgid(uid) != 0 || libc::setuid(uid) != 0 {
++                println!("  could not become {uid}");
++                libc::_exit(1);
++            }
++            let binder = match Binder::open() {
++                Ok(b) => b,
++                Err(e) => {
++                    println!("  as {uid}: the driver would not open: {e:#}");
++                    libc::_exit(1);
++                }
++            };
++            for (what, code) in [("getService", 1u32), ("checkService", 2)] {
++                let mut call = Parcel::call("android.os.IServiceManager");
++                call.string(NAME);
++                match binder.transact(0, code, &call) {
++                    Ok(reply) => {
++                        let mut read = reply.read();
++                        match status::ok(&mut read) {
++                            Ok(()) => match read.object() {
++                                Ok(Some(handle)) => println!("  as {uid} {what}: found it, handle {handle}"),
++                                Ok(None) => println!("  as {uid} {what}: nothing"),
++                                Err(e) => println!("  as {uid} {what}: {e:#}"),
++                            },
++                            Err(e) => println!("  as {uid} {what}: {e:#}"),
++                        }
++                    }
++                    Err(e) => println!("  as {uid} {what}: {e:#}"),
++                }
++            }
++            libc::_exit(0);
++        }
++        libc::waitpid(pid, std::ptr::null_mut(), 0);
++    }
++}
++
++fn hex(b: &[u8]) -> String {
++    b.iter().map(|x| format!("{x:02x}")).collect()
++}

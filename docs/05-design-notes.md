@@ -1,0 +1,185 @@
+# 设计思路
+
+> 状态：**现行**
+> 对应版本：`v0.2.0-onyx.4`
+> 读者：想理解「为什么这样做、为什么不那样做」的人。
+
+---
+
+## 1. 问题的本质
+
+一开始的表象是「recovery 里输锁屏密码，提示密码不对」。但拆开看是三层：
+
+1. `/data` 的**设备级**加密：keymint 能取到密钥，`/data` 已经挂载，`/data/app`、`/data/misc` 都能读；
+2. `/data/media/0` 的**用户级（CE）**加密：文件名是密文，读写报 `Required key not available`；
+3. 用户密钥的解锁链：锁屏密码 → 合成密码（SP）→ file secret → CE key。
+
+第 3 层卡住的原因不是密码错，而是 **weaver 拿不到它保管的值**：
+
+```
+E/OmapiTransport: Failed to start omapiSeService null
+E/OmapiTransport: Failed to connect to OMAPI
+E/weaver-impl: GetSlots Failed to perform getSlot Request
+```
+
+NXP 的 weaver HAL 只走 OMAPI；OMAPI 的服务在正常系统里由 system_server 提供，recovery 没有。gatekeeper 本身是好的（用一个不存在的凭据去问，它会正确回答「不认识」），缺的只是通往 eSE 的那条通道。
+
+---
+
+## 2. 两条路：OMAPI 桥 vs gatekeeper 回退
+
+### 方案 A：在 recovery 里实现 OMAPI → SE HAL 桥
+
+做法：给 `skyward-binder` 加服务端，注册 `android.se.omapi.ISecureElementService/default`，把 weaver 的调用转发给 `android.hardware.secure_element.ISecureElement/eSE1`。
+
+已经做到：
+
+- binder 服务端能收 `BR_TRANSACTION`、回 `BC_REPLY`、在等待答复时处理对方回调、传 binder 对象；
+- 服务用 stability **3** 注册（试过 1/2/16/32/48 都被 `Stability: Can only set known stability` 拒掉）；
+- AIDL 方法编号从 **1** 开始：`getReaders=1, getReader=2, isSecureElementPresent=3`，session / channel 同理；
+- 真机上 weaver 已经依次调用 `getReaders → getReader("eSE1") → isSecureElementPresent`，说明桥接、编号、对象交接都对。
+
+卡住的地方：
+
+- SE HAL 的 `init()` 不返回（`Failed on initalize eSE TA`），因为 eSE TA 没在安全世界里起来；
+- 继续往下查要碰 TEE / NFC 链路，历史测试中触发过整机黑屏重启；
+- 即使打通，收益只是「让 weaver 可用」，而 user 999 还需要额外的凭据输入流程。
+
+**结论：不作为 v4 的主路径。** 代码留在 `patches/0002`，CLI 是 `skyward omapi` / `skyward se`，不自动启动。
+
+### 方案 B：回退到 gatekeeper 绑定的第二份 protector
+
+真机检查发现 user 0 在 `/data/system_de/0/spblob/` 下有**两份** protector：
+
+| 文件 | 绑定 | 说明 |
+| --- | --- | --- |
+| `f599a28814fc768a` | `.weaver` → 槽位 1 | 系统记录为「当前凭据打开的那份」；weaver 不可用 |
+| `f599a28814fc768b` | `.secdis`（58 字节 gatekeeper handle） | 同一用户、同一把锁屏密码也能打开 |
+
+两份的 salt / scrypt 参数完全相同，所以同一个密码能算出同一个 `stretched`；`spblob` 里的 `inner` 是同一个 SP 的密文，差别只在「谁保管解它的 secret」：
+
+- weaver：secret 由 eSE 槽位 1 的值派生；
+- secdiscardable：secret 由 `.secdis` 的字节派生，凭据由 gatekeeper 校验。
+
+而 CE 的 `encrypted_key` 是用 **SP 派生的 file secret** 做软件包裹的，不是绑 weaver 的。所以从任意一份 protector 拿到 SP，都能解出同一个 CE key。
+
+实现（`patches/0003`，只改 `data.rs`）：
+
+```text
+open_user_files:
+  1. protector(user) 读系统记录的那份
+  2. 先按原逻辑开
+  3. 若错误是 WeaverUnusable：
+       a. 没有 credential → 原样返回
+       b. 遍历 protector_ids(user)
+       c. 跳过当前 id
+       d. 只保留 Bound::Secdiscardable + lock.is_some() 的
+       e. 用同一个 credential 再开一次（gatekeeper 校验）
+       f. 成功即返回；全失败返回最后一个错误
+```
+
+**为什么选 B：**
+
+- 不碰 eSE / TEE，不增加黑屏风险；
+- 不改数据、不写 `/data`；
+- 用的是系统自己留下的第二份 protector，不是破解；
+- 代码改动小（约 90 行），失败时能明确报错。
+
+**代价：**
+
+- 只对「有第二份 secdiscardable protector」的用户有效；user 999 只有 weaver 绑定的，仍然打不开；
+- 依赖 `.pwd` 的 salt / scrypt 参数与 `.spblob` 匹配；换底包 / 改锁屏方式后要重新确认；
+- 如果系统记录的当前 protector 变了、或第二份被清理，回退会失败。
+
+---
+
+## 3. 为什么不是「直接跟 eSE 里的 applet 讲 APDU」
+
+理论上可以绕过 weaver HAL，直接通过 SE HAL 发 APDU 给 weaver applet。不做：
+
+- applet 的 APDU 协议是 NXP 私有的，要从 `ese_weaver.so` 反推；
+- 一旦 APDU 写错，可能触发 eSE 复位 / 安全世界异常，风险远高于收益；
+- user 0 已有 gatekeeper 回退，user 999 的收益不足以承担这个风险。
+
+---
+
+## 4. 触摸：为什么不能直接读 `/dev/input/event7`
+
+现象：`getevent /dev/input/event7` 90 秒、用户滑动，**零事件**；把 `enable_touch_raw` 从 1 改 0、重刷触摸固件也没有用。
+
+根因：onyx 的 NT38771 驱动在连接时复位控制器，之后只回传 raw 帧；面板自己的 input 设备不带触摸。小米的 `touch_report_debug` 才负责：
+
+```
+读 /dev/xiaomi-touch 的 raw 帧
+  → /odm/lib64/libtouchreport.so + /odm/firmware/o10u_nova_csot_thp_config.ini
+  → 写回面板输入设备
+  → skyward 的 UI 才能收到
+```
+
+所以配置里是：
+
+```toml
+[[service]]
+path = "/odm/bin/touch_report_debug"
+libraries = ["/odm/lib64", "/vendor/lib64", "/vendor/lib64/hw", "/system/lib64"]
+user = "root"
+groups = ["root", "uhid", "input"]
+capabilities = ["SYS_NICE"]
+```
+
+注意 onyx 的 ODM 里**没有** `touch_report`，只有 `_debug`。v2 按 fuxi / ishtar / nuwa 的写法拉了 `touch_report`，服务起不来，屏幕给出诊断页，这就是 v2 无触摸的全部原因。
+
+---
+
+## 5. 密度：为什么是 512 而不是 1109
+
+- 屏幕 1280 × 2772；
+- 目标布局宽度 400 dp（和测试过的机型一致）；
+- `1280 ÷ 400 × 160 = 512`。
+
+v1 用 `1109 = 2772 ÷ 400 × 160`，是按**高度**反推的，导致布局宽度只有约 184 dp，UI 整体放大 2.2 倍并溢出。
+
+---
+
+## 6. Windows 宿主构建：为什么需要补丁 0001
+
+上游 `skyward-bootimg` 的 `Ramdisk::unpack` / `c_path` / `set_time` 用了 Unix 的权限 / 时间 API；宿主打包器只走内存里的 cpio，不需要这些函数。用 `#[cfg(unix)]` 围起来后，Windows 上可以只编打包器，手机侧照样交叉编译。
+
+这不是「为了 Windows 改上游行为」，而是让同一个 crate 在不同宿主上只编需要的部分。
+
+---
+
+## 7. 关键取舍
+
+| 取舍 | 选择 | 理由 |
+| --- | --- | --- |
+| 解密路径 | gatekeeper 回退优先 | 不碰 eSE，风险最低；user 0 已覆盖 |
+| OMAPI 桥 | 保留代码，不自动启动 | 给 user 999 / 排错留路，但不进主路径 |
+| 触摸 | 拉起小米自己的 `touch_report_debug` | 不自己解析 raw 帧，不重写驱动 |
+| 密度 | 512 | 400 dp 宽，和测试机型一致 |
+| 镜像 | 整分区 100 MB | 与原厂 recovery 分区一致，AVB footer 正确 |
+| 数据 | 只读挂载验证，不写 `/data` | 用户数据不可替代 |
+| 发布 | 镜像进 Release，不进 git | 单文件 100 MB，超过 GitHub 限制 |
+
+---
+
+## 8. 什么时候会失效
+
+以下任一变化都可能让 v4 的回退失效：
+
+- 底包不是 OS3.0.306.0.WOLCNXM；
+- 用户在系统里改过锁屏方式，第二份 protector 被清理；
+- `.pwd` 的 salt / scrypt 参数与 `.spblob` 不再匹配；
+- 系统把「当前 protector」记录改成了另一份；
+- keymint 的 note / key blob 布局变化；
+- `/data` 的 `encrypted_key` 版本变化。
+
+出现这些情况时，回退会报明确的错误（而不是静默失败）；按 [`08-troubleshooting.md`](08-troubleshooting.md) 收集 `spblob` 列表、`locksettings` 记录和日志，再决定是否走 OMAPI 桥。
+
+---
+
+## 9. 相关记录
+
+- v1–v3 的构建与真机结论：[`sessions/2026-11-11-onyx-bringup.md`](sessions/2026-11-11-onyx-bringup.md)
+- v4 的发现与验证：[`sessions/2026-11-12-ce-unlock-v4.md`](sessions/2026-11-12-ce-unlock-v4.md)
+- 坑的完整列表：[`06-pitfalls.md`](06-pitfalls.md)

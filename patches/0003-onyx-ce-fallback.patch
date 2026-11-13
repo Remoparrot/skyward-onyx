@@ -1,0 +1,131 @@
+diff --git a/crates/skyward-crypto/src/data.rs b/crates/skyward-crypto/src/data.rs
+index 3bb2ef7..5d9f317 100644
+--- a/crates/skyward-crypto/src/data.rs
++++ b/crates/skyward-crypto/src/data.rs
+@@ -334,15 +334,7 @@ const PROTECTORS: &str = "/data/system_de";
+ /// so this reads it rather than guess.
+ fn protector(user: u32) -> Result<crate::user::Protector> {
+     let dir = blobs(user);
+-    let mut ids = Vec::new();
+-    for entry in std::fs::read_dir(&dir).with_context(|| format!("read {}", dir.display()))? {
+-        let path = entry.with_context(|| format!("read {}", dir.display()))?.path();
+-        if path.extension().is_some_and(|e| e == "spblob") {
+-            if let Some(id) = path.file_stem().and_then(|s| s.to_str()) {
+-                ids.push(id.to_string());
+-            }
+-        }
+-    }
++    let ids = protector_ids(user)?;
+     let id = match crate::locksettings::current_protector(Path::new(crate::locksettings::DATABASE), user)? {
+         Some(recorded) => {
+             anyhow::ensure!(
+@@ -364,6 +356,28 @@ fn protector(user: u32) -> Result<crate::user::Protector> {
+             ),
+         },
+     };
++    protector_named(user, &id)
++}
++
++/// The names of every blob the phone keeps for `user`.
++fn protector_ids(user: u32) -> Result<Vec<String>> {
++    let dir = blobs(user);
++    let mut ids = Vec::new();
++    for entry in std::fs::read_dir(&dir).with_context(|| format!("read {}", dir.display()))? {
++        let path = entry.with_context(|| format!("read {}", dir.display()))?.path();
++        if path.extension().is_some_and(|e| e == "spblob") {
++            if let Some(id) = path.file_stem().and_then(|s| s.to_str()) {
++                ids.push(id.to_string());
++            }
++        }
++    }
++    Ok(ids)
++}
++
++/// Read the blob the phone keeps for `user` under `id`, with what the
++/// credential that opens it takes.
++fn protector_named(user: u32, id: &str) -> Result<crate::user::Protector> {
++    let dir = blobs(user);
+     // A user who has set a screen lock has what the phone recorded about
+     // it beside the blob; a user who has set none has nothing there.
+     let recorded = dir.join(format!("{id}.pwd"));
+@@ -385,7 +399,7 @@ fn protector(user: u32) -> Result<crate::user::Protector> {
+     Ok(crate::user::Protector {
+         blob: std::fs::read(dir.join(format!("{id}.spblob"))).with_context(|| format!("read the blob in {}", dir.display()))?,
+         bound,
+-        id,
++        id: id.to_string(),
+         lock,
+     })
+ }
+@@ -468,6 +482,59 @@ const TAG_BYTES: usize = 16;
+ /// shows at /sdcard.
+ fn open_user_files(service: &KeyMint, user: u32, credential: Option<&[u8]>, owner: Option<&Token>) -> Result<Note> {
+     let protector = protector(user)?;
++    match open_with_protector(service, user, credential, owner, &protector) {
++        Ok(note) => Ok(note),
++        Err(e) if e.downcast_ref::<WeaverUnusable>().is_some() => {
++            // The blob the phone recorded as the one the user's own
++            // credential opens is bound to the weaver, and the weaver will
++            // not say what it holds. A phone that changed its screen lock
++            // with a fingerprint enrolled leaves another blob, bound to the
++            // secure world itself; it keeps the same secret, and the same
++            // credential opens it. What a recovery can reach, then, is the
++            // screen lock's own check rather than the weaver's.
++            let Some(credential) = credential else { return Err(e) };
++            let mut last = e;
++            for id in protector_ids(user)? {
++                if id == protector.id {
++                    continue;
++                }
++                let other = protector_named(user, &id)?;
++                if !matches!((&other.bound, &other.lock), (Bound::Secdiscardable(_), Some(_))) {
++                    continue;
++                }
++                match open_with_protector(service, user, Some(credential), owner, &other) {
++                    Ok(note) => return Ok(note),
++                    Err(why) => last = why,
++                }
++            }
++            Err(last)
++        }
++        Err(e) => Err(e),
++    }
++}
++
++/// The weaver cannot be asked what it holds, so a blob bound to it cannot
++/// be opened here; what stands in for it is said with this, so a caller
++/// can tell it from a credential the weaver refused.
++#[derive(Debug)]
++struct WeaverUnusable;
++
++impl std::fmt::Display for WeaverUnusable {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        write!(f, "the phone's weaver is not answering, so what it holds cannot be asked for")
++    }
++}
++
++impl std::error::Error for WeaverUnusable {}
++
++/// Open the own files of `user` with the blob `protector` holds.
++fn open_with_protector(
++    service: &KeyMint,
++    user: u32,
++    credential: Option<&[u8]>,
++    owner: Option<&Token>,
++    protector: &crate::user::Protector,
++) -> Result<Note> {
+     let stretched = match &protector.lock {
+         Some(lock) => {
+             let typed = match made_up_credential(service, user, &protector.id, owner)? {
+@@ -486,8 +553,9 @@ fn open_user_files(service: &KeyMint, user: u32, credential: Option<&[u8]>, owne
+         // the secret is then guarded by nothing else.
+         (Bound::Weaver(slot), _) => {
+             let binder = Binder::open()?;
+-            let weaver = Weaver::open(&binder)?;
+-            let key = crate::user::weaver_key(&stretched, weaver.config()?.key_bytes)?;
++            let weaver = Weaver::open(&binder).map_err(|_| anyhow::Error::new(WeaverUnusable))?;
++            let config = weaver.config().map_err(|_| anyhow::Error::new(WeaverUnusable))?;
++            let key = crate::user::weaver_key(&stretched, config.key_bytes)?;
+             let value = weaver.read(*slot, &key)?;
+             (crate::user::weaver_protector_secret(&stretched, &value), None)
+         }
