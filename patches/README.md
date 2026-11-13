@@ -92,6 +92,21 @@ skyward se      # 只探 SE HAL
 
 ---
 
+## 0005-onyx-readings.patch
+
+**文件**：8 个（`Cargo.toml` / `Cargo.lock` / `skyward-net/github.rs` / `skyward-ui/{app,pages,widgets}.rs` / `skyward/{ui,updates}.rs`）
+
+**内容**：v0.3.0-onyx.2 的全部改动，两组：
+
+1. **主界面机型卡片的数据条**（本次需求）：`skyward-ui/widgets.rs` 新增 `Reading` / `readings_of`，`device_card` 在机型名与副标题下、提示行上画四列读数（当前槽位 / 数据分区 / 可用空间 / 电量，第二行是说明）；`pages.rs` 的 `home()` 按现有读数拼出这四列，读不到的项（无 A/B、data 未挂载没 free、无电量计）自动省略，列数随之收缩；`Cargo.toml` 版本号 `0.3.0-onyx.2`。
+2. **在线更新接受裸 `recovery.img` + 本地刷入**（上一轮未进补丁的工作）：`github.rs` 优先取 release 里名为 `recovery.img` 的 asset（没有才退回 `skyward-<tag>-onyx-*.zip`），`Build.raw` 标出是裸镜像；`updates.rs` 新增 `UpdateSkywardFile` 与 `write_raw` / `write_image` 拆解；`ui.rs` 处理 `Effect::UpdateSkywardLocal`；`app.rs` 新增 `Action::UpdateSkywardLocal` 与 `Effect::UpdateSkywardLocal`，把 `/sdcard/Download/recovery.img` 交给同一个写分区路径（本地刷入**不检查网络**）；`pages.rs` 的「Skyward 更新」页加「从本地 recovery.img 刷入」一行，在线那一行改名为「从 GitHub 下载 recovery.img 并更新」。
+
+**为什么**：主界面只靠状态栏显示槽位 / data / 电量，太小且分散；机型卡片下的四列读数是按用户给的截图做的（截图来自别的机型构建，本仓库用自己的主题与 512 dpi 的 onyx 面板重画，尺寸按 `m.account_title_px` / `m.sub_px` 与卡片宽度四等分）。裸镜像与本地刷入则是「GitHub 直连不通时也能更新」的退路。
+
+**边界**：本地刷入的路径写死 `/sdcard/Download/recovery.img`；`upgrade::check` 仍会核对镜像内 `device.toml` 的 codename，刷错机型的镜像会被拒绝，且什么都没写。
+
+---
+
 ## 应用
 
 ```sh
@@ -118,9 +133,10 @@ git -C vendor/skyward apply --check patches/0001-windows-host-build.patch
 git -C vendor/skyward apply --check patches/0002-omapi-se-bridge.patch
 git -C vendor/skyward apply --check patches/0003-onyx-ce-fallback.patch
 git -C vendor/skyward apply --check patches/0004-onyx-v0.3.0-wifi-ui.patch
+git -C vendor/skyward apply --check patches/0005-onyx-readings.patch
 ```
 
-四个都过，且应用后 `crates/` 与发布镜像对应的源码一致。
+五个都过，且应用后 `crates/` 与发布镜像对应的源码一致（v0.3.0-onyx.2 用 `diff -r --strip-trailing-cr` 对过，除 `.git` / `target` / `.onyx-patched` 外完全一致）。
 
 ## 修改 / 新增补丁
 
