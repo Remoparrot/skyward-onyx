@@ -14,13 +14,13 @@
 
 | 项 | 值 |
 | --- | --- |
-| 最新 release | [`v0.3.0-onyx.1`](https://github.com/Remoparrot/skyward-onyx/releases/tag/v0.3.0-onyx.1) |
+| 最新 release | [`v0.3.0-onyx.3`](https://github.com/Remoparrot/skyward-onyx/releases/tag/v0.3.0-onyx.3) |
 | 镜像 | `recovery.img` · **104,857,600 字节**（整分区） |
-| SHA-256 | `714dfc27be9ae76c18366ebd36fc5dff587a9fa4c17873a803d55c8aa1210ba5` |
-| ramdisk | 50,669,556 字节（LZ4）· 1062 个 cpio 条目 |
-| 内含 skyward | 8,655,096 字节 · `fb67d123ac80eae2d71ba9fac706a8e577a2cf3532edda48550a2c1161452629` |
+| SHA-256 | `d0a67128ee1fbc54033dadae2cf9c55b429733c4b163e1528dedbaca370360c5` |
+| ramdisk | 50,681,746 字节（LZ4）· 1062 个 cpio 条目 |
+| 内含 skyward | 8,753,632 字节 · `bb75d7e4aef48a3a5f3b986e6b0974ad7daf531ed5e25d7fbb88611fc942ba44` |
 | 底包 | HyperOS **OS4.0.2.0.XOLCNXM**（Android 17） |
-| 上游 | `kirklin/skyward` @ `ff1668f`（v0.2.0）+ 4 个补丁 |
+| 上游 | `kirklin/skyward` @ `ff1668f`（v0.2.0）+ 6 个补丁 |
 | 真机 | ✅ 已刷入 onyx 并验证：触摸服务、`/data` 自动挂载、user 0 CE（`/data/media/0` 与相册 JPEG 可读）、WLAN 自动连接（`CMCC-A9s7-5G`，`192.168.1.227`）、振动驱动；用 `sendevent` 注入触摸验证滑动锁屏；电源键注入验证息屏/点亮后先显示滑动锁屏；唤醒黑屏已修（面板不再 rest/off，息屏只关背光） |
 | 风险 | ⚠️ 需要解锁 bootloader；只刷 recovery 分区，详见[安装](docs/04-install.md) |
 
@@ -38,7 +38,9 @@
 | 备份 / 安装 / 文件管理 / 终端 | ⚠️ | 上游能力，随镜像提供；未逐项真机验证 |
 | MTP | ⚠️ | 已带 `skyward-mtp.rc`，未逐项验证 |
 | WLAN | ✅ | `qca_cld3_wcn7750` + `rfkill` 从 vendor_dlkm 加载；wpa_supplicant 用 `skyward/wpa-aidl-shim.so` 跳过 recovery 不认的 AIDL 注册；开机自动连接上次网络（密码存 `/metadata`，0600） |
-| Skyward 在线更新 | ✅ | 高级 → 「Skyward 更新」；查 `Remoparrot/skyward-onyx` 的 Release，按 `onyx` 取 zip；需要 WLAN |
+| Skyward 在线更新 | ✅ | 高级 → 「Skyward 更新」；查 `Remoparrot/skyward-onyx` 的 Release，优先下裸 `recovery.img`、没有才取 zip；下载最多 512 连接并行（45.85 MB 实测 17.2 s），需要 WLAN |
+| 从本地 recovery.img 刷入 | ✅ | 同一页把 `/sdcard/Download/recovery.img` 校验后写入 recovery 分区，不需要网络；onyx.2 → onyx.3 实测 |
+| 首页机型卡片读数 | ✅ | 机型名/底包下四列：当前槽位 / 数据分区 / 可用空间 / 电量（充电时写充电中）；读不到的项自动省略，解密完成后补上可用空间 |
 | 振动 | ✅ | AW8697（`awinic_haptic`，i2c 5-005a）的 `activate` / `duration` / `gain`；设置页滑杆与触摸反馈走同一路径 |
 | recovery 锁屏 | ✅ | 每次息屏再点亮都先显示图 1 的滑动锁屏（日期 / 时钟 / 电量 / 滑动解锁），解锁回原页面；开机首屏滑动后进解密页；设置 4–8 位 recovery 密码后改为数字键盘；只存 salt + SHA-256 |
 | 双击亮屏 | ✅ | 息屏后 400 ms 内两次点击点亮；设置页可关 |

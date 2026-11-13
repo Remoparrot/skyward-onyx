@@ -2,7 +2,7 @@
 
 > 状态：**现行**
 > 最后更新：2026-11-13
-> 对应版本：`v0.3.0-onyx.1`
+> 对应版本：`v0.3.0-onyx.3`
 > 设备：Redmi Turbo 4 Pro（`onyx`）· 底包 OS4.0.2.0.XOLCNXM（Android 17）
 
 ---
@@ -11,15 +11,15 @@
 
 | 项 | 值 |
 | --- | --- |
-| 版本 | `v0.3.0-onyx.1`（OS4 底包 + WLAN / 振动 / UI） |
+| 版本 | `v0.3.0-onyx.3`（OS4 底包 + WLAN / 振动 / UI + 并行更新下载） |
 | 构建日期 | 2026-11-13 |
 | 镜像 | `recovery.img` · 104,857,600 字节 |
-| 镜像 SHA-256 | `714dfc27be9ae76c18366ebd36fc5dff587a9fa4c17873a803d55c8aa1210ba5` |
-| ramdisk | 50,669,556 字节（LZ4）· 1062 个 cpio 条目 |
-| 内含 skyward | 8,655,096 字节 · `fb67d123ac80eae2d71ba9fac706a8e577a2cf3532edda48550a2c1161452629` |
-| zip（在线更新用） | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,840,075 字节 · `ab7bb0644fb9f04b87559211bad6d636253db057bb5ca2c6e669eee46ecf6f62` |
+| 镜像 SHA-256 | `d0a67128ee1fbc54033dadae2cf9c55b429733c4b163e1528dedbaca370360c5` |
+| ramdisk | 50,681,746 字节（LZ4）· 1062 个 cpio 条目 |
+| 内含 skyward | 8,753,632 字节 · `bb75d7e4aef48a3a5f3b986e6b0974ad7daf531ed5e25d7fbb88611fc942ba44` |
+| zip（在线更新用） | `skyward-v0.3.0-onyx.3-onyx-OS4.0.2.0.XOLCNXM.zip` · 46,347,671 字节 · `9f41916f651927de297222832a2f3295f2a445fdc87e44f16480957fdbbeb874` |
 | 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · 104,857,600 字节 · `ce53850714fe2ca9ab22600a00e71813df2775dc94244192c83a224d7ecd3357` |
-| 上游 | `kirklin/skyward` @ `ff1668fdb72a46f22152a6540f49728c42081aba`（v0.2.0）+ 0001–0004 |
+| 上游 | `kirklin/skyward` @ `ff1668fdb72a46f22152a6540f49728c42081aba`（v0.2.0）+ 0001–0006 |
 | 真机 | ✅ 已刷入 onyx：触摸服务、`/data` 自动挂载、WLAN 自动连接、振动驱动、自动进入解密页；锁屏（每次息屏点亮）已实现，见第 3 节 |
 
 发布资产在 [Releases](https://github.com/Remoparrot/skyward-onyx/releases)；仓库内只有源码、补丁、配置和文档。
@@ -32,7 +32,9 @@
 | v2 | `9ae3c85e…9dd` | 密度修好；仍无触摸 |
 | v3 | `b1374ccd…b5ee` | 触摸、`/data` 设备级解密修好；user 0 CE 仍锁 |
 | v4 | `b41bee5b…f83f` | user 0 CE 解开；OS3.0.306.0 底包 |
-| v0.3.0-onyx.1 | `714dfc27…0ba5` | **当前**；OS4.0.2.0 底包；WLAN / 振动 / 锁屏（每次亮屏）/ 双击亮屏 / 自动解密页 / AVB 页；控制中心已按用户要求删除 |
+| v0.3.0-onyx.1 | `714dfc27…0ba5` | OS4.0.2.0 底包；WLAN / 振动 / 锁屏（每次亮屏）/ 双击亮屏 / 自动解密页 / AVB 页；控制中心已按用户要求删除 |
+| v0.3.0-onyx.2 | `ebed2df2…3060` | 首页机型卡片四列读数；在线更新接受裸 `recovery.img`、支持本地刷入 |
+| v0.3.0-onyx.3 | `d0a67128…60c5` | **当前**；更新下载最多 512 连接并行；可用空间读数在解密后补齐；更新页对本地刷入显示进度/结果 |
 
 ---
 
@@ -58,6 +60,10 @@
 | 下载页 | 主界面「下载」；键盘「确定」打开文本网页；二维码页面 `http://192.168.1.227:8080/` 可打开并回传 URL；用 `adb reverse` 的本地 HTTP 服务下载 `test.bin` 到 `/sdcard/Download`，内容校验一致 |
 | 文本网页 | 键盘「确定」打开 `https://ys.mihoyo.com`，显示标题《原神》官方网站…和文本；无 JS/CSS/图片，不是 Chromium |
 | 高级页面 | Skyward 更新、禁用 AVB 2.0 已从设置移到高级；设置页不再有这两行 |
+| 首页机型卡片读数 | 卡片下四列：`B / 当前槽位`、`已解密 / 数据分区`、`175.1GB / 可用空间`、`100% / 未充电`；「可用空间」在解密完成后补齐（之前整列缺失） |
+| 在线更新（自更新） | `0.3.0-onyx.1` → `0.3.0-onyx.2`：检查到新版本、下载 45.85 MB zip、SHA-256 校验后写入槽位 B；重启 `dmesg`：`onyx 0.3.0-onyx.2 recovery up` |
+| 并行下载 512 连接 | 同上 zip 用新下载器 17.2 s 下完并校验通过；单连接此前约 17 分钟（≈40 KB/s） |
+| 本地 recovery.img 刷入 | `0.3.0-onyx.2` → `0.3.0-onyx.3`：`/sdcard/Download/recovery.img` 写入槽位 B；onyx.3 上再刷一次，页面显示进度与「更新成功 · 已将 Skyward 刷入槽位 B 的 recovery 分区。」 |
 | 锁屏滑动（注入触摸） | 用 `sendevent` 往 `/dev/input/event7` 注入从滑锁轨道左到右的拖动：`/data` 挂载、进入解密页 |
 | 自动连接持久化 | 自动连接之后 settings 中的 `wlan.password` 仍为原密码（修复了首次自动连接会把密码写空的问题） |
 
@@ -74,7 +80,9 @@
 | recovery 锁屏（输入解锁） | ⚠️ | 图 1 的滑动锁屏已用注入触摸验证；开机解锁进解密页，亮屏解锁回原页；4–8 位数字键盘未手动点过 |
 | 双击亮屏 | ⚠️ | 已实现（息屏 400 ms 内两次点击）；有注入触摸手段，但未逐项点过 |
 | 禁用 AVB 2.0 | ⚠️ | 页面与 `avbctl` 调用已实现；**按要求未测试** |
-| Skyward 在线更新 | ⚠️ | 已指向 `Remoparrot/skyward-onyx`，asset 命名与版本比较已改；没有「更新到更高版本」可测，未跑完整下载/写入 |
+| Skyward 在线更新 | ✅ | `0.3.0-onyx.1` → `0.3.0-onyx.2` 全流程实测；onyx.3 起优先下 release 里的裸 `recovery.img`，没有再退回 zip |
+| 并行下载（512 连接） | ✅ | 45.85 MB 17.2 s；DNS 查询已缓存，服务端不认 Range 会退回单连接 |
+| 系统 OTA 并行下载 | ⚠️ | 走同一条并行下载路径；未在真机完整下载过几 GB 的 OTA |
 | WLAN 密码安全 | ⚠️ | 明文存 `/metadata/skyward/settings.json`（0600）；recovery 内 adb 本来就是 root，但共享镜像/换机前应删掉 |
 | 振动强度 | ⚠️ | 驱动 `gain` 0x00–0x80 映射；实际振感与强度曲线待用户确认 |
 | 备份 / 安装 / 文件管理 / 终端 / MTP | ⚠️ | 上游能力，未逐项验证 |
@@ -89,7 +97,7 @@
 1. **user 0 CE 在 OS4 底包回归**：已用 `skyward data --credential` 验证；用户仍可在 UI「解密」页输入同一密码，确认相册/微信目录。
 2. **WLAN 自动连接的用户可见验证**：开机已自动连上 `CMCC-A9s7-5G` 并拿到 `192.168.1.227`；可在 WLAN 页确认图标/网络。
 3. **锁屏滑动、双击亮屏**：锁屏滑动已用注入触摸验证；双击亮屏未逐项点。
-4. **Skyward 在线更新**：发一个更高的 `v0.3.0-onyx.2` 测试「检查 → 下载 → 写入 recovery」；当前版本只能验证「已是最新」。
+4. **Skyward 在线更新**：`0.3.0-onyx.1` → `0.3.0-onyx.2` 已实测「检查 → 下载 → 写入 recovery」；onyx.3 起下载最多 512 连接并行。下一步可找一个几 GB 的系统 OTA 验证并行路径。
 5. **AVB 2.0**：用户明确不测试；如果以后要测，先备份 `vbmeta_a/b` 与 boot，并确认能 `fastboot flash vbmeta` 回滚。
 6. **WLAN AIDL shim 的上游化**：现在靠 `LD_PRELOAD` 应答 `AServiceManager_addService`；如果 vendor 更新后 supplicant 行为变化，需要重新对。
 7. **user 999**：仍然只有 weaver 绑定的 protector，收益低、风险高，暂不做。
@@ -114,7 +122,7 @@
 ## 6. 发布检查单
 
 - [x] 镜像大小 104,857,600
-- [x] 头部 v4 / kernel 0 / ramdisk 50,669,556
+- [x] 头部 v4 / kernel 0 / ramdisk 50,681,746
 - [x] `system/bin/recovery`、`skyward/system-init`、`skyward/device.toml`、`skyward/wpa-aidl-shim.so` 存在
 - [x] 镜像内二进制与编译产物 sha256 一致
 - [x] 原厂 recovery 的 sha256 与配置 `[stock] recovery` 一致（`ce538507…`）

@@ -6,6 +6,47 @@
 
 ---
 
+## v0.3.0-onyx.3 · 2026-11-13
+
+**主题：更新下载改为最多 512 连接并行（GitHub 45.85 MB 从约 17 分钟降到 17.2 秒）+ 首页读数在解密后补齐 + 更新页对本地刷入的进度/结果反馈**
+
+| 项 | 值 |
+| --- | --- |
+| 镜像 | `recovery.img` · 104,857,600 字节 |
+| SHA-256 | `d0a67128ee1fbc54033dadae2cf9c55b429733c4b163e1528dedbaca370360c5` |
+| 内含 skyward | 8,753,632 字节 · `bb75d7e4aef48a3a5f3b986e6b0974ad7daf531ed5e25d7fbb88611fc942ba44` |
+| ramdisk | 50,681,746 字节 · 1062 条 |
+| 底包 | OS4.0.2.0.XOLCNXM（Android 17） |
+| zip | `skyward-v0.3.0-onyx.3-onyx-OS4.0.2.0.XOLCNXM.zip` · 46,347,671 字节 · `9f41916f651927de297222832a2f3295f2a445fdc87e44f16480957fdbbeb874` |
+| 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · `ce538507…cd3357` |
+
+### 改了什么
+
+- **并行下载**：`skyward-net/download.rs` 把带校验和的包（Skyward 更新、系统 OTA）按 64 KiB 分段、每段一个 `Range` 请求，最多 512 个连接同时取；全部写完再整文件核对 SHA-256 / MD5。单段失败重试（最多 4 次，退避 200 ms×n）；服务端不认 `Range`（回 200）时退回单连接；停止或失败时删除 `.part`，不会拿半截文件续传。
+- **DNS 缓存**：`skyward-net/http.rs` 的自定义解析器按 (host, port) 缓存 5 分钟。512 个连接不再各查一次 DNS——实测路由器的 DNS 会拒答突发查询（`Query Refused`），这也是第一次 512 连接测试失败的原因。
+- **首页读数补齐**：`skyward/src/ui.rs` 在 `/data` 打开或解锁完成后重新 `skyward_info::collect`，机型卡片的「可用空间」不再因为开机时 `/data` 未挂载而整块消失。
+- **更新页反馈**：`skyward-ui/pages.rs` 把更新任务（进度 / 成功 / 失败）从「在线更新」段中独立出来；本地 `recovery.img` 刷入也用同一张进度卡和「更新成功 · 已将 Skyward 刷入槽位 B 的 recovery 分区。」。`SkywardJob` 新增 `local` 字段区分来源，本地刷入的版本号未知，文案不再写版本号。
+- **版本号**：`0.3.0-onyx.3`；新增 `patches/0006-onyx.3-fast-download.patch`。
+
+### 真机验证
+
+- 同一份下载器代码（`skyward-net` 的 example `fetch`）在 onyx 上从 GitHub 下载 `v0.3.0-onyx.2` 的 45.85 MB zip：**17.2 s**，SHA-256 校验通过；此前单连接约 17 分钟（≈40 KB/s）。
+- 本地 range 服务器 100 MB：并行 5.9 s（≈17.8 MB/s）、单连接 3.7 s（≈28 MB/s）——并行在快链路上有连接开销，收益主要来自 GitHub 这种单连接被限速的链路。
+- `0.3.0-onyx.1` 高级 → Skyward 更新：检查到 `0.3.0-onyx.2`、下载并写入槽位 B；重启后 `dmesg`：`onyx 0.3.0-onyx.2 recovery up`，首页读数出现。
+- 在 `0.3.0-onyx.2` 的更新页用「从本地 recovery.img 刷入」写入 `0.3.0-onyx.3` 镜像；`dmesg`：`Skyward's build written to [B]: Ok(())`。
+- 重启后 `dmesg`：`onyx 0.3.0-onyx.3 recovery up`；`/system/bin/recovery` 的 sha256 与镜像内一致（`bb75d7e4…`）。
+- onyx.3 首页机型卡片：`B / 当前槽位`、`已解密 / 数据分区`、`175.1GB / 可用空间`、`100% / 未充电`；可用空间在解密完成后出现（此前整列缺失）。
+- onyx.3 再走一次本地刷入：页面出现进度卡，随后「更新成功 · 已将 Skyward 刷入槽位 B 的 recovery 分区。」与「重启到恢复模式」。
+
+### 已知限制
+
+- GitHub 直连在中国大陆时快时慢、偶尔完全连不上；本地刷入（`/sdcard/Download/recovery.img`）是兜底方案。
+- 并行下载不续传：停止或失败会删掉 `.part`，下次从 0 开始。
+- 512 是上限，实际连接数 = min(512, ⌈包大小 / 64 KiB⌉)。
+- 系统 OTA（几 GB）同走并行路径；未在真机完整下载过 OTA。
+
+---
+
 ## v0.3.0-onyx.1 · 2026-11-13
 
 **主题：OS4 底包 + WLAN 自动连接 + 振动 + 锁屏（每次亮屏）/ 双击亮屏 + 自动解密页**

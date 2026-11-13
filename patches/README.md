@@ -1,6 +1,6 @@
 # 补丁
 
-相对上游 **Skyward v0.2.0** 的设备补丁，按编号顺序应用；0004 起是 v0.3.0 的 OS4 / WLAN / UI 改动。
+相对上游 **Skyward v0.2.0** 的设备补丁，按编号顺序应用；0004 起是 v0.3.0 的 OS4 / WLAN / UI / 更新下载改动。
 
 | 项 | 值 |
 | --- | --- |
@@ -107,6 +107,25 @@ skyward se      # 只探 SE HAL
 
 ---
 
+## 0006-onyx.3-fast-download.patch
+
+**文件**：7 个（`Cargo.toml` / `Cargo.lock` / `skyward-net/{download,http}.rs` / `skyward-ui/{app,pages}.rs` / `skyward/src/ui.rs`）
+
+**行数**：887
+
+**内容**：v0.3.0-onyx.3 的全部改动，四组：
+
+1. **并行下载**：`download.rs` 把带校验和的包（Skyward 更新、系统 OTA）按 64 KiB 分段，每段一个 `Range: bytes=start-end` 请求，最多 512 个连接同时写同一个文件（`write_at` 按偏移写，共享一个句柄）；全部写完再从头读一遍核对 SHA-256 / MD5。单段失败重试 4 次（200 ms×n 退避），服务端回 200（不认 Range）时整包退回单连接，停止/失败删除 `.part`。
+2. **DNS 缓存**：`http.rs` 的自定义 `Lookup` 按 (host, port) 缓存 5 分钟，并在解析期间持锁避免并发查询；512 个连接不再各查一次 DNS（路由器的 DNS 会拒答突发查询）。
+3. **可用空间读数**：`skyward/src/ui.rs` 在 `Decryptor` 报 `Opened(Ok)` / `Unlocked(Ok)` 后重新 `skyward_info::collect`，机型卡片「可用空间」不再因开机时 `/data` 未挂载而消失。
+4. **更新页反馈**：`pages.rs` 新增 `skyward_job()`，进度/成功/失败从 `skyward_online()` 中独立出来，本地 `recovery.img` 刷入也显示进度卡与「更新成功 · 已将 Skyward 刷入槽位 B 的 recovery 分区」；`app.rs` 的 `SkywardJob` 新增 `local: bool`，本地刷入的版本未知，文案不写版本号。
+
+**为什么**：Skyward 更新此前是单连接顺序下载，GitHub 直连实测约 40 KB/s，45.85 MB 要 17 分钟；分段并行后同样一个包 17.2 秒。DNS 缓存与 `.part` 清理是 512 连接的必然配套：前者避免 DNS 拒答，后者避免并行写入留下的空洞被当成可续传的前缀。
+
+**边界**：并行下载不续传（停止/失败删 `.part`）；512 是上限，实际连接数 = min(512, ⌈包大小/64 KiB⌉)；系统 OTA 同走这条路但未真机完整下载过。
+
+---
+
 ## 应用
 
 ```sh
@@ -134,9 +153,10 @@ git -C vendor/skyward apply --check patches/0002-omapi-se-bridge.patch
 git -C vendor/skyward apply --check patches/0003-onyx-ce-fallback.patch
 git -C vendor/skyward apply --check patches/0004-onyx-v0.3.0-wifi-ui.patch
 git -C vendor/skyward apply --check patches/0005-onyx-readings.patch
+git -C vendor/skyward apply --check patches/0006-onyx.3-fast-download.patch
 ```
 
-五个都过，且应用后 `crates/` 与发布镜像对应的源码一致（v0.3.0-onyx.2 用 `diff -r --strip-trailing-cr` 对过，除 `.git` / `target` / `.onyx-patched` 外完全一致）。
+六个都过，且应用后 `crates/` 与发布镜像对应的源码一致（v0.3.0-onyx.3 用 `diff -r --strip-trailing-cr` 对过，除 `.git` / `target` / `.onyx-patched` 外完全一致）。
 
 ## 修改 / 新增补丁
 
