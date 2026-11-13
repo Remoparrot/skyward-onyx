@@ -23,9 +23,9 @@
 
 | 文件 | 用途 | SHA-256 |
 | --- | --- | --- |
-| `recovery.img` | 要刷的 Skyward recovery | `e02acd5ff873aef78f2bbc86edae08d0556551ece604bfaae2d520439c824ade` |
+| `recovery.img` | 要刷的 Skyward recovery | `73016303620c5d59a72b608ba2dd1684bbc888b1ec4620cf3aed0eec26fd760c` |
 | `recovery-stock-OS4.0.2.0.XOLCNXM.img` | 回滚用官方 recovery | `ce53850714fe2ca9ab22600a00e71813df2775dc94244192c83a224d7ecd3357` |
-| `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` | 官方格式 zip（内含同一个 img，供在线更新） | `db245f2dfe24adf54954dbe0ddae3e7336aafd64b0d68980bdce6f88737e9d7f` |
+| `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` | 官方格式 zip（内含同一个 img，供在线更新） | `e8df16ad67ef8e9e79fe20f4d5219d67230323d8b6b4ce16ca422e45baa2d636` |
 | `SHA256SUMS` | 校验和 | — |
 
 ```sh

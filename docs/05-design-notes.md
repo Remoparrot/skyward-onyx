@@ -208,6 +208,8 @@ vendor supplicant 带 AIDL；recovery 的 servicemanager 不认它的注册，`A
 
 `sleep()` 只关面板，不改栈；所以熄屏再亮屏时，锁屏在旧页之上，解锁后原样回去。开机、电源键、双击、插线四条路都覆盖。
 
+onyx 的 DSI 面板被 `surface.rest()` 或 `surface.turn_off()` 后，再 `present()` 会出现「背光亮、DPMS On、物理屏黑」；因此在 `ui.rs` 里息屏只把背光降到 0、保留面板 On，让下一次 `present()` 直接把锁屏画上去。
+
 ### 9.6 双击亮屏
 
 `App::touch` 在 `display_on == false` 时记录最后一次 `Down` 的时间与坐标；400 ms 内第二次 `Down` 落在 80 px 内就 `wake()`。设置页可关。输入设备在息屏时仍然打开（`Wakeful` 持有），所以触摸能唤醒 CPU。

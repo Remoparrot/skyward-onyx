@@ -14,10 +14,10 @@
 | 版本 | `v0.3.0-onyx.1`（OS4 底包 + WLAN / 振动 / UI） |
 | 构建日期 | 2026-11-13 |
 | 镜像 | `recovery.img` · 104,857,600 字节 |
-| 镜像 SHA-256 | `e02acd5ff873aef78f2bbc86edae08d0556551ece604bfaae2d520439c824ade` |
-| ramdisk | 50,624,105 字节（LZ4）· 1062 个 cpio 条目 |
-| 内含 skyward | 8,655,096 字节 · `47354397c33c55b44f7caa4012c8b0ee94a119c2332e045be1e563d38f447c39` |
-| zip（在线更新用） | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,802,871 字节 · `db245f2dfe24adf54954dbe0ddae3e7336aafd64b0d68980bdce6f88737e9d7f` |
+| 镜像 SHA-256 | `73016303620c5d59a72b608ba2dd1684bbc888b1ec4620cf3aed0eec26fd760c` |
+| ramdisk | 50,623,471 字节（LZ4）· 1062 个 cpio 条目 |
+| 内含 skyward | 8,655,096 字节 · `0ec8397febf8931e8aafc37bb1e428e7f2c7a1780458cf575187a505164c9a87` |
+| zip（在线更新用） | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,801,113 字节 · `e8df16ad67ef8e9e79fe20f4d5219d67230323d8b6b4ce16ca422e45baa2d636` |
 | 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · 104,857,600 字节 · `ce53850714fe2ca9ab22600a00e71813df2775dc94244192c83a224d7ecd3357` |
 | 上游 | `kirklin/skyward` @ `ff1668fdb72a46f22152a6540f49728c42081aba`（v0.2.0）+ 0001–0004 |
 | 真机 | ✅ 已刷入 onyx：触摸服务、`/data` 自动挂载、WLAN 自动连接、振动驱动、自动进入解密页；锁屏（每次息屏点亮）已实现，见第 3 节 |
@@ -32,7 +32,7 @@
 | v2 | `9ae3c85e…9dd` | 密度修好；仍无触摸 |
 | v3 | `b1374ccd…b5ee` | 触摸、`/data` 设备级解密修好；user 0 CE 仍锁 |
 | v4 | `b41bee5b…f83f` | user 0 CE 解开；OS3.0.306.0 底包 |
-| v0.3.0-onyx.1 | `e02acd5f…24de` | **当前**；OS4.0.2.0 底包；WLAN / 振动 / 锁屏（每次亮屏）/ 双击亮屏 / 自动解密页 / AVB 页；控制中心已按用户要求删除 |
+| v0.3.0-onyx.1 | `73016303…760c` | **当前**；OS4.0.2.0 底包；WLAN / 振动 / 锁屏（每次亮屏）/ 双击亮屏 / 自动解密页 / AVB 页；控制中心已按用户要求删除 |
 
 ---
 
@@ -52,6 +52,7 @@
 | 振动 | `skyward haptic --config /skyward/device.toml`：驱动 `awinic_haptic` 进入 RAM 模式，`level=0x40`，`duration=16`；实际振感待用户确认 |
 | recovery 锁屏（启动） | 无 recovery 密码时为图 1 的滑动锁屏（日期 / 时钟 / 电量 / 滑动解锁）；种入 4 位恢复密码后为数字键盘；启动时 `/data` 不打开，滑动/解锁后才进「解密」 |
 | 每次息屏点亮锁屏 | 用 `sendevent` 注入 `pmic_pwrkey` 电源键：息屏后背光 0，再按点亮背光；`App::wake()` 把 `Lock` 压栈，解锁后回原页 |
+| 唤醒黑屏修复 | 第一版 `wake` 后物理屏黑、后台截图却是锁屏页；原因是面板被 `surface.rest()`/`turn_off()` 后本机不恢复。改为息屏只关背光、面板保持 On，唤醒后背光 10926、DPMS On，锁屏帧重新 present |
 | 锁屏滑动（注入触摸） | 用 `sendevent` 往 `/dev/input/event7` 注入从滑锁轨道左到右的拖动：`/data` 挂载、进入解密页 |
 | 自动连接持久化 | 自动连接之后 settings 中的 `wlan.password` 仍为原密码（修复了首次自动连接会把密码写空的问题） |
 
@@ -108,7 +109,7 @@
 ## 6. 发布检查单
 
 - [x] 镜像大小 104,857,600
-- [x] 头部 v4 / kernel 0 / ramdisk 50,624,105
+- [x] 头部 v4 / kernel 0 / ramdisk 50,623,471
 - [x] `system/bin/recovery`、`skyward/system-init`、`skyward/device.toml`、`skyward/wpa-aidl-shim.so` 存在
 - [x] 镜像内二进制与编译产物 sha256 一致
 - [x] 原厂 recovery 的 sha256 与配置 `[stock] recovery` 一致（`ce538507…`）

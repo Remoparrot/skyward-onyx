@@ -16,12 +16,12 @@
 | --- | --- |
 | 最新 release | [`v0.3.0-onyx.1`](https://github.com/Remoparrot/skyward-onyx/releases/tag/v0.3.0-onyx.1) |
 | 镜像 | `recovery.img` · **104,857,600 字节**（整分区） |
-| SHA-256 | `e02acd5ff873aef78f2bbc86edae08d0556551ece604bfaae2d520439c824ade` |
-| ramdisk | 50,624,105 字节（LZ4）· 1062 个 cpio 条目 |
-| 内含 skyward | 8,655,096 字节 · `47354397c33c55b44f7caa4012c8b0ee94a119c2332e045be1e563d38f447c39` |
+| SHA-256 | `73016303620c5d59a72b608ba2dd1684bbc888b1ec4620cf3aed0eec26fd760c` |
+| ramdisk | 50,623,471 字节（LZ4）· 1062 个 cpio 条目 |
+| 内含 skyward | 8,655,096 字节 · `0ec8397febf8931e8aafc37bb1e428e7f2c7a1780458cf575187a505164c9a87` |
 | 底包 | HyperOS **OS4.0.2.0.XOLCNXM**（Android 17） |
 | 上游 | `kirklin/skyward` @ `ff1668f`（v0.2.0）+ 4 个补丁 |
-| 真机 | ✅ 已刷入 onyx 并验证：触摸服务、`/data` 自动挂载、user 0 CE（`/data/media/0` 与相册 JPEG 可读）、WLAN 自动连接（`CMCC-A9s7-5G`，`192.168.1.227`）、振动驱动；用 `sendevent` 注入触摸验证滑动锁屏；电源键注入验证息屏/点亮后先显示滑动锁屏 |
+| 真机 | ✅ 已刷入 onyx 并验证：触摸服务、`/data` 自动挂载、user 0 CE（`/data/media/0` 与相册 JPEG 可读）、WLAN 自动连接（`CMCC-A9s7-5G`，`192.168.1.227`）、振动驱动；用 `sendevent` 注入触摸验证滑动锁屏；电源键注入验证息屏/点亮后先显示滑动锁屏；唤醒黑屏已修（面板不再 rest/off，息屏只关背光） |
 | 风险 | ⚠️ 需要解锁 bootloader；只刷 recovery 分区，详见[安装](docs/04-install.md) |
 
 > **一句话结论**：不需要 weaver，也不需要 OMAPI 桥。onyx 的 user 0 有两份 protector，其中一份绑在 gatekeeper 上；weaver 不可用时回退到它，用同一个锁屏密码即可拿到合成密码（SP），解开 CE。详细原理见[设计思路](docs/05-design-notes.md)。

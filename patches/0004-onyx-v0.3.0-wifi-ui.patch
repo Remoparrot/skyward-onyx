@@ -1307,10 +1307,18 @@ index ad36bfb..8163438 100644
      file.sync_all().with_context(|| format!("write {WRITING}"))?;
      fs::rename(WRITING, FILE).with_context(|| format!("move {WRITING} over {FILE}"))?;
 diff --git a/crates/skyward/src/ui.rs b/crates/skyward/src/ui.rs
-index 3144b83..9940a34 100644
+index 3144b83..ae43031 100644
 --- a/crates/skyward/src/ui.rs
 +++ b/crates/skyward/src/ui.rs
-@@ -1061,7 +1061,10 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+@@ -67,7 +67,6 @@ const TOUCH_WAIT: Duration = Duration::from_secs(5);
+ /// How long a panel gone dark rests, ready to light again at once, before
+ /// the display turns off; the phone's own system keeps its panel dozing
+ /// about as long after the screen goes off.
+-const REST: Duration = Duration::from_secs(5);
+ 
+ /// Where logs saved to the temporary folder go, in the recovery service's
+ /// own folder, and where in internal storage the others do.
+@@ -1061,7 +1060,10 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
      let control = Control::open()?;
      let mut haptics = cfg.haptics.as_ref().map(Haptics::open).transpose()?;
      let mut backlight = Backlight::open()?;
@@ -1322,7 +1330,7 @@ index 3144b83..9940a34 100644
          Work::Fastboot => Screen::Fastboot,
          Work::PromptWipeData => Screen::CantStart,
          Work::Unsupported(_) => Screen::Unhandled,
-@@ -1077,14 +1080,18 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+@@ -1077,14 +1079,18 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
          | Work::SwitchSystem { .. }
          | Work::SystemStopped => start,
      };
@@ -1347,7 +1355,15 @@ index 3144b83..9940a34 100644
      let locale = request.locale.as_deref().or(info.locale.as_deref());
      let named = locale.map(Lang::for_locale).transpose()?;
      app.take_settings(kept.settings(), named);
-@@ -1354,6 +1361,26 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+@@ -1125,7 +1131,6 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+     // panel; cleared once a real frame is shown again.
+     let mut blanked = false;
+     // When the panel gone dark began to rest.
+-    let mut rested_at: Option<Instant> = None;
+     // Started for fastboot, the port goes to the phone's own fastbootd. The
+     // page says whether it came up and how far a computer has the port;
+     // why it did not come up goes to the kernel log and on screen.
+@@ -1354,6 +1359,26 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
          }
          None => None,
      };
@@ -1374,7 +1390,40 @@ index 3144b83..9940a34 100644
      let mut scanned_at = Instant::now();
      app.state.update_server = cfg.update.is_some();
      // Asking the update server, and downloading the full package.
-@@ -2473,6 +2500,37 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+@@ -1474,17 +1499,11 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+             // Lit, a panel that came on again switches to its fastest
+             // refresh.
+             surface.speed_up()?;
+-            rested_at = None;
+-        } else if surface.is_on() {
+-            // With the backlight off, the panel rests, and the touch
+-            // controller following it stops drawing power.
+-            surface.rest()?;
+-            rested_at = Some(Instant::now());
+-        } else if rested_at.is_some_and(|at| at.elapsed() >= REST) {
+-            // Rested long enough, the display goes off: the panel and the
+-            // display processor feeding it stop drawing power.
+-            surface.turn_off()?;
+-            rested_at = None;
++        } else {
++            // This panel comes back from its low-power rest or from off as
++            // a black screen on onyx, with the backlight and DPMS saying it
++            // is on. Keep the display lit with the backlight at 0; the next
++            // frame shown turns the light back on with it.
+         }
+         // A page at rest draws the rows it has yet to while nothing else
+         // is to be done, a band at a time, looking for input between bands.
+@@ -1495,8 +1514,7 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+         let floor = if shown { 0 } else { 1 };
+         let until_due = app.deadline(now).map(|d| d.saturating_sub(now) as i32);
+         // A resting panel turns off once its rest is over.
+-        let rest_left = rested_at.map(|at| REST.saturating_sub(at.elapsed()).as_millis() as i32);
+-        let timeout = if ahead { 0 } else { until_due.into_iter().chain(rest_left).min().map_or(1000, |t| t.clamp(floor, 1000)) };
++        let timeout = if ahead { 0 } else { until_due.into_iter().min().map_or(1000, |t| t.clamp(floor, 1000)) };
+         // With the display off, the phone sleeps unless something needs it
+         // awake: work under way, fastboot or sideload, a restart on its way,
+         // a command running in the terminal, a network being joined, the
+@@ -2473,6 +2491,37 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
                          wlan_worker(&wlan)?.send(wlan::Command::Join { ssid, name, security, password: password.0 })
                      }
                      Effect::LeaveWlan => wlan_worker(&wlan)?.send(wlan::Command::Leave),
@@ -1412,7 +1461,7 @@ index 3144b83..9940a34 100644
                      // What the installed system is called is the page's to
                      // report when it cannot be read.
                      Effect::CheckUpdate => {
-@@ -2502,7 +2560,8 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+@@ -2502,7 +2551,8 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
                      Effect::CheckSkyward => {
                          ensure!(skyward_checker.is_none(), "GitHub is being asked already");
                          let probe = cfg.wlan.as_ref().context("the phone's WLAN is not brought up")?.probe.clone();

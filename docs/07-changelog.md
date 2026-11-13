@@ -13,11 +13,11 @@
 | 项 | 值 |
 | --- | --- |
 | 镜像 | `recovery.img` · 104,857,600 字节 |
-| SHA-256 | `e02acd5ff873aef78f2bbc86edae08d0556551ece604bfaae2d520439c824ade` |
-| 内含 skyward | 8,655,096 字节 · `47354397c33c55b44f7caa4012c8b0ee94a119c2332e045be1e563d38f447c39` |
-| ramdisk | 50,624,105 字节 · 1062 条 |
+| SHA-256 | `73016303620c5d59a72b608ba2dd1684bbc888b1ec4620cf3aed0eec26fd760c` |
+| 内含 skyward | 8,655,096 字节 · `0ec8397febf8931e8aafc37bb1e428e7f2c7a1780458cf575187a505164c9a87` |
+| ramdisk | 50,623,471 字节 · 1062 条 |
 | 底包 | OS4.0.2.0.XOLCNXM（Android 17） |
-| zip | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,802,871 字节 · `db245f2d…9d7f` |
+| zip | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,801,113 字节 · `e8df16ad…d636` |
 | 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · `ce538507…cd3357` |
 
 ### 改了什么
@@ -37,6 +37,7 @@
 - 振动驱动：`awinic_haptic` 进入 RAM 模式，`level=0x40`，`duration=16`；
 - 锁屏启动：无 recovery 密码时为滑动锁屏，`/data` 不打开；种入 4 位锁后为键盘，UI 存活。
 - 注入触摸：从滑锁轨道左到右拖动后 `/data` 挂载、进入解密页；`pmic_pwrkey` 注入电源键，息屏后点亮背光，`wake()` 压入锁屏。
+- 唤醒黑屏修复：面板不再 `rest`/`turn_off`，息屏只关背光；唤醒后 DPMS On、背光 10926，锁屏页可见。
 - user 0 CE：`skyward data --credential <用户锁屏密码>` 后 `/data/media/0` 真实文件名，`DCIM/Camera` 的 JPEG 可读；user 999 仍锁。
 
 ### 已知限制
