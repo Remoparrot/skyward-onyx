@@ -57,6 +57,7 @@
 - 三个补丁在**干净的上游 tree**（`git archive ff1668f`）上依次 `git apply --check` + `git apply` 通过；应用后的 `crates/` 与 `work/skyward` 逐文件一致（`diff --strip-trailing-cr`）。
 - 用 Release 里的 `skyward` 二进制 + system-init + stock + 字体重跑 `build-image.sh`，得到**完全相同**的 `b41bee5b…f1f83f`（104857600 字节 / 996 条），说明打包步骤确定。
 - 用同一份源码重编 `skyward`：大小仍 8,619,216，逐字节只有 2 个字节不同（build-id 附近），哈希 `51e902f6…` → `0fdbee2a…`；已写进 `03-build.md` 的可复现性说明，避免把二进制哈希当源码一致性证据。
+- 从干净 clone（`file://` 本地上游）走完 `bootstrap.sh` → `build-pack.sh` → `build-phone.sh` → `build-system-init.sh` → `build-image.sh`，退出码 0；新镜像 104,857,600 / 996 条 / 结构校验通过（整镜像哈希随 build-id 变化，符合预期）。
 - `scripts/verify-image.sh recovery.img b41bee5b…` 输出：
 
   ```text
@@ -72,8 +73,10 @@
 
 ## 7. 未完成 / 下一步 / 风险
 
+- **发布**：仓库 `Remoparrot/skyward-onyx`、tag `v0.2.0-onyx.4`、Release 与四个资产（`recovery.img` / stock / zip / `SHA256SUMS`）已创建；下载后需再核对一次 `sha256sum -c`。
 - **user 999 / WLAN / 振动**：与 v4 相同，未做。
 - **CI**：没有加；交叉编译需要 NDK + 100 MB stock，GitHub Actions 成本高。若以后加，只做 `bash -n` / 补丁 `git apply --check` / 文档链接检查。
 - **上游同步**：上游更新后需要重放 3 个补丁，并在真机回归触摸 + 解密。
 - **Release 资产体积**：约 245 MB；GitHub 单资产上限 2 GB，没问题，但下载慢。
+- **可复现性**：整镜像哈希对「同一份二进制 + stock + 字体」成立；重新编译二进制会因 build-id 变化，属于正常现象，不要据此判断源码不一致。
 - **法律 / 商标**：stock recovery 来自小米官方包，仅用于回滚；README / NOTICE 已声明无隶属关系。
