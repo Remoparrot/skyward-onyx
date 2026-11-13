@@ -13,11 +13,11 @@
 | 项 | 值 |
 | --- | --- |
 | 镜像 | `recovery.img` · 104,857,600 字节 |
-| SHA-256 | `14c5311aa2e70c8d419da0fafcbb7b0670ece1dc4d586cb0f7454b96068efb5a` |
-| 内含 skyward | 8,655,096 字节 · `3a6a1da3393d58d082b09919721e11eaffef4657e9945ca27b3b55f3ee78ac93` |
-| ramdisk | 50,627,912 字节 · 1062 条 |
+| SHA-256 | `59f1f439993f793bca23a75b169ca7aedf6736f1214311d3f4aee27bd34a88d8` |
+| 内含 skyward | 8,655,096 字节 · `d12d6bb963283c5c82b15b5a8b9de0cd40bf22440a6d88e98950d0a30d19f65e` |
+| ramdisk | 50,631,040 字节 · 1062 条 |
 | 底包 | OS4.0.2.0.XOLCNXM（Android 17） |
-| zip | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,805,204 字节 · `0d0c2f03…4dbb5` |
+| zip | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,807,668 字节 · `0d0c2f03…4dbb5` |
 | 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · `ce538507…cd3357` |
 
 ### 改了什么
@@ -25,7 +25,7 @@
 - **底包**：`[stock]` 从 OS3.0.306.0 换到 OS4.0.2.0.XOLCNXM；版本号改为 `0.3.0-onyx.1`；`has_root` 代替 `is_absolute` 以兼容 Windows 宿主校验。
 - **WLAN**：`[wlan]` 配置 `qca_cld3_wcn7750` + `rfkill`，`wpss_boot` / `wlan_en_delay`，固件从 vendor 与 persist 取；`wlan.rs` 对 `EBUSY` 重试、启动自动开 WLAN；`wpa-aidl-shim` 让 AIDL supplicant 跳过 recovery 不认的 `addService`；UI 保存上次网络并在下次启动自动加入。
 - **振动**：AW8697 的 sysfs 后端（`activate` / `duration` / `effect_id` / `gain`），`skyward haptic` 可测。
-- **UI**：图 1 滑动锁屏（有 4–8 位 recovery 密码时改数字键盘）；滑动后自动进入解密页；图 2 顶部下滑控制中心（WLAN / 截图 / 重启 / 熄屏 + 亮度 / 振动滑杆）；双击亮屏；AVB 2.0 禁用页（未测）。
+- **UI**：图 1 滑动锁屏（有 4–8 位 recovery 密码时改数字键盘）；滑动后自动进入解密页；图 2 顶部下滑控制中心（WLAN / 截图 / 重启 / 熄屏 + 亮度 / 振动滑杆，背景为当前页模糊副本，卡片半透明，上滑/把手关闭）；双击亮屏；AVB 2.0 禁用页（未测）。
 - **Skyward 更新**：检查 `Remoparrot/skyward-onyx` 的 Release，asset 命名 `skyward-<tag>-onyx-*.zip`；版本比较按 `0.3.0-onyx.N`。
 - **打包**：`skyward-pack recovery --extra RAMDISK=HOST`；`build-phone.sh` 编 shim，`build-image.sh` 把 shim 放进 `skyward/`。
 

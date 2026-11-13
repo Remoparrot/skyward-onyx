@@ -159,7 +159,7 @@ scripts/verify-image.sh out/skyward-v0.3.0-onyx.1-OS4.0.2.0.XOLCNXM.img
 大小：104857600 字节
 header v4  kernel 0 bytes  ramdisk 50625278 bytes  OsVersionPatch(0.0.0, 2000-00)
 ramdisk 条目：1062
-SHA-256：14c5311aa2e70c8d419da0fafcbb7b0670ece1dc4d586cb0f7454b96068efb5a
+SHA-256：59f1f439993f793bca23a75b169ca7aedf6736f1214311d3f4aee27bd34a88d8
 ```
 
 ---

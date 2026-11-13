@@ -203,7 +203,11 @@ vendor supplicant 带 AIDL；recovery 的 servicemanager 不认它的注册，`A
 
 顶部下滑手势在 `App::touch` 里识别：`Down` 落在距顶 28 dp 内、`Move` 超过 36 dp 时，`drop_control()` 把当前页 canvas 留在 `under`，把 `Control` 压栈并设 260 ms 的 `drop` 进度；`compose()` 先把 `under` 画在下面，再把 `Control` 页从 `-h` 放到 0，形成从上方落下的面板。
 
-`Control` 页用 `Canvas::unfilled` 画一层半透明遮罩和一张圆角面板，面板里是图 2 的 2×2 磁贴（WLAN / 截图 / 重启 / 熄屏）和亮度 / 振动滑杆；底部小把手是关闭命中区。面板之外保持透明，因此落下时能看见下面的页面。
+`Control` 页用 `Canvas::unfilled` 画一层半透明遮罩和一张圆角面板，面板里是图 2 的 2×2 磁贴（WLAN / 截图 / 重启 / 熄屏）和亮度 / 振动滑杆；底部小把手是关闭命中区。
+
+背景：`drop_control()` 先用 `pages::render` 把当前页画成屏幕大小的 canvas，再 `blur_canvas()` 做两遍盒式模糊；`compose()` 把这层模糊图放在面板后面，面板与磁贴用半透明色，卡片里透出的就是模糊后的页面。
+
+关闭：底部 72 dp 内上滑、面板空白处上滑、点底部把手、系统返回键都可以。
 
 ### 9.6 双击亮屏
 
