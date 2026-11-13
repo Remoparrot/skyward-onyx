@@ -74,7 +74,7 @@
 | WLAN | ✅ | 扫描 / 加入 / 重启自动连接；密码存 `/metadata`（0600） |
 | Skyward 在线更新 | ✅ | 查 `Remoparrot/skyward-onyx` 的 Release；需要 WLAN |
 | 振动 | ✅ | AW8697 sysfs；实际振感待用户确认 |
-| recovery 锁屏 / 控制中心 / 双击亮屏 | ✅ | 锁屏默认图 1 滑动解锁（可设 recovery 数字密码）；控制中心图 2 顶部下滑网格 + 模糊背景 + 上滑关闭；双击亮屏；未手动逐项点过 |
+| recovery 锁屏 / 双击亮屏 | ✅ | 锁屏默认图 1 滑动解锁（可设 recovery 数字密码），每次息屏点亮都先显示；解锁回原页；双击亮屏；未逐项点过 |
 | 自动进入解密页 | ✅ | 滑动锁屏后首屏即解密；`skyward data --credential` 已验证 user 0 CE |
 | 禁用 AVB 2.0 | ⚠️ | 已实现；按要求未测试 |
 | 双系统 / OTA / fastbootd | ⚠️ | 未验证，不建议依赖 |
@@ -89,7 +89,7 @@
 | v2 | density 512；改拉起 `/odm/bin/touch_report`；加屏幕诊断 | 仍无触摸——onyx 没有 `touch_report`，只有 `_debug` |
 | v3 | 改 `touch_report_debug`；补 qseecomd / keymint / gatekeeper / secure_element / weaver / boot | 触摸正常，`/data` 自动解密；CE 仍锁 |
 | v4 | `data.rs` 在 weaver 不可用时回退到 gatekeeper 绑定的 protector | **user 0 CE 解开**；相册、微信可读 |
-| v0.3.0-onyx.1 | OS4 底包；WLAN + 自动连接；AW8697 振动；首屏自动解密；锁屏 / 控制中心 / 双击亮屏 / AVB 页 | 真机：`/data` 自动打开、WLAN 自动连、振动驱动；其余见状态页 |
+| v0.3.0-onyx.1 | OS4 底包；WLAN + 自动连接；AW8697 振动；首屏自动解密；锁屏（每次亮屏）/ 双击亮屏 / AVB 页；控制中心已删 | 真机：`/data` 自动打开、WLAN 自动连、振动驱动；其余见状态页 |
 
 完整哈希与验证见 [`00-status.md`](00-status.md) 和 [`07-changelog.md`](07-changelog.md)。
 

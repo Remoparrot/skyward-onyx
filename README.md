@@ -1,6 +1,6 @@
 # Skyward for onyx · 红米 Turbo 4 Pro
 
-> 把 [Skyward](https://github.com/kirklin/skyward)（Rust 从零写的第三方 recovery）移植到 **Redmi Turbo 4 Pro（onyx）**：触摸可用、`/data` 自动解密、**user 0 的 CE 存储（相册 / 微信）能用锁屏密码解开**，并补上 WLAN 自动连接、振动、recovery 锁屏、控制中心、双击亮屏和 Skyward 在线更新；只改写 recovery 分区、不动用户数据。
+> 把 [Skyward](https://github.com/kirklin/skyward)（Rust 从零写的第三方 recovery）移植到 **Redmi Turbo 4 Pro（onyx）**：触摸可用、`/data` 自动解密、**user 0 的 CE 存储（相册 / 微信）能用锁屏密码解开**，并补上 WLAN 自动连接、振动、recovery 锁屏（每次息屏点亮都显示滑动锁屏）、双击亮屏和 Skyward 在线更新；只改写 recovery 分区、不动用户数据。
 
 [![Release](https://img.shields.io/github/v/release/Remoparrot/skyward-onyx?label=release&color=1f6feb)](https://github.com/Remoparrot/skyward-onyx/releases)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
@@ -16,12 +16,12 @@
 | --- | --- |
 | 最新 release | [`v0.3.0-onyx.1`](https://github.com/Remoparrot/skyward-onyx/releases/tag/v0.3.0-onyx.1) |
 | 镜像 | `recovery.img` · **104,857,600 字节**（整分区） |
-| SHA-256 | `fe567d23c77e0cf30bdee64e1dc317b88ef0f7a613a97d3326fc4a0879f036d3` |
-| ramdisk | 50,631,043 字节（LZ4）· 1062 个 cpio 条目 |
-| 内含 skyward | 8,655,096 字节 · `f4c63b76cc502c6419324157265c7b2d027e1e283441cf7e3e7c71710c6c1cf3` |
+| SHA-256 | `e02acd5ff873aef78f2bbc86edae08d0556551ece604bfaae2d520439c824ade` |
+| ramdisk | 50,624,105 字节（LZ4）· 1062 个 cpio 条目 |
+| 内含 skyward | 8,655,096 字节 · `47354397c33c55b44f7caa4012c8b0ee94a119c2332e045be1e563d38f447c39` |
 | 底包 | HyperOS **OS4.0.2.0.XOLCNXM**（Android 17） |
 | 上游 | `kirklin/skyward` @ `ff1668f`（v0.2.0）+ 4 个补丁 |
-| 真机 | ✅ 已刷入 onyx 并验证：触摸服务、`/data` 自动挂载、user 0 CE（`/data/media/0` 与相册 JPEG 可读）、WLAN 自动连接（`CMCC-A9s7-5G`，`192.168.1.227`）、振动驱动；用 `sendevent` 注入触摸验证滑动锁屏、控制中心打开/WLAN 磁贴/上滑关闭 |
+| 真机 | ✅ 已刷入 onyx 并验证：触摸服务、`/data` 自动挂载、user 0 CE（`/data/media/0` 与相册 JPEG 可读）、WLAN 自动连接（`CMCC-A9s7-5G`，`192.168.1.227`）、振动驱动；用 `sendevent` 注入触摸验证滑动锁屏；电源键注入验证息屏/点亮后先显示滑动锁屏 |
 | 风险 | ⚠️ 需要解锁 bootloader；只刷 recovery 分区，详见[安装](docs/04-install.md) |
 
 > **一句话结论**：不需要 weaver，也不需要 OMAPI 桥。onyx 的 user 0 有两份 protector，其中一份绑在 gatekeeper 上；weaver 不可用时回退到它，用同一个锁屏密码即可拿到合成密码（SP），解开 CE。详细原理见[设计思路](docs/05-design-notes.md)。
@@ -40,10 +40,9 @@
 | WLAN | ✅ | `qca_cld3_wcn7750` + `rfkill` 从 vendor_dlkm 加载；wpa_supplicant 用 `skyward/wpa-aidl-shim.so` 跳过 recovery 不认的 AIDL 注册；开机自动连接上次网络（密码存 `/metadata`，0600） |
 | Skyward 在线更新 | ✅ | 查 `Remoparrot/skyward-onyx` 的 Release，按 `onyx` 取 zip；需要 WLAN |
 | 振动 | ✅ | AW8697（`awinic_haptic`，i2c 5-005a）的 `activate` / `duration` / `gain`；设置页滑杆与触摸反馈走同一路径 |
-| recovery 锁屏 | ✅ | 无 recovery 密码时是图 1 的滑动锁屏（日期 / 时钟 / 电量 / 滑动解锁），滑动后进解密页；设置 4–8 位 recovery 密码后改为数字键盘；只存 salt + SHA-256 |
-| 控制中心 | ✅ | 图 2 样式：从屏幕**顶部下滑**拉下网格面板，WLAN / 截图 / 重启 / 熄屏，亮度与振动滑杆；背景是当前页的模糊副本，卡片半透明；上滑/底部把手/返回关闭。注入触摸已验证打开、WLAN 磁贴、上滑关闭 |
+| recovery 锁屏 | ✅ | 每次息屏再点亮都先显示图 1 的滑动锁屏（日期 / 时钟 / 电量 / 滑动解锁），解锁回原页面；开机首屏滑动后进解密页；设置 4–8 位 recovery 密码后改为数字键盘；只存 salt + SHA-256 |
 | 双击亮屏 | ✅ | 息屏后 400 ms 内两次点击点亮；设置页可关 |
-| 禁用 AVB 2.0 | ⚠️ | 控制中心/设置里的「禁用 AVB 2.0」页，写入当前槽位 vbmeta；**按要求未在真机点过** |
+| 禁用 AVB 2.0 | ⚠️ | 设置里的「禁用 AVB 2.0」页，写入当前槽位 vbmeta；**按要求未在真机点过** |
 | 自动打开解密页 | ✅ | 正常进 recovery 首屏即「解密」，自动打开 `/data`；有 recovery 锁屏时先锁屏 |
 | 双系统 / OTA / fastbootd | ⚠️ | 未在 onyx 上验证，不建议依赖 |
 
@@ -237,4 +236,4 @@ out/                          本地构建输出（ignored）
 
 ## English
 
-A device port of [Skyward](https://github.com/kirklin/skyward) (a Rust recovery) for the **Redmi Turbo 4 Pro (`onyx`)**, built on HyperOS `OS4.0.2.0.XOLCNXM`. Touch works, `/data` auto-decrypts, **user 0's credential-encrypted storage (photos, WeChat) unlocks with the lock-screen password**, and WLAN auto-connects, vibration, a recovery lock, a control centre and double-tap-to-wake are included. Only the recovery partition is written; roll back with the stock image from the release. See [`docs/`](docs/README.md) for the full build, design, and troubleshooting notes (Chinese).
+A device port of [Skyward](https://github.com/kirklin/skyward) (a Rust recovery) for the **Redmi Turbo 4 Pro (`onyx`)**, built on HyperOS `OS4.0.2.0.XOLCNXM`. Touch works, `/data` auto-decrypts, **user 0's credential-encrypted storage (photos, WeChat) unlocks with the lock-screen password**, and WLAN auto-connects, vibration, a recovery lock (shown on every screen-on), and double-tap-to-wake are included. Only the recovery partition is written; roll back with the stock image from the release. See [`docs/`](docs/README.md) for the full build, design, and troubleshooting notes (Chinese).

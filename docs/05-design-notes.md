@@ -199,21 +199,20 @@ vendor supplicant 带 AIDL；recovery 的 servicemanager 不认它的注册，`A
 - 手机锁屏密码只在 `Decrypt` 页输入；`skyward data --credential` 用同一个密码验证过 user 0 CE；
 - recovery 密码只存 salt + SHA-256；锁屏不是安全边界：recovery 的 root adb 仍能改 settings / 读分区。
 
-### 9.5 控制中心
+### 9.5 每次息屏点亮都锁屏
 
-顶部下滑手势在 `App::touch` 里识别：`Down` 落在距顶 28 dp 内、`Move` 超过 36 dp 时，`drop_control()` 把当前页 canvas 留在 `under`，把 `Control` 压栈并设 260 ms 的 `drop` 进度；`compose()` 先把 `under` 画在下面，再把 `Control` 页从 `-h` 放到 0，形成从上方落下的面板。
+`wake()` 是面板从暗到亮的唯一入口（电源键、双击、插线都会走到它）。它在点亮时检查当前页：不是 `Lock` 就往栈顶压一个 `Lock`，并置 `wake_lock = true`。滑动/解锁后：
 
-`Control` 页用 `Canvas::unfilled` 画一层半透明遮罩和一张圆角面板，面板里是图 2 的 2×2 磁贴（WLAN / 截图 / 重启 / 熄屏）和亮度 / 振动滑杆；底部小把手是关闭命中区。
+- `wake_lock` 为真：`Action::Unlock` 把 `Lock` 弹掉，回到息屏前那一页，不重新开 data；
+- `wake_lock` 为假（开机首屏的锁）：栈换成 `Decrypt` 并 `open_data()`，即「进入 recovery 自动进解密页」。
 
-背景：`drop_control()` 先用 `pages::render` 把当前页画成屏幕大小的 canvas，再 `blur_canvas()` 做两遍盒式模糊；`compose()` 把这层模糊图放在面板后面，面板与磁贴用半透明色，卡片里透出的就是模糊后的页面。
-
-关闭：底部 72 dp 内上滑、面板空白处上滑、点底部把手、系统返回键都可以。
+`sleep()` 只关面板，不改栈；所以熄屏再亮屏时，锁屏在旧页之上，解锁后原样回去。开机、电源键、双击、插线四条路都覆盖。
 
 ### 9.6 双击亮屏
 
 `App::touch` 在 `display_on == false` 时记录最后一次 `Down` 的时间与坐标；400 ms 内第二次 `Down` 落在 80 px 内就 `wake()`。设置页可关。输入设备在息屏时仍然打开（`Wakeful` 持有），所以触摸能唤醒 CPU。
 
-### 9.6 版本与在线更新
+### 9.7 版本与在线更新
 
 上游 `github.rs` 硬编码 `kirklin/skyward`；onyx 的资产在 `Remoparrot/skyward-onyx`。用 `[update].skyward` 配置仓库，workspace 版本改成 `0.3.0-onyx.N`，asset 名 `skyward-v0.3.0-onyx.N-onyx-OS4.0.2.0.XOLCNXM.zip`，`semver` 才能正确比较 `onyx.N` 的前后。
 

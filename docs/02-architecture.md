@@ -253,7 +253,7 @@ AW8697（`awinic_haptic`）在 i2c `5-005a`，input `event5` 有 FF，但它的�
 |  | `crates/skyward/src/main.rs` | 加 `Omapi` / `Se` 两个子命令 | 手动起桥 / 探针，不进自动流程 |
 |  | `crates/skyward/src/omapi.rs`（新文件） | `android.se.omapi` 的最小子集，转发到 SE HAL | 让 NXP weaver 能在 recovery 里查 eSE 槽位 |
 | `0003-onyx-ce-fallback.patch` | `crates/skyward-crypto/src/data.rs` | 拆 `protector_ids` / `protector_named`；`open_user_files` 在 `WeaverUnusable` 时回退；抽出 `open_with_protector` | onyx user 0 有第二份 gatekeeper 绑定的 protector，不需要 weaver 就能拿 SP |
-| `0004-onyx-v0.3.0-wifi-ui.patch` | 16 个文件（config / net / pack / UI / skyward） | OS4 路径校验、WLAN preload + EBUSY 重试 + 自动连接、AW8697 sysfs 振动、锁屏 / 控制中心 / 双击亮屏 / AVB 页、Skyward 更新仓库、`--extra` | 本次 v0.3.0 的全部代码；细节见 `patches/README.md` |
+| `0004-onyx-v0.3.0-wifi-ui.patch` | 16 个文件（config / net / pack / UI / skyward） | OS4 路径校验、WLAN preload + EBUSY 重试 + 自动连接、AW8697 sysfs 振动、锁屏（每次亮屏）/ 双击亮屏 / AVB 页、Skyward 更新仓库、`--extra` | 本次 v0.3.0 的全部代码；细节见 `patches/README.md` |
 
 补丁顺序固定，`scripts/bootstrap.sh` 按 `0001 → 0002 → 0003 → 0004` 应用。上游 commit 与每个补丁的说明见 [`patches/README.md`](../patches/README.md)。
 

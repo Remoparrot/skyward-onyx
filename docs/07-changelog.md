@@ -8,16 +8,16 @@
 
 ## v0.3.0-onyx.1 · 2026-11-13
 
-**主题：OS4 底包 + WLAN 自动连接 + 振动 + 锁屏 / 控制中心 / 双击亮屏 + 自动解密页**
+**主题：OS4 底包 + WLAN 自动连接 + 振动 + 锁屏（每次亮屏）/ 双击亮屏 + 自动解密页**
 
 | 项 | 值 |
 | --- | --- |
 | 镜像 | `recovery.img` · 104,857,600 字节 |
-| SHA-256 | `fe567d23c77e0cf30bdee64e1dc317b88ef0f7a613a97d3326fc4a0879f036d3` |
-| 内含 skyward | 8,655,096 字节 · `f4c63b76cc502c6419324157265c7b2d027e1e283441cf7e3e7c71710c6c1cf3` |
-| ramdisk | 50,631,043 字节 · 1062 条 |
+| SHA-256 | `e02acd5ff873aef78f2bbc86edae08d0556551ece604bfaae2d520439c824ade` |
+| 内含 skyward | 8,655,096 字节 · `47354397c33c55b44f7caa4012c8b0ee94a119c2332e045be1e563d38f447c39` |
+| ramdisk | 50,624,105 字节 · 1062 条 |
 | 底包 | OS4.0.2.0.XOLCNXM（Android 17） |
-| zip | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,807,784 字节 · `0d0c2f03…4dbb5` |
+| zip | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,802,871 字节 · `db245f2d…9d7f` |
 | 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · `ce538507…cd3357` |
 
 ### 改了什么
@@ -25,7 +25,7 @@
 - **底包**：`[stock]` 从 OS3.0.306.0 换到 OS4.0.2.0.XOLCNXM；版本号改为 `0.3.0-onyx.1`；`has_root` 代替 `is_absolute` 以兼容 Windows 宿主校验。
 - **WLAN**：`[wlan]` 配置 `qca_cld3_wcn7750` + `rfkill`，`wpss_boot` / `wlan_en_delay`，固件从 vendor 与 persist 取；`wlan.rs` 对 `EBUSY` 重试、启动自动开 WLAN；`wpa-aidl-shim` 让 AIDL supplicant 跳过 recovery 不认的 `addService`；UI 保存上次网络并在下次启动自动加入。
 - **振动**：AW8697 的 sysfs 后端（`activate` / `duration` / `effect_id` / `gain`），`skyward haptic` 可测。
-- **UI**：图 1 滑动锁屏（有 4–8 位 recovery 密码时改数字键盘）；滑动后自动进入解密页；图 2 顶部下滑控制中心（WLAN / 截图 / 重启 / 熄屏 + 亮度 / 振动滑杆，背景为当前页模糊副本，卡片半透明，上滑/把手关闭）；双击亮屏；AVB 2.0 禁用页（未测）。
+- **UI**：图 1 滑动锁屏（有 4–8 位 recovery 密码时改数字键盘）；**每次息屏再点亮都先显示**，解锁回原页；开机首屏滑动后自动进入解密页；双击亮屏；AVB 2.0 禁用页（未测）。控制中心已按用户要求删除。
 - **Skyward 更新**：检查 `Remoparrot/skyward-onyx` 的 Release，asset 命名 `skyward-<tag>-onyx-*.zip`；版本比较按 `0.3.0-onyx.N`。
 - **打包**：`skyward-pack recovery --extra RAMDISK=HOST`；`build-phone.sh` 编 shim，`build-image.sh` 把 shim 放进 `skyward/`。
 
@@ -36,13 +36,13 @@
 - WLAN 扫描 CMCC-A9s7-5G（5 GHz / SAE），`wpa_state=COMPLETED`；重启后自动连接，`192.168.1.227/24`；
 - 振动驱动：`awinic_haptic` 进入 RAM 模式，`level=0x40`，`duration=16`；
 - 锁屏启动：无 recovery 密码时为滑动锁屏，`/data` 不打开；种入 4 位锁后为键盘，UI 存活。
-- 注入触摸：从滑锁轨道左到右拖动后 `/data` 挂载、进入解密页；顶部下滑打开控制中心，WLAN 磁贴能关/开，上滑能关闭。
+- 注入触摸：从滑锁轨道左到右拖动后 `/data` 挂载、进入解密页；`pmic_pwrkey` 注入电源键，息屏后点亮背光，`wake()` 压入锁屏。
 - user 0 CE：`skyward data --credential <用户锁屏密码>` 后 `/data/media/0` 真实文件名，`DCIM/Camera` 的 JPEG 可读；user 999 仍锁。
 
 ### 已知限制
 
-- user 0 CE 在 OS4 上未重新输入密码验证（逻辑沿用 v4）；
-- 锁屏解锁输入、控制中心、双击亮屏未手动点过；
+- user 0 CE 已用用户锁屏密码 + `skyward data --credential` 验证；
+- 锁屏滑动已用注入触摸验证；4–8 位键盘、双击亮屏未逐项点过；
 - AVB 2.0 按要求未测试；
 - WLAN 密码明文存 `/metadata`（0600）；
 - Skyward 在线更新只验证到配置/API，缺更高版本可测完整写入。
