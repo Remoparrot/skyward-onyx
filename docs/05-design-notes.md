@@ -199,7 +199,11 @@ vendor supplicant 带 AIDL；recovery 的 servicemanager 不认它的注册，`A
 - 锁屏只存 salt + SHA-256（4–8 位数字）；解锁后才把栈换成 `Decrypt` 并 `open_data()`；
 - 锁屏不是安全边界：recovery 的 root adb 仍能改 settings / 读分区。
 
-### 9.5 双击亮屏
+### 9.5 控制中心
+
+顶部下滑手势在 `App::touch` 里识别：`Down` 落在距顶 28 dp 内、`Move` 超过 36 dp 时，`drop_control()` 把当前页 canvas 留在 `under`，把 `Control` 压栈并设 260 ms 的 `drop` 进度；`compose()` 先把 `under` 画在下面，再把 `Control` 页从 `-h` 放到 0，形成从上方落下的面板。
+
+### 9.6 双击亮屏
 
 `App::touch` 在 `display_on == false` 时记录最后一次 `Down` 的时间与坐标；400 ms 内第二次 `Down` 落在 80 px 内就 `wake()`。设置页可关。输入设备在息屏时仍然打开（`Wakeful` 持有），所以触摸能唤醒 CPU。
 

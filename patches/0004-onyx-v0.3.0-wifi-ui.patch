@@ -386,7 +386,7 @@ index 47dcfd7..db16d30 100644
  skyward-install = { path = "../skyward-install" }
  skyward-net = { path = "../skyward-net" }
 diff --git a/crates/skyward-ui/src/app.rs b/crates/skyward-ui/src/app.rs
-index fe3a1b6..9bd33bd 100644
+index fe3a1b6..adf05a1 100644
 --- a/crates/skyward-ui/src/app.rs
 +++ b/crates/skyward-ui/src/app.rs
 @@ -33,8 +33,18 @@ use skyward_vab::{BootSlots, Hold, Slot, SnapshotState, Standing};
@@ -516,7 +516,17 @@ index fe3a1b6..9bd33bd 100644
  }
  
  enum Drag {
-@@ -2186,6 +2255,11 @@ const TOAST_MS: u64 = 2000;
+@@ -2150,6 +2219,9 @@ enum Drag {
+     /// A finger that landed just after the panel lit; nothing it does
+     /// counts until it lifts.
+     Waking,
++    /// A finger pulled down from the top edge, `start_y` where it landed;
++    /// past the threshold the control centre comes down.
++    Shade { start_y: f32, armed: bool },
+ }
+ 
+ /// Where the keys are on a page.
+@@ -2186,6 +2258,11 @@ const TOAST_MS: u64 = 2000;
  /// How long a text field's cursor shows and then hides, as the stock
  /// fields blink it.
  const BLINK_MS: u64 = 500;
@@ -528,25 +538,54 @@ index fe3a1b6..9bd33bd 100644
  /// The spring the home page's search bar moves to the search page's field
  /// on, and back: critically damped, fitted to frames of the stock settings
  /// on a Xiaomi 17 Ultra.
-@@ -2604,6 +2678,9 @@ pub struct App {
+@@ -2604,6 +2681,15 @@ pub struct App {
      /// The first of the power key and volume down gone down, waiting for
      /// the other to take a screenshot, and when it went down.
      chord: Option<(Key, u64)>,
 +    /// The last tap on the dark screen, and where it landed, for the second
 +    /// of a double tap to light it.
 +    last_tap: Option<(u64, f32, f32)>,
++    /// The page under the control centre as it comes down, and how far
++    /// down it was scrolled.
++    under: Option<Canvas>,
++    under_scroll: f32,
++    /// When the control centre began to come down, and how long it takes.
++    drop: Option<(u64, u64)>,
      /// The page scrolling of its own accord, to show the control the keys
      /// moved to or to fold its search bar whole or not at all: where it
      /// comes to rest, and the spring taking it there.
-@@ -2742,6 +2819,7 @@ impl App {
+@@ -2742,6 +2828,10 @@ impl App {
              keys: start == Screen::Fastboot,
              button: None,
              chord: None,
 +            last_tap: None,
++            under: None,
++            under_scroll: 0.0,
++            drop: None,
              seek: None,
              knob: None,
              adjusting: false,
-@@ -3587,6 +3665,22 @@ impl App {
+@@ -2833,6 +2923,9 @@ impl App {
+     /// backlight eases, else when a shown message should disappear or the
+     /// panel should dim or go off.
+     pub fn deadline(&self, now: u64) -> Option<u64> {
++        if self.drop.is_some() {
++            return Some(0);
++        }
+         let sliding = matches!(self.button, Some((_, Press::Slide { .. }))) && self.state.confirm < 1.0;
+         let moving = self.display_on
+             && (self.fling.is_some()
+@@ -2907,6 +3000,9 @@ impl App {
+     /// deadline goes away.
+     pub fn tick(&mut self, now: u64) -> Vec<Effect> {
+         let mut fx = Vec::new();
++        if self.drop.is_some() {
++            self.dirty = true;
++        }
+         // The key waiting for its partner in a screenshot, left alone long
+         // enough, does what it does alone.
+         if self.chord.is_some_and(|(_, at)| now >= at + CHORD_MS) {
+@@ -3587,6 +3683,22 @@ impl App {
          if self.state.wlan.as_ref() == Some(&w) {
              return;
          }
@@ -569,7 +608,53 @@ index fe3a1b6..9bd33bd 100644
          self.state.wlan = Some(w);
          if matches!(self.screen(), Screen::Home | Screen::Wlan | Screen::WlanNetwork | Screen::Update | Screen::SkywardUpdate) {
              self.refresh();
-@@ -5137,6 +5231,35 @@ impl App {
+@@ -4224,6 +4336,24 @@ impl App {
+     /// while a cable has just gone in, both as dark as the content stands
+     /// as the panel goes off or comes up.
+     pub fn compose(&mut self, out: &mut Canvas, f: &Fonts, info: &DeviceInfo, clock: &str, now: u64) {
++        if let Some((start, length)) = self.drop {
++            let progress = ((now.saturating_sub(start) as f32) / length as f32).clamp(0.0, 1.0);
++            out.data.fill(0);
++            if let Some(under) = &self.under {
++                out.lay(under, 0, -(self.under_scroll.round() as i32), 1.0);
++            }
++            out.dim(0.38 * progress);
++            self.render(f, info, self.w);
++            if let Some(frame) = &self.frame {
++                let y = (self.h as f32 * (progress - 1.0)).round() as i32;
++                out.lay(&frame.canvas, 0, y, 1.0);
++            }
++            if progress >= 1.0 {
++                self.drop = None;
++                self.under = None;
++            }
++            return;
++        }
+         let charge = self.charging.as_ref().map_or(0.0, |c| c.shown.level(now));
+         if charge < 1.0 {
+             self.compose_page(out, f, info, clock, now);
+@@ -4711,6 +4841,20 @@ impl App {
+         self.dirty = true;
+     }
+ 
++    /// Bring the control centre down over the page shown: the page as it
++    /// was stays under it, and the shade eases down from the top.
++    fn drop_control(&mut self, now: u64) {
++        if self.screen() == Screen::Control {
++            return;
++        }
++        self.under = self.frame.take().map(|f| f.canvas);
++        self.under_scroll = self.top().1;
++        self.stack.push((Screen::Control, 0.0, Focus::Unset));
++        self.settle_page();
++        self.drop = Some((now, 260));
++        self.dirty = true;
++    }
++
+     /// Open `screen` over the page shown, sliding in over it.
+     fn open(&mut self, screen: Screen) {
+         self.leave(false);
+@@ -5137,6 +5281,35 @@ impl App {
                  return self.arrive_at(s);
              }
              Action::OpenData => return self.open_data(),
@@ -605,7 +690,7 @@ index fe3a1b6..9bd33bd 100644
              Action::Skip => {
                  self.leave(true);
                  if self.stack.len() > 1 {
-@@ -5171,6 +5294,8 @@ impl App {
+@@ -5171,6 +5344,8 @@ impl App {
                      Switch::Verify => &mut self.state.verify,
                      Switch::Signature => &mut self.state.check_signature,
                      Switch::KeepRecovery => &mut self.state.keep_recovery,
@@ -614,7 +699,7 @@ index fe3a1b6..9bd33bd 100644
                      Switch::ShowPassword => &mut self.state.show_password,
                      Switch::Wlan => unreachable!("the WLAN switch is turned above"),
                  };
-@@ -5685,7 +5810,7 @@ impl App {
+@@ -5685,7 +5860,7 @@ impl App {
      fn typing(&mut self) -> &mut String {
          match self.screen() {
              Screen::Search => &mut self.state.search,
@@ -623,7 +708,7 @@ index fe3a1b6..9bd33bd 100644
              Screen::Rename => &mut self.state.new_name,
              Screen::WlanPassword => &mut self.state.password,
              Screen::WlanAdd => {
-@@ -5881,6 +6006,14 @@ impl App {
+@@ -5881,6 +6056,14 @@ impl App {
                      let code = std::mem::take(&mut self.state.code);
                      return self.unlock(code);
                  }
@@ -638,7 +723,7 @@ index fe3a1b6..9bd33bd 100644
                  // A name the folder cannot take is turned down here, in
                  // the user's words; an unchanged one leaves the page.
                  Screen::Rename => {
-@@ -5905,6 +6038,7 @@ impl App {
+@@ -5905,6 +6088,7 @@ impl App {
                          Some(why) => self.say(why, now),
                          None => {
                              let password = Secret(std::mem::take(&mut self.state.password));
@@ -646,7 +731,7 @@ index fe3a1b6..9bd33bd 100644
                              let mut fx = self.back(now);
                              fx.push(Effect::JoinWlan { ssid: network.ssid, name: network.name, security: network.security, password });
                              return fx;
-@@ -5938,6 +6072,7 @@ impl App {
+@@ -5938,6 +6122,7 @@ impl App {
                                  true => Secret(std::mem::take(&mut self.state.password)),
                                  false => Secret::default(),
                              };
@@ -654,7 +739,7 @@ index fe3a1b6..9bd33bd 100644
                              let mut fx = self.back(now);
                              fx.push(Effect::JoinWlan { ssid: name.clone().into_bytes(), name, security, password });
                              return fx;
-@@ -5959,11 +6094,27 @@ impl App {
+@@ -5959,11 +6144,27 @@ impl App {
      }
  
      pub fn touch(&mut self, ev: Touch, f: &Fonts, now: u64) -> Vec<Effect> {
@@ -684,7 +769,35 @@ index fe3a1b6..9bd33bd 100644
          // A finger on the charging screen sends it away for the page, and
          // does nothing else until it lifts.
          if self.charge_shown() {
-@@ -6570,6 +6721,7 @@ impl App {
+@@ -6002,6 +6203,12 @@ impl App {
+             Touch::Down(x, y) => {
+                 self.tracker.clear();
+                 self.tracker.add(now, y);
++                // A pull down from the top edge brings the control centre
++                // over the page, as the phone's own the shade does.
++                if y <= m.dp(28.0) && !matches!(self.screen(), Screen::Control | Screen::Lock | Screen::Fastboot) {
++                    self.drag = Drag::Shade { start_y: y, armed: false };
++                    return fx;
++                }
+                 let side = if x < edge {
+                     Some(true)
+                 } else if x > m.w as f32 - edge {
+@@ -6090,6 +6297,14 @@ impl App {
+                 };
+             }
+             Touch::Move(x, y) => match std::mem::replace(&mut self.drag, Drag::Idle) {
++                Drag::Shade { start_y, armed } => {
++                    if !armed && y - start_y > m.dp(36.0) {
++                        self.drop_control(now);
++                        self.drag = Drag::Waking;
++                        return Vec::new();
++                    }
++                    self.drag = Drag::Shade { start_y, armed };
++                }
+                 Drag::Press { x: x0, y: y0, action, edge: at_edge, at } => {
+                     self.tracker.add(now, y);
+                     let (dx, dy) = (x - x0, y - y0);
+@@ -6570,6 +6785,7 @@ impl App {
                      self.refresh();
                  }
              }
@@ -692,7 +805,7 @@ index fe3a1b6..9bd33bd 100644
          }
          fx
      }
-@@ -9768,6 +9920,26 @@ mod tests {
+@@ -9768,6 +9984,26 @@ mod tests {
          assert_eq!(first.arrive(), vec![Effect::OpenData], "a recovery that starts on the page opens it as well");
      }
  

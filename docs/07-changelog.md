@@ -13,11 +13,11 @@
 | 项 | 值 |
 | --- | --- |
 | 镜像 | `recovery.img` · 104,857,600 字节 |
-| SHA-256 | `baf93862fc3f8eebf04a82b4d250c985c5b3e77523e14e6358e82c6d947078b0` |
-| 内含 skyward | 8,655,096 字节 · `a39596f82ea13411436da953fc664dac0a6504ae13181abf56ad64762ac8cd70` |
-| ramdisk | 50,625,278 字节 · 1062 条 |
+| SHA-256 | `84ec2df675c150941537acbc8151231ce14e5d8a908dfde79fa5c6b18faa8103` |
+| 内含 skyward | 8,655,096 字节 · `7aa1920f618c2151dab4f0ffa7690f5d8648dba2090bb6d9b112f0a11e6fb90c` |
+| ramdisk | 50,626,095 字节 · 1062 条 |
 | 底包 | OS4.0.2.0.XOLCNXM（Android 17） |
-| zip | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,803,240 字节 · `0d0c2f03…4dbb5` |
+| zip | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,804,158 字节 · `0d0c2f03…4dbb5` |
 | 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · `ce538507…cd3357` |
 
 ### 改了什么

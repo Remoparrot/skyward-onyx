@@ -14,10 +14,10 @@
 | 版本 | `v0.3.0-onyx.1`（OS4 底包 + WLAN / 振动 / UI） |
 | 构建日期 | 2026-11-13 |
 | 镜像 | `recovery.img` · 104,857,600 字节 |
-| 镜像 SHA-256 | `baf93862fc3f8eebf04a82b4d250c985c5b3e77523e14e6358e82c6d947078b0` |
-| ramdisk | 50,625,278 字节（LZ4）· 1062 个 cpio 条目 |
-| 内含 skyward | 8,655,096 字节 · `a39596f82ea13411436da953fc664dac0a6504ae13181abf56ad64762ac8cd70` |
-| zip（在线更新用） | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,803,240 字节 · `0d0c2f035b73189484b3bb8f44341dd70bf347018da2ab0a9ec60d732b54dbb5` |
+| 镜像 SHA-256 | `84ec2df675c150941537acbc8151231ce14e5d8a908dfde79fa5c6b18faa8103` |
+| ramdisk | 50,626,095 字节（LZ4）· 1062 个 cpio 条目 |
+| 内含 skyward | 8,655,096 字节 · `7aa1920f618c2151dab4f0ffa7690f5d8648dba2090bb6d9b112f0a11e6fb90c` |
+| zip（在线更新用） | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,804,158 字节 · `0d3f0bfcae34a5c64373047933e1f3385f9bd09c06b1b73435a36977abe85a90` |
 | 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · 104,857,600 字节 · `ce53850714fe2ca9ab22600a00e71813df2775dc94244192c83a224d7ecd3357` |
 | 上游 | `kirklin/skyward` @ `ff1668fdb72a46f22152a6540f49728c42081aba`（v0.2.0）+ 0001–0004 |
 | 真机 | ✅ 已刷入 onyx：触摸服务、`/data` 自动挂载、WLAN 自动连接、振动驱动、自动进入解密页；锁屏/控制中心/双击亮屏已实现，见第 3 节 |
@@ -63,7 +63,7 @@
 | user 0 CE（相册 / 微信） | ⚠️ | 逻辑沿用 v4；本次没有在 OS4 底包上重新输入用户锁屏密码验证 `/data/media/0` |
 | user 999（第二空间 / 应用分身） | ❌ | 只有 weaver 绑定的 protector；recovery 没有 eSE 通道 |
 | recovery 锁屏（输入解锁） | ⚠️ | 启动锁屏与「未解锁不打开 data」已验；4 位码输入解锁未在真机手动点过（逻辑有单元测试，未跑） |
-| 控制中心 | ⚠️ | 页面已编译进镜像；未在真机打开逐项点过 |
+| 控制中心 | ⚠️ | 从屏幕顶部下滑打开，面板从上方落下；未在真机手动打开逐项点过 |
 | 双击亮屏 | ⚠️ | 已实现（息屏 400 ms 内两次点击）；本次没有可注入真机触摸的手段，未手动验证 |
 | 禁用 AVB 2.0 | ⚠️ | 页面与 `avbctl` 调用已实现；**按要求未测试** |
 | Skyward 在线更新 | ⚠️ | 已指向 `Remoparrot/skyward-onyx`，asset 命名与版本比较已改；没有「更新到更高版本」可测，未跑完整下载/写入 |
@@ -106,7 +106,7 @@
 ## 6. 发布检查单
 
 - [x] 镜像大小 104,857,600
-- [x] 头部 v4 / kernel 0 / ramdisk 50,625,278
+- [x] 头部 v4 / kernel 0 / ramdisk 50,626,095
 - [x] `system/bin/recovery`、`skyward/system-init`、`skyward/device.toml`、`skyward/wpa-aidl-shim.so` 存在
 - [x] 镜像内二进制与编译产物 sha256 一致
 - [x] 原厂 recovery 的 sha256 与配置 `[stock] recovery` 一致（`ce538507…`）

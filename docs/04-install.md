@@ -23,9 +23,9 @@
 
 | 文件 | 用途 | SHA-256 |
 | --- | --- | --- |
-| `recovery.img` | 要刷的 Skyward recovery | `baf93862fc3f8eebf04a82b4d250c985c5b3e77523e14e6358e82c6d947078b0` |
+| `recovery.img` | 要刷的 Skyward recovery | `84ec2df675c150941537acbc8151231ce14e5d8a908dfde79fa5c6b18faa8103` |
 | `recovery-stock-OS4.0.2.0.XOLCNXM.img` | 回滚用官方 recovery | `ce53850714fe2ca9ab22600a00e71813df2775dc94244192c83a224d7ecd3357` |
-| `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` | 官方格式 zip（内含同一个 img，供在线更新） | `0d0c2f035b73189484b3bb8f44341dd70bf347018da2ab0a9ec60d732b54dbb5` |
+| `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` | 官方格式 zip（内含同一个 img，供在线更新） | `0d3f0bfcae34a5c64373047933e1f3385f9bd09c06b1b73435a36977abe85a90` |
 | `SHA256SUMS` | 校验和 | — |
 
 ```sh
@@ -105,7 +105,12 @@ fastboot reboot recovery
 - 密码存在 `/metadata/skyward/settings.json`（0600）；换机 / 共享镜像前删掉这个文件；
 - 设置页的「WLAN」可扫描、加入、断开；「自动连接」开关控制下次启动是否自动加入。
 
-### 4.1.2 recovery 锁屏
+### 4.1.2 控制中心 / 锁屏
+
+- 在任意页面从**屏幕顶部下滑**，控制中心从上方落下；面板里有 WLAN、自动连接、亮度、双击亮屏、锁屏和重启/关机；
+- 面板的 `<` 或系统返回关闭。
+
+### 4.1.3 recovery 锁屏
 
 - 设置 → 安全 → 「恢复模式锁屏」可设 4–8 位数字；
 - 只保存 salt + SHA-256，不保存明文；

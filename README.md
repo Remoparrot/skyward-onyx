@@ -16,9 +16,9 @@
 | --- | --- |
 | 最新 release | [`v0.3.0-onyx.1`](https://github.com/Remoparrot/skyward-onyx/releases/tag/v0.3.0-onyx.1) |
 | 镜像 | `recovery.img` · **104,857,600 字节**（整分区） |
-| SHA-256 | `baf93862fc3f8eebf04a82b4d250c985c5b3e77523e14e6358e82c6d947078b0` |
-| ramdisk | 50,625,278 字节（LZ4）· 1062 个 cpio 条目 |
-| 内含 skyward | 8,655,096 字节 · `a39596f82ea13411436da953fc664dac0a6504ae13181abf56ad64762ac8cd70` |
+| SHA-256 | `84ec2df675c150941537acbc8151231ce14e5d8a908dfde79fa5c6b18faa8103` |
+| ramdisk | 50,626,095 字节（LZ4）· 1062 个 cpio 条目 |
+| 内含 skyward | 8,655,096 字节 · `7aa1920f618c2151dab4f0ffa7690f5d8648dba2090bb6d9b112f0a11e6fb90c` |
 | 底包 | HyperOS **OS4.0.2.0.XOLCNXM**（Android 17） |
 | 上游 | `kirklin/skyward` @ `ff1668f`（v0.2.0）+ 4 个补丁 |
 | 真机 | ✅ 已刷入 onyx 并验证：触摸、`/data` 自动挂载、WLAN 自动连接（`CMCC-A9s7-5G`，DHCP 到 `192.168.1.227`）、振动、自动进入解密页 |
@@ -41,7 +41,7 @@
 | Skyward 在线更新 | ✅ | 查 `Remoparrot/skyward-onyx` 的 Release，按 `onyx` 取 zip；需要 WLAN |
 | 振动 | ✅ | AW8697（`awinic_haptic`，i2c 5-005a）的 `activate` / `duration` / `gain`；设置页滑杆与触摸反馈走同一路径 |
 | recovery 锁屏 | ✅ | 4–8 位数字，只存 salt + SHA-256；开机先锁屏，解锁后才自动打开 `/data` |
-| 控制中心 | ✅ | 首页「控制中心」：WLAN、自动连接、亮度、双击亮屏、锁屏、重启/关机 |
+| 控制中心 | ✅ | 从屏幕**顶部下滑**打开：WLAN、自动连接、亮度、双击亮屏、锁屏、重启/关机 |
 | 双击亮屏 | ✅ | 息屏后 400 ms 内两次点击点亮；设置页可关 |
 | 禁用 AVB 2.0 | ⚠️ | 控制中心/设置里的「禁用 AVB 2.0」页，写入当前槽位 vbmeta；**按要求未在真机点过** |
 | 自动打开解密页 | ✅ | 正常进 recovery 首屏即「解密」，自动打开 `/data`；有 recovery 锁屏时先锁屏 |
