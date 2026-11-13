@@ -222,7 +222,7 @@ adb shell ls -l /skyward/run/supplicant/sockets
 
 - 没有 `wlan0`：看 `rfkill` / `qca_cld3_wcn7750` 是否加载、`/sys/kernel/icnss/wpss_boot` 是否写入；
 - `wpa_supplicant` 不在：看 `dmesg` 的 `the WLAN did not come up`；若 `Failed to initialize wpa_supplicant`，先确认 `skyward/wpa-aidl-shim.so` 在 ramdisk 里、`[wlan].preload` 对；
-- 有 socket 但不连接：用 `wpa_state` / 扫描结果确认密码、频段、SAE；`CMCC-A9s7-5G` 是 5 GHz + SAE，密码 `[redacted]` 已验证；
+- 有 socket 但不连接：用 `wpa_state` / 扫描结果确认密码、频段、SAE；`CMCC-A9s7-5G` 是 5 GHz + SAE，密码 `<已脱敏>` 已验证；
 - 自动连接没生效：看 `/metadata/skyward/settings.json` 的 `wlan.auto` / `ssid` / `password`；密码可能被旧版本写空。
 
 ### 10.2 振动没有

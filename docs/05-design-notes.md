@@ -194,14 +194,16 @@ vendor supplicant 带 AIDL；recovery 的 servicemanager 不认它的注册，`A
 
 ### 9.4 锁屏与自动解密
 
-- 开机读 settings，有锁屏则首屏 `Lock`，否则 `Decrypt`；
-- `Decrypt` 的 `arrive()` 发 `Effect::OpenData`，所以「进入 recovery 自动进入解密页」不需要额外入口；
-- 锁屏只存 salt + SHA-256（4–8 位数字）；解锁后才把栈换成 `Decrypt` 并 `open_data()`；
-- 锁屏不是安全边界：recovery 的 root adb 仍能改 settings / 读分区。
+- 开机一律先 `Lock`：没有 recovery 密码时是图 1 的滑动锁屏（日期、时钟、电量、「滑动解锁」），有 recovery 密码时是 4–8 位键盘；
+- 滑动/解锁后才把栈换成 `Decrypt`，`Decrypt` 的 `arrive()` 发 `Effect::OpenData`，所以「进入 recovery 自动进入解密页」不需要额外入口；
+- 手机锁屏密码只在 `Decrypt` 页输入；`skyward data --credential` 用同一个密码验证过 user 0 CE；
+- recovery 密码只存 salt + SHA-256；锁屏不是安全边界：recovery 的 root adb 仍能改 settings / 读分区。
 
 ### 9.5 控制中心
 
 顶部下滑手势在 `App::touch` 里识别：`Down` 落在距顶 28 dp 内、`Move` 超过 36 dp 时，`drop_control()` 把当前页 canvas 留在 `under`，把 `Control` 压栈并设 260 ms 的 `drop` 进度；`compose()` 先把 `under` 画在下面，再把 `Control` 页从 `-h` 放到 0，形成从上方落下的面板。
+
+`Control` 页用 `Canvas::unfilled` 画一层半透明遮罩和一张圆角面板，面板里是图 2 的 2×2 磁贴（WLAN / 截图 / 重启 / 熄屏）和亮度 / 振动滑杆；底部小把手是关闭命中区。面板之外保持透明，因此落下时能看见下面的页面。
 
 ### 9.6 双击亮屏
 

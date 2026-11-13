@@ -386,7 +386,7 @@ index 47dcfd7..db16d30 100644
  skyward-install = { path = "../skyward-install" }
  skyward-net = { path = "../skyward-net" }
 diff --git a/crates/skyward-ui/src/app.rs b/crates/skyward-ui/src/app.rs
-index fe3a1b6..adf05a1 100644
+index fe3a1b6..0e3186c 100644
 --- a/crates/skyward-ui/src/app.rs
 +++ b/crates/skyward-ui/src/app.rs
 @@ -33,8 +33,18 @@ use skyward_vab::{BootSlots, Hold, Slot, SnapshotState, Standing};
@@ -456,22 +456,30 @@ index fe3a1b6..adf05a1 100644
  impl Data {
      /// Whether the owner's internal storage can be read: the partition is
      /// open, and so are the owner's own files, which open first.
-@@ -877,6 +921,8 @@ pub enum Confirm {
+@@ -877,6 +921,10 @@ pub enum Confirm {
      RemoveSystem,
      /// Install the system the installer holds with the room chosen.
      InstallSystem,
 +    /// Turn off dm-verity and verification in the booted slot's vbmeta.
 +    DisableAvb,
++    /// The recovery's lock screen, slid to open.
++    UnlockScreen,
  }
  
  /// What the wipe page erases: everything a factory reset erases, or any of
-@@ -1169,6 +1215,13 @@ pub enum Action {
+@@ -1169,6 +1217,19 @@ pub enum Action {
      Skip,
      /// Try opening the data partition again, after it did not open.
      OpenData,
 +    /// Check the code typed on the recovery's lock, and open the data
 +    /// partition behind it.
 +    Unlock,
++    /// Save a screenshot of the panel.
++    Screenshot,
++    /// Put the panel out, as the power key does.
++    Sleep,
++    /// Put the control centre away, back to the page under it.
++    CloseControl,
 +    /// Keep the code typed as the recovery's lock.
 +    LockSave,
 +    /// Take the recovery's lock away.
@@ -479,7 +487,7 @@ index fe3a1b6..adf05a1 100644
      Back,
      Theme { dark: bool },
      Toggle(Switch),
-@@ -1667,6 +1720,15 @@ pub struct State {
+@@ -1667,6 +1728,15 @@ pub struct State {
      /// Why the second system's start stopped, as its first program told
      /// it, which the systems page shows.
      pub system_notice: Option<String>,
@@ -495,7 +503,7 @@ index fe3a1b6..adf05a1 100644
      /// Where the data partition stands, and what is typed at the screen
      /// lock its users' own files wait on.
      pub data: Data,
-@@ -1797,6 +1859,11 @@ impl Default for State {
+@@ -1797,6 +1867,11 @@ impl Default for State {
              system_pick: None,
              systems_work: None,
              system_notice: None,
@@ -507,7 +515,7 @@ index fe3a1b6..adf05a1 100644
              data: Data::Closed,
              code: String::new(),
              search: String::new(),
-@@ -2124,6 +2191,8 @@ pub enum Effect {
+@@ -2124,6 +2199,8 @@ pub enum Effect {
      /// Merge the update that waits in the slot the phone runs from,
      /// telling how it goes with [`App::set_update`].
      Merge,
@@ -516,7 +524,7 @@ index fe3a1b6..adf05a1 100644
  }
  
  enum Drag {
-@@ -2150,6 +2219,9 @@ enum Drag {
+@@ -2150,6 +2227,9 @@ enum Drag {
      /// A finger that landed just after the panel lit; nothing it does
      /// counts until it lifts.
      Waking,
@@ -526,7 +534,7 @@ index fe3a1b6..adf05a1 100644
  }
  
  /// Where the keys are on a page.
-@@ -2186,6 +2258,11 @@ const TOAST_MS: u64 = 2000;
+@@ -2186,6 +2266,11 @@ const TOAST_MS: u64 = 2000;
  /// How long a text field's cursor shows and then hides, as the stock
  /// fields blink it.
  const BLINK_MS: u64 = 500;
@@ -538,7 +546,7 @@ index fe3a1b6..adf05a1 100644
  /// The spring the home page's search bar moves to the search page's field
  /// on, and back: critically damped, fitted to frames of the stock settings
  /// on a Xiaomi 17 Ultra.
-@@ -2604,6 +2681,15 @@ pub struct App {
+@@ -2604,6 +2689,15 @@ pub struct App {
      /// The first of the power key and volume down gone down, waiting for
      /// the other to take a screenshot, and when it went down.
      chord: Option<(Key, u64)>,
@@ -554,7 +562,7 @@ index fe3a1b6..adf05a1 100644
      /// The page scrolling of its own accord, to show the control the keys
      /// moved to or to fold its search bar whole or not at all: where it
      /// comes to rest, and the spring taking it there.
-@@ -2742,6 +2828,10 @@ impl App {
+@@ -2742,6 +2836,10 @@ impl App {
              keys: start == Screen::Fastboot,
              button: None,
              chord: None,
@@ -565,7 +573,7 @@ index fe3a1b6..adf05a1 100644
              seek: None,
              knob: None,
              adjusting: false,
-@@ -2833,6 +2923,9 @@ impl App {
+@@ -2833,6 +2931,9 @@ impl App {
      /// backlight eases, else when a shown message should disappear or the
      /// panel should dim or go off.
      pub fn deadline(&self, now: u64) -> Option<u64> {
@@ -575,7 +583,7 @@ index fe3a1b6..adf05a1 100644
          let sliding = matches!(self.button, Some((_, Press::Slide { .. }))) && self.state.confirm < 1.0;
          let moving = self.display_on
              && (self.fling.is_some()
-@@ -2907,6 +3000,9 @@ impl App {
+@@ -2907,6 +3008,9 @@ impl App {
      /// deadline goes away.
      pub fn tick(&mut self, now: u64) -> Vec<Effect> {
          let mut fx = Vec::new();
@@ -585,7 +593,7 @@ index fe3a1b6..adf05a1 100644
          // The key waiting for its partner in a screenshot, left alone long
          // enough, does what it does alone.
          if self.chord.is_some_and(|(_, at)| now >= at + CHORD_MS) {
-@@ -3587,6 +3683,22 @@ impl App {
+@@ -3587,6 +3691,22 @@ impl App {
          if self.state.wlan.as_ref() == Some(&w) {
              return;
          }
@@ -608,7 +616,7 @@ index fe3a1b6..adf05a1 100644
          self.state.wlan = Some(w);
          if matches!(self.screen(), Screen::Home | Screen::Wlan | Screen::WlanNetwork | Screen::Update | Screen::SkywardUpdate) {
              self.refresh();
-@@ -4224,6 +4336,24 @@ impl App {
+@@ -4224,6 +4344,24 @@ impl App {
      /// while a cable has just gone in, both as dark as the content stands
      /// as the panel goes off or comes up.
      pub fn compose(&mut self, out: &mut Canvas, f: &Fonts, info: &DeviceInfo, clock: &str, now: u64) {
@@ -633,7 +641,7 @@ index fe3a1b6..adf05a1 100644
          let charge = self.charging.as_ref().map_or(0.0, |c| c.shown.level(now));
          if charge < 1.0 {
              self.compose_page(out, f, info, clock, now);
-@@ -4711,6 +4841,20 @@ impl App {
+@@ -4711,6 +4849,20 @@ impl App {
          self.dirty = true;
      }
  
@@ -654,13 +662,22 @@ index fe3a1b6..adf05a1 100644
      /// Open `screen` over the page shown, sliding in over it.
      fn open(&mut self, screen: Screen) {
          self.leave(false);
-@@ -5137,6 +5281,35 @@ impl App {
+@@ -5137,6 +5289,44 @@ impl App {
                  return self.arrive_at(s);
              }
              Action::OpenData => return self.open_data(),
++            Action::Screenshot => return vec![Effect::Screenshot { storage: self.state.data.storage_open() }],
++            Action::Sleep => {
++                self.sleep(now);
++                return Vec::new();
++            }
++            Action::CloseControl => return self.back(now),
 +            Action::Unlock => {
 +                let code = std::mem::take(&mut self.state.code);
-+                let ok = self.state.lock.as_ref().is_some_and(|lock| lock.matches(&code));
++                let ok = match &self.state.lock {
++                    Some(lock) => lock.matches(&code),
++                    None => true,
++                };
 +                if ok {
 +                    if self.screen() == Screen::Lock {
 +                        self.stack = vec![(Screen::Decrypt, 0.0, Focus::Unset)];
@@ -690,7 +707,7 @@ index fe3a1b6..adf05a1 100644
              Action::Skip => {
                  self.leave(true);
                  if self.stack.len() > 1 {
-@@ -5171,6 +5344,8 @@ impl App {
+@@ -5171,6 +5361,8 @@ impl App {
                      Switch::Verify => &mut self.state.verify,
                      Switch::Signature => &mut self.state.check_signature,
                      Switch::KeepRecovery => &mut self.state.keep_recovery,
@@ -699,7 +716,7 @@ index fe3a1b6..adf05a1 100644
                      Switch::ShowPassword => &mut self.state.show_password,
                      Switch::Wlan => unreachable!("the WLAN switch is turned above"),
                  };
-@@ -5685,7 +5860,7 @@ impl App {
+@@ -5685,7 +5877,7 @@ impl App {
      fn typing(&mut self) -> &mut String {
          match self.screen() {
              Screen::Search => &mut self.state.search,
@@ -708,7 +725,7 @@ index fe3a1b6..adf05a1 100644
              Screen::Rename => &mut self.state.new_name,
              Screen::WlanPassword => &mut self.state.password,
              Screen::WlanAdd => {
-@@ -5881,6 +6056,14 @@ impl App {
+@@ -5881,6 +6073,14 @@ impl App {
                      let code = std::mem::take(&mut self.state.code);
                      return self.unlock(code);
                  }
@@ -723,7 +740,7 @@ index fe3a1b6..adf05a1 100644
                  // A name the folder cannot take is turned down here, in
                  // the user's words; an unchanged one leaves the page.
                  Screen::Rename => {
-@@ -5905,6 +6088,7 @@ impl App {
+@@ -5905,6 +6105,7 @@ impl App {
                          Some(why) => self.say(why, now),
                          None => {
                              let password = Secret(std::mem::take(&mut self.state.password));
@@ -731,7 +748,7 @@ index fe3a1b6..adf05a1 100644
                              let mut fx = self.back(now);
                              fx.push(Effect::JoinWlan { ssid: network.ssid, name: network.name, security: network.security, password });
                              return fx;
-@@ -5938,6 +6122,7 @@ impl App {
+@@ -5938,6 +6139,7 @@ impl App {
                                  true => Secret(std::mem::take(&mut self.state.password)),
                                  false => Secret::default(),
                              };
@@ -739,7 +756,7 @@ index fe3a1b6..adf05a1 100644
                              let mut fx = self.back(now);
                              fx.push(Effect::JoinWlan { ssid: name.clone().into_bytes(), name, security, password });
                              return fx;
-@@ -5959,11 +6144,27 @@ impl App {
+@@ -5959,11 +6161,27 @@ impl App {
      }
  
      pub fn touch(&mut self, ev: Touch, f: &Fonts, now: u64) -> Vec<Effect> {
@@ -769,7 +786,7 @@ index fe3a1b6..adf05a1 100644
          // A finger on the charging screen sends it away for the page, and
          // does nothing else until it lifts.
          if self.charge_shown() {
-@@ -6002,6 +6203,12 @@ impl App {
+@@ -6002,6 +6220,12 @@ impl App {
              Touch::Down(x, y) => {
                  self.tracker.clear();
                  self.tracker.add(now, y);
@@ -782,7 +799,7 @@ index fe3a1b6..adf05a1 100644
                  let side = if x < edge {
                      Some(true)
                  } else if x > m.w as f32 - edge {
-@@ -6090,6 +6297,14 @@ impl App {
+@@ -6090,6 +6314,14 @@ impl App {
                  };
              }
              Touch::Move(x, y) => match std::mem::replace(&mut self.drag, Drag::Idle) {
@@ -797,15 +814,16 @@ index fe3a1b6..adf05a1 100644
                  Drag::Press { x: x0, y: y0, action, edge: at_edge, at } => {
                      self.tracker.add(now, y);
                      let (dx, dy) = (x - x0, y - y0);
-@@ -6570,6 +6785,7 @@ impl App {
+@@ -6570,6 +6802,8 @@ impl App {
                      self.refresh();
                  }
              }
 +            Confirm::DisableAvb => fx.push(Effect::DisableAvb),
++            Confirm::UnlockScreen => fx.extend(self.act(Action::Unlock, now)),
          }
          fx
      }
-@@ -9768,6 +9984,26 @@ mod tests {
+@@ -9768,6 +10002,26 @@ mod tests {
          assert_eq!(first.arrive(), vec![Effect::OpenData], "a recovery that starts on the page opens it as well");
      }
  
@@ -833,7 +851,7 @@ index fe3a1b6..adf05a1 100644
      fn leaving_the_decrypt_page_goes_back_to_where_it_was_opened_from() {
          let (f, i) = (fonts(), info());
 diff --git a/crates/skyward-ui/src/pages.rs b/crates/skyward-ui/src/pages.rs
-index 5216cb6..bf79fde 100644
+index 5216cb6..be9e8db 100644
 --- a/crates/skyward-ui/src/pages.rs
 +++ b/crates/skyward-ui/src/pages.rs
 @@ -63,8 +63,12 @@ pub struct Band {
@@ -849,14 +867,16 @@ index 5216cb6..bf79fde 100644
          Screen::Reboot => reboot(cx),
          Screen::Wipe => wipe(cx),
          Screen::Mount => mount(cx),
-@@ -112,6 +116,137 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
+@@ -112,6 +116,180 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
      }
  }
  
-+/// The recovery's own lock: the clock and date, the dots of the code typed
-+/// so far, and the keypad that types it. A code that does not match is said
-+/// on the page, and the dots clear.
++/// The recovery's own lock: with a code set, the keypad that types it; with
++/// none, the swipe the phone's own lock screen shows.
 +pub fn lock(cx: &Ctx) -> Frame {
++    if cx.state.lock.is_none() {
++        return lock_swipe(cx);
++    }
 +    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
 +    let m = &t.m;
 +    let mut c = page(cx);
@@ -872,6 +892,28 @@ index 5216cb6..bf79fde 100644
 +    let mut out = Vec::new();
 +    let caps = widgets::keypad(&mut c, t, f, l, top, s.key_held(), l.pick(["解锁", "解鎖", "Unlock"]));
 +    out.extend(caps.into_iter().map(|(rect, cap)| Hit { rect, action: Action::Type(cap) }));
++    Frame { header: false, back: false, ..Frame::new(t, c, out, "", 0.0) }
++}
++
++/// The lock screen without a recovery code: the date, the clock, the
++/// battery, and a pill slid to open the decrypt page.
++fn lock_swipe(cx: &Ctx) -> Frame {
++    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
++    let m = &t.m;
++    let mut c = page(cx);
++    let (w, h) = (m.w as f32, m.h as f32);
++    c.fill_rect(0.0, 0.0, w, h, Rgba::rgb(0, 0, 0));
++    let x = w / 2.0;
++    let now = jiff::Timestamp::now().as_second();
++    let white = Rgba::rgb(255, 255, 255);
++    c.text_center(&f.body, &fmt::date(l, now, s.time_zone), x, m.dp(172.0), m.sub_px * 1.15, white);
++    c.text_center(&f.title, &fmt::clock(now, s.time_zone), x, m.dp(232.0), m.dp(84.0), white);
++    if let Some(battery) = &cx.info.battery {
++        c.text_center(&f.body, &format!("{}%", battery.level), x, m.dp(320.0), m.sub_px, white);
++    }
++    let (label, _) = confirm_label(Confirm::UnlockScreen, s);
++    let track = widgets::confirm(&mut c, t, f, h - m.dp(112.0), label, false, s.confirm);
++    let out = vec![Hit { rect: track, action: Action::Confirm(Confirm::UnlockScreen) }];
 +    Frame { header: false, back: false, ..Frame::new(t, c, out, "", 0.0) }
 +}
 +
@@ -913,51 +955,70 @@ index 5216cb6..bf79fde 100644
 +    Frame::new(t, c, out, l.pick(["锁屏密码", "鎖屏密碼", "Lock code"]), m.content_top)
 +}
 +
-+/// The switches kept at hand: the WLAN, the brightness, and the ways out of
-+/// the recovery.
++/// The control centre the top edge pulls down: the phone's WLAN and a
++/// screenshot, a restart and the panel put out, then the screen's
++/// brightness and the motor's strength, on a panel over the page left
++/// behind.
 +pub fn control(cx: &Ctx) -> Frame {
 +    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
-+    let mut c = long_page(cx);
++    let m = &t.m;
++    let (w, h) = (m.w as f32, m.h as f32);
++    let mut c = Canvas::unfilled(m.w, m.h, 0..m.h);
 +    let mut out = Vec::new();
-+    let top = t.m.content_top;
-+    let y = widgets::section_first(&mut c, t, f, top, l.pick(["网络", "網路", "Network"]));
-+    let mut rows = Vec::new();
-+    let mut picks = Vec::new();
-+    if s.wlan.is_some() {
-+        let on = s.wlan.as_ref().is_some_and(|w| !matches!(w.power, Power::Off | Power::Failed(_)));
-+        rows.push(Row::new(l.pick(WLAN)).icon(BLUE, Icon::Wlan).trail(Trail::Switch(on)));
-+        picks.push(Action::Toggle(Switch::Wlan));
-+        rows.push(Row::new(l.pick(["自动连接", "自動連線", "Join automatically"])).trail(Trail::Switch(s.wlan_auto)));
-+        picks.push(Action::Toggle(Switch::WlanAuto));
++    let white = Rgba::rgb(255, 255, 255);
++    c.fill_rect(0.0, 0.0, w, h, Rgba::rgb(0, 0, 0).with_alpha(76));
++    let px = m.margin;
++    let pw = w - px * 2.0;
++    let top = m.dp(30.0);
++    let ph = m.dp(536.0);
++    c.fill_round_rect(px, top, pw, ph, m.dp(28.0), Rgba::rgb(27, 28, 32).with_alpha(240));
++    let now = jiff::Timestamp::now().as_second();
++    c.text(&f.heading, &fmt::clock(now, s.time_zone), px + m.dp(24.0), top + m.dp(48.0), m.dp(27.0), white, None);
++    if let Some(battery) = &cx.info.battery {
++        let text = format!("{}%", battery.level);
++        let width = c.text_width(&f.body, &text, m.sub_px);
++        c.text(&f.body, &text, px + pw - m.dp(24.0) - width, top + m.dp(48.0), m.sub_px, white.with_alpha(210), None);
 +    }
-+    if rows.is_empty() {
-+        rows.push(Row::new(l.pick(["WLAN 未配置", "Wi-Fi 未設定", "WLAN not set up"])).trail(Trail::None));
-+        picks.push(Action::Unavailable("WLAN"));
-+    }
-+    let net = widgets::list(&mut c, t, f, y, &rows);
-+    out.extend(hits(&net.rows, &picks));
-+    let y = widgets::section(&mut c, t, f, net.bottom, l.pick(["显示", "顯示", "Display"]));
-+    let slider = widgets::slider_card(&mut c, t, f, y, Caption::Sun, l.pick(["屏幕亮度", "螢幕亮度", "Screen brightness"]), s.brightness, None);
-+    out.push(Hit { rect: slider.track, action: Action::Slider(Slider::Brightness) });
-+    let y = slider.bottom + t.m.card_gap;
-+    let mut rows = vec![Row::new(l.pick(["双击亮屏", "雙擊亮屏", "Double tap to wake"])).icon(BLUE, Icon::Phone).trail(Trail::Switch(s.double_tap))];
-+    let mut picks = vec![Action::Toggle(Switch::DoubleTap)];
-+    let (title, open) = match s.lock {
-+        Some(_) => (l.pick(["锁屏", "鎖屏", "Lock"]), Screen::Lock),
-+        None => (l.pick(["设置锁屏密码", "設定鎖屏密碼", "Set a lock code"]), Screen::LockSet),
++    let inner = m.dp(18.0);
++    let gap = m.dp(12.0);
++    let tw = (pw - inner * 2.0 - gap) / 2.0;
++    let th = m.dp(104.0);
++    let tile_top = top + m.dp(74.0);
++    let wlan_on = s.wlan.as_ref().is_some_and(|w| !matches!(w.power, Power::Off | Power::Failed(_)));
++    let wlan_label = if wlan_on {
++        l.pick(["WLAN · 已开", "WLAN · 已開", "WLAN · on"])
++    } else {
++        l.pick(["WLAN · 已关", "WLAN · 已關", "WLAN · off"])
 +    };
-+    rows.push(Row::new(title).icon(BLUE, Icon::Lock));
-+    picks.push(Action::Open(open));
-+    let list = widgets::list(&mut c, t, f, y, &rows);
-+    out.extend(hits(&list.rows, &picks));
-+    let y = widgets::section(&mut c, t, f, list.bottom, l.pick(["电源", "電源", "Power"]));
-+    let power = widgets::list(&mut c, t, f, y, &[
-+        Row::new(l.pick(["重启到系统", "重新啟動到系統", "Reboot to system"])).icon(GREEN, Icon::Power),
-+        Row::new(l.pick(["重启到 recovery", "重新啟動到復原模式", "Reboot to recovery"])).icon(ORANGE, Icon::Power),
-+        Row::new(l.pick(["关机", "關機", "Power off"])).icon(RED, Icon::Power),
-+    ]);
-+    out.extend(hits(&power.rows, &[Action::RebootTo(Target::System), Action::RebootTo(Target::Recovery), Action::RebootTo(Target::PowerOff)]));
-+    Frame::new(t, fit(c, t, power.bottom), out, l.pick(["控制中心", "控制中心", "Control center"]), top)
++    let screenshot = l.pick(["截图", "截圖", "Screenshot"]);
++    let reboot = l.pick(["重启", "重新啟動", "Reboot"]);
++    let sleep = l.pick(["熄屏", "關閉螢幕", "Screen off"]);
++    let mut tile = |x: f32, y: f32, label: &str, icon: Icon, active: bool, action: Action| {
++        let base = if active { t.pal.accent.with_alpha(238) } else { Rgba::rgb(45, 46, 51).with_alpha(238) };
++        c.fill_round_rect(x, y, tw, th, m.dp(20.0), base);
++        icons::glyph(&mut c, icon, x + m.dp(22.0), y + m.dp(30.0), m.dp(23.0), white);
++        c.text(&f.heading, label, x + m.dp(20.0), y + th - m.dp(22.0), m.row_title_px, white, Some(tw - m.dp(36.0)));
++        out.push(Hit { rect: Rect::new(x, y, tw, th), action });
++    };
++    tile(px + inner, tile_top, wlan_label, Icon::Wlan, wlan_on, Action::Toggle(Switch::Wlan));
++    tile(px + inner + tw + gap, tile_top, screenshot, Icon::Phone, false, Action::Screenshot);
++    let second = tile_top + th + gap;
++    tile(px + inner, second, reboot, Icon::Power, false, Action::Open(Screen::Reboot));
++    tile(px + inner + tw + gap, second, sleep, Icon::Power, false, Action::Sleep);
++    drop(tile);
++    let slider_top = second + th + m.dp(22.0);
++    let track_w = pw - inner * 2.0;
++    let mut slider = |top: f32, label: &str, value: f32, action: Action| {
++        c.text(&f.body, label, px + inner, top + m.dp(15.0), m.sub_px, white.with_alpha(220), None);
++        widgets::progress_bar(&mut c, t, px + inner, top + m.dp(27.0), track_w, value);
++        out.push(Hit { rect: Rect::new(px + inner, top + m.dp(8.0), track_w, m.dp(40.0)), action });
++    };
++    slider(slider_top, l.pick(["亮度", "亮度", "Brightness"]), s.brightness, Action::Slider(Slider::Brightness));
++    slider(slider_top + m.dp(54.0), l.pick(["振动", "震動", "Vibration"]), s.vibration, Action::Slider(Slider::Vibration));
++    drop(slider);
++    c.fill_round_rect(w / 2.0 - m.dp(22.0), top + ph - m.dp(14.0), m.dp(44.0), m.dp(4.0), m.dp(2.0), white.with_alpha(130));
++    out.push(Hit { rect: Rect::new(w / 2.0 - m.dp(40.0), top + ph - m.dp(28.0), m.dp(80.0), m.dp(28.0)), action: Action::CloseControl });
++    Frame { header: false, back: false, ..Frame::new(t, c, out, "", 0.0) }
 +}
 +
 +/// Turning off the booted slot's dm-verity and verification, with a swipe:
@@ -987,15 +1048,16 @@ index 5216cb6..bf79fde 100644
  /// Label and colour of each swipe-to-confirm control: the filesystem
  /// page's as `s` says what it is to do.
  pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
-@@ -137,6 +272,7 @@ pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
+@@ -137,6 +315,8 @@ pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
          Confirm::SwitchSystem => (["滑动以切换并重启", "滑動以切換並重新啟動", "Slide to switch and reboot"], false),
          Confirm::RemoveSystem => (["滑动以删除", "滑動以刪除", "Slide to remove"], true),
          Confirm::InstallSystem => (INSTALL, false),
 +        Confirm::DisableAvb => (["滑动以禁用", "滑動以停用", "Slide to disable"], true),
++        Confirm::UnlockScreen => (["滑动解锁", "滑動解鎖", "Slide to unlock"], false),
      };
      (s.lang.pick(label), danger)
  }
-@@ -290,6 +426,7 @@ pub fn home(cx: &Ctx) -> Frame {
+@@ -290,6 +470,7 @@ pub fn home(cx: &Ctx) -> Frame {
          Row::new(l.pick(["备份", "備份", "Backup"])).icon(BLUE, Icon::Backup),
          Row::new(l.pick(["恢复", "還原", "Restore"])).icon(PURPLE, Icon::Restore),
          Row::new(l.pick(["挂载", "掛載", "Mount"])).icon(SLATE, Icon::Mount),
@@ -1003,7 +1065,7 @@ index 5216cb6..bf79fde 100644
          Row::new(l.pick(DECRYPT)).icon(BLUE, Icon::Lock).trail(Trail::Value(fmt::data(l, &cx.state.data))),
      ]);
      out.extend(hits(&tools.rows, &[
-@@ -297,6 +434,7 @@ pub fn home(cx: &Ctx) -> Frame {
+@@ -297,6 +478,7 @@ pub fn home(cx: &Ctx) -> Frame {
          Action::Open(Screen::Backup),
          Action::Open(Screen::Restore),
          Action::Open(Screen::Mount),
@@ -1011,7 +1073,7 @@ index 5216cb6..bf79fde 100644
          Action::Open(Screen::Decrypt),
      ]));
      y = tools.bottom + t.m.card_gap;
-@@ -363,7 +501,10 @@ pub fn settings(cx: &Ctx) -> Frame {
+@@ -363,7 +545,10 @@ pub fn settings(cx: &Ctx) -> Frame {
      if let Some(r) = slider.below {
          out.push(Hit { rect: r, action: Action::Open(Screen::ScreenOff) });
      }
@@ -1023,7 +1085,7 @@ index 5216cb6..bf79fde 100644
      let below = Row::new(l.pick(["触摸振动", "觸控震動", "Touch vibration"])).trail(Trail::Switch(s.vibrate));
      let vibration = widgets::slider_card(&mut c, t, f, y, Caption::Vibrate, l.pick(["振动强度", "震動強度", "Vibration intensity"]), s.vibration, Some(below));
      out.push(Hit { rect: vibration.track, action: Action::Slider(Slider::Vibration) });
-@@ -376,7 +517,14 @@ pub fn settings(cx: &Ctx) -> Frame {
+@@ -376,7 +561,14 @@ pub fn settings(cx: &Ctx) -> Frame {
          Row::new(l.pick(TIME_ZONE)).icon(ORANGE, Icon::Clock).trail(Trail::Value(l.pick(TIME_ZONES[s.time_zone].0))),
      ]);
      out.extend(hits(&general.rows, &[Action::Open(Screen::Language), Action::Open(Screen::TimeZone)]));
@@ -1039,7 +1101,7 @@ index 5216cb6..bf79fde 100644
      let usb = widgets::list(&mut c, t, f, y, &[Row::new(l.pick(["文件传输", "檔案傳輸", "File transfer"])).icon(BLUE, Icon::Usb).trail(Trail::Switch(s.file_transfer))]);
      out.extend(hits(&usb.rows, &[Action::Toggle(Switch::FileTransfer)]));
      let note = l.pick([
-@@ -786,7 +934,7 @@ fn code(cx: &Ctx, mut c: Canvas, user: u32, keys: Keys, checking: bool) -> Frame
+@@ -786,7 +978,7 @@ fn code(cx: &Ctx, mut c: Canvas, user: u32, keys: Keys, checking: bool) -> Frame
          }
          Keys::Digits => {
              let top = m.h as f32 - widgets::keypad_height(t);
@@ -1048,7 +1110,7 @@ index 5216cb6..bf79fde 100644
              if !checking {
                  out.extend(caps.into_iter().map(|(rect, cap)| Hit { rect, action: Action::Type(cap) }));
              }
-@@ -2881,7 +3029,13 @@ pub fn wlan(cx: &Ctx) -> Frame {
+@@ -2881,7 +3073,13 @@ pub fn wlan(cx: &Ctx) -> Frame {
      let on = !matches!(w.power, Power::Off | Power::Failed(_));
      let switch = widgets::list(&mut c, t, f, top, &[Row::new(l.pick(WLAN)).trail(Trail::Switch(on))]);
      out.extend(hits(&switch.rows, &[Action::Toggle(Switch::Wlan)]));
@@ -1416,7 +1478,7 @@ index ad36bfb..8163438 100644
      file.sync_all().with_context(|| format!("write {WRITING}"))?;
      fs::rename(WRITING, FILE).with_context(|| format!("move {WRITING} over {FILE}"))?;
 diff --git a/crates/skyward/src/ui.rs b/crates/skyward/src/ui.rs
-index 3144b83..22213a4 100644
+index 3144b83..9940a34 100644
 --- a/crates/skyward/src/ui.rs
 +++ b/crates/skyward/src/ui.rs
 @@ -1061,7 +1061,10 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
@@ -1431,11 +1493,13 @@ index 3144b83..22213a4 100644
          Work::Fastboot => Screen::Fastboot,
          Work::PromptWipeData => Screen::CantStart,
          Work::Unsupported(_) => Screen::Unhandled,
-@@ -1077,14 +1080,16 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+@@ -1077,14 +1080,18 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
          | Work::SwitchSystem { .. }
          | Work::SystemStopped => start,
      };
-+    if first == Screen::Decrypt && kept.settings().is_some_and(|s| s.lock.is_some()) {
++    if first == Screen::Decrypt {
++        // The recovery's own lock screen comes first; with no recovery
++        // code it is the swipe the phone's own lock screen shows.
 +        first = Screen::Lock;
 +    }
      let mut app = App::new(first, w, h, cfg.display.density as f32 / 160.0);
@@ -1454,7 +1518,7 @@ index 3144b83..22213a4 100644
      let locale = request.locale.as_deref().or(info.locale.as_deref());
      let named = locale.map(Lang::for_locale).transpose()?;
      app.take_settings(kept.settings(), named);
-@@ -1354,6 +1359,26 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+@@ -1354,6 +1361,26 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
          }
          None => None,
      };
@@ -1481,7 +1545,7 @@ index 3144b83..22213a4 100644
      let mut scanned_at = Instant::now();
      app.state.update_server = cfg.update.is_some();
      // Asking the update server, and downloading the full package.
-@@ -2473,6 +2498,37 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+@@ -2473,6 +2500,37 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
                          wlan_worker(&wlan)?.send(wlan::Command::Join { ssid, name, security, password: password.0 })
                      }
                      Effect::LeaveWlan => wlan_worker(&wlan)?.send(wlan::Command::Leave),
@@ -1519,7 +1583,7 @@ index 3144b83..22213a4 100644
                      // What the installed system is called is the page's to
                      // report when it cannot be read.
                      Effect::CheckUpdate => {
-@@ -2502,7 +2558,8 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+@@ -2502,7 +2560,8 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
                      Effect::CheckSkyward => {
                          ensure!(skyward_checker.is_none(), "GitHub is being asked already");
                          let probe = cfg.wlan.as_ref().context("the phone's WLAN is not brought up")?.probe.clone();

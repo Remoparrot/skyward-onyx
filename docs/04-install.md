@@ -23,9 +23,9 @@
 
 | 文件 | 用途 | SHA-256 |
 | --- | --- | --- |
-| `recovery.img` | 要刷的 Skyward recovery | `84ec2df675c150941537acbc8151231ce14e5d8a908dfde79fa5c6b18faa8103` |
+| `recovery.img` | 要刷的 Skyward recovery | `14c5311aa2e70c8d419da0fafcbb7b0670ece1dc4d586cb0f7454b96068efb5a` |
 | `recovery-stock-OS4.0.2.0.XOLCNXM.img` | 回滚用官方 recovery | `ce53850714fe2ca9ab22600a00e71813df2775dc94244192c83a224d7ecd3357` |
-| `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` | 官方格式 zip（内含同一个 img，供在线更新） | `0d3f0bfcae34a5c64373047933e1f3385f9bd09c06b1b73435a36977abe85a90` |
+| `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` | 官方格式 zip（内含同一个 img，供在线更新） | `6ea3a56825caecae99b78a8c36a597f5e95f589565b15497e9fadd493a42917b` |
 | `SHA256SUMS` | 校验和 | — |
 
 ```sh
@@ -107,15 +107,15 @@ fastboot reboot recovery
 
 ### 4.1.2 控制中心 / 锁屏
 
-- 在任意页面从**屏幕顶部下滑**，控制中心从上方落下；面板里有 WLAN、自动连接、亮度、双击亮屏、锁屏和重启/关机；
-- 面板的 `<` 或系统返回关闭。
+- 在任意页面从**屏幕顶部下滑**，控制中心从上方落下；面板是图 2 的网格：WLAN、截图、重启、熄屏，亮度与振动滑杆；
+- 面板底部的小把手可以点按关闭，系统返回键也可以。
 
 ### 4.1.3 recovery 锁屏
 
-- 设置 → 安全 → 「恢复模式锁屏」可设 4–8 位数字；
-- 只保存 salt + SHA-256，不保存明文；
-- 开机先锁屏，解锁后才自动打开 `/data`；
-- 忘记密码时，可在 recovery 的 adb root 下删 `/metadata/skyward/settings.json` 的 `lock` 字段（或整个文件）。
+- 默认是图 1 的**滑动解锁**：日期、时钟、电量，底部「滑动解锁」；滑到右端后进入「解密」页，输入**手机锁屏密码**打开 user 0 的 CE 存储；
+- 在设置 → 安全 → 「恢复模式锁屏」可另设 4–8 位 recovery 密码；设了之后启动先显示数字键盘，只保存 salt + SHA-256；
+- 启动时 `/data` 不打开，滑动/解锁后才进「解密」；
+- 忘记 recovery 密码时，可在 recovery 的 adb root 下删 `/metadata/skyward/settings.json` 的 `lock` 字段（或整个文件）。
 
 ### 4.2 用 adb（可选）
 

@@ -13,11 +13,11 @@
 | 项 | 值 |
 | --- | --- |
 | 镜像 | `recovery.img` · 104,857,600 字节 |
-| SHA-256 | `84ec2df675c150941537acbc8151231ce14e5d8a908dfde79fa5c6b18faa8103` |
-| 内含 skyward | 8,655,096 字节 · `7aa1920f618c2151dab4f0ffa7690f5d8648dba2090bb6d9b112f0a11e6fb90c` |
-| ramdisk | 50,626,095 字节 · 1062 条 |
+| SHA-256 | `14c5311aa2e70c8d419da0fafcbb7b0670ece1dc4d586cb0f7454b96068efb5a` |
+| 内含 skyward | 8,655,096 字节 · `3a6a1da3393d58d082b09919721e11eaffef4657e9945ca27b3b55f3ee78ac93` |
+| ramdisk | 50,627,912 字节 · 1062 条 |
 | 底包 | OS4.0.2.0.XOLCNXM（Android 17） |
-| zip | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,804,158 字节 · `0d0c2f03…4dbb5` |
+| zip | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,805,204 字节 · `0d0c2f03…4dbb5` |
 | 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · `ce538507…cd3357` |
 
 ### 改了什么
@@ -25,7 +25,7 @@
 - **底包**：`[stock]` 从 OS3.0.306.0 换到 OS4.0.2.0.XOLCNXM；版本号改为 `0.3.0-onyx.1`；`has_root` 代替 `is_absolute` 以兼容 Windows 宿主校验。
 - **WLAN**：`[wlan]` 配置 `qca_cld3_wcn7750` + `rfkill`，`wpss_boot` / `wlan_en_delay`，固件从 vendor 与 persist 取；`wlan.rs` 对 `EBUSY` 重试、启动自动开 WLAN；`wpa-aidl-shim` 让 AIDL supplicant 跳过 recovery 不认的 `addService`；UI 保存上次网络并在下次启动自动加入。
 - **振动**：AW8697 的 sysfs 后端（`activate` / `duration` / `effect_id` / `gain`），`skyward haptic` 可测。
-- **UI**：首屏自动进入解密页；recovery 锁屏（4–8 位数字，salt + SHA-256）；控制中心（WLAN / 亮度 / 双击亮屏 / 锁屏 / 重启）；双击亮屏；AVB 2.0 禁用页（未测）。
+- **UI**：图 1 滑动锁屏（有 4–8 位 recovery 密码时改数字键盘）；滑动后自动进入解密页；图 2 顶部下滑控制中心（WLAN / 截图 / 重启 / 熄屏 + 亮度 / 振动滑杆）；双击亮屏；AVB 2.0 禁用页（未测）。
 - **Skyward 更新**：检查 `Remoparrot/skyward-onyx` 的 Release，asset 命名 `skyward-<tag>-onyx-*.zip`；版本比较按 `0.3.0-onyx.N`。
 - **打包**：`skyward-pack recovery --extra RAMDISK=HOST`；`build-phone.sh` 编 shim，`build-image.sh` 把 shim 放进 `skyward/`。
 
@@ -35,7 +35,8 @@
 - `/data` 自动打开：`/dev/block/dm-9 holds f2fs at /data`；
 - WLAN 扫描 CMCC-A9s7-5G（5 GHz / SAE），`wpa_state=COMPLETED`；重启后自动连接，`192.168.1.227/24`；
 - 振动驱动：`awinic_haptic` 进入 RAM 模式，`level=0x40`，`duration=16`；
-- 锁屏启动：种入 4 位锁后重启，`/data` 不挂载，UI 存活；移除锁后恢复自动解密。
+- 锁屏启动：无 recovery 密码时为滑动锁屏，`/data` 不打开；种入 4 位锁后为键盘，UI 存活。
+- user 0 CE：`skyward data --credential <用户锁屏密码>` 后 `/data/media/0` 真实文件名，`DCIM/Camera` 的 JPEG 可读；user 999 仍锁。
 
 ### 已知限制
 

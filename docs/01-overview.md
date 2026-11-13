@@ -74,8 +74,8 @@
 | WLAN | ✅ | 扫描 / 加入 / 重启自动连接；密码存 `/metadata`（0600） |
 | Skyward 在线更新 | ✅ | 查 `Remoparrot/skyward-onyx` 的 Release；需要 WLAN |
 | 振动 | ✅ | AW8697 sysfs；实际振感待用户确认 |
-| recovery 锁屏 / 控制中心 / 双击亮屏 | ✅ | 控制中心从顶部下滑；已实现；锁屏输入 / 控制中心 / 双击亮屏未手动逐项点过 |
-| 自动进入解密页 | ✅ | 正常进 recovery 首屏即解密 |
+| recovery 锁屏 / 控制中心 / 双击亮屏 | ✅ | 锁屏默认图 1 滑动解锁（可设 recovery 数字密码）；控制中心图 2 顶部下滑网格；双击亮屏；未手动逐项点过 |
+| 自动进入解密页 | ✅ | 滑动锁屏后首屏即解密；`skyward data --credential` 已验证 user 0 CE |
 | 禁用 AVB 2.0 | ⚠️ | 已实现；按要求未测试 |
 | 双系统 / OTA / fastbootd | ⚠️ | 未验证，不建议依赖 |
 

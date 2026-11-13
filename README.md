@@ -16,12 +16,12 @@
 | --- | --- |
 | 最新 release | [`v0.3.0-onyx.1`](https://github.com/Remoparrot/skyward-onyx/releases/tag/v0.3.0-onyx.1) |
 | 镜像 | `recovery.img` · **104,857,600 字节**（整分区） |
-| SHA-256 | `84ec2df675c150941537acbc8151231ce14e5d8a908dfde79fa5c6b18faa8103` |
-| ramdisk | 50,626,095 字节（LZ4）· 1062 个 cpio 条目 |
-| 内含 skyward | 8,655,096 字节 · `7aa1920f618c2151dab4f0ffa7690f5d8648dba2090bb6d9b112f0a11e6fb90c` |
+| SHA-256 | `14c5311aa2e70c8d419da0fafcbb7b0670ece1dc4d586cb0f7454b96068efb5a` |
+| ramdisk | 50,627,912 字节（LZ4）· 1062 个 cpio 条目 |
+| 内含 skyward | 8,655,096 字节 · `3a6a1da3393d58d082b09919721e11eaffef4657e9945ca27b3b55f3ee78ac93` |
 | 底包 | HyperOS **OS4.0.2.0.XOLCNXM**（Android 17） |
 | 上游 | `kirklin/skyward` @ `ff1668f`（v0.2.0）+ 4 个补丁 |
-| 真机 | ✅ 已刷入 onyx 并验证：触摸、`/data` 自动挂载、WLAN 自动连接（`CMCC-A9s7-5G`，DHCP 到 `192.168.1.227`）、振动、自动进入解密页 |
+| 真机 | ✅ 已刷入 onyx 并验证：触摸服务、`/data` 自动挂载、user 0 CE（`/data/media/0` 与相册 JPEG 可读）、WLAN 自动连接（`CMCC-A9s7-5G`，`192.168.1.227`）、振动驱动、滑动锁屏后自动进入解密页 |
 | 风险 | ⚠️ 需要解锁 bootloader；只刷 recovery 分区，详见[安装](docs/04-install.md) |
 
 > **一句话结论**：不需要 weaver，也不需要 OMAPI 桥。onyx 的 user 0 有两份 protector，其中一份绑在 gatekeeper 上；weaver 不可用时回退到它，用同一个锁屏密码即可拿到合成密码（SP），解开 CE。详细原理见[设计思路](docs/05-design-notes.md)。
@@ -40,8 +40,8 @@
 | WLAN | ✅ | `qca_cld3_wcn7750` + `rfkill` 从 vendor_dlkm 加载；wpa_supplicant 用 `skyward/wpa-aidl-shim.so` 跳过 recovery 不认的 AIDL 注册；开机自动连接上次网络（密码存 `/metadata`，0600） |
 | Skyward 在线更新 | ✅ | 查 `Remoparrot/skyward-onyx` 的 Release，按 `onyx` 取 zip；需要 WLAN |
 | 振动 | ✅ | AW8697（`awinic_haptic`，i2c 5-005a）的 `activate` / `duration` / `gain`；设置页滑杆与触摸反馈走同一路径 |
-| recovery 锁屏 | ✅ | 4–8 位数字，只存 salt + SHA-256；开机先锁屏，解锁后才自动打开 `/data` |
-| 控制中心 | ✅ | 从屏幕**顶部下滑**打开：WLAN、自动连接、亮度、双击亮屏、锁屏、重启/关机 |
+| recovery 锁屏 | ✅ | 无 recovery 密码时是图 1 的滑动锁屏（日期 / 时钟 / 电量 / 滑动解锁），滑动后进解密页；设置 4–8 位 recovery 密码后改为数字键盘；只存 salt + SHA-256 |
+| 控制中心 | ✅ | 图 2 样式：从屏幕**顶部下滑**拉下网格面板，WLAN / 截图 / 重启 / 熄屏，亮度与振动滑杆，底部把手关闭 |
 | 双击亮屏 | ✅ | 息屏后 400 ms 内两次点击点亮；设置页可关 |
 | 禁用 AVB 2.0 | ⚠️ | 控制中心/设置里的「禁用 AVB 2.0」页，写入当前槽位 vbmeta；**按要求未在真机点过** |
 | 自动打开解密页 | ✅ | 正常进 recovery 首屏即「解密」，自动打开 `/data`；有 recovery 锁屏时先锁屏 |
