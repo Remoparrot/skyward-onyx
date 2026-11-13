@@ -13,11 +13,11 @@
 | 项 | 值 |
 | --- | --- |
 | 镜像 | `recovery.img` · 104,857,600 字节 |
-| SHA-256 | `73016303620c5d59a72b608ba2dd1684bbc888b1ec4620cf3aed0eec26fd760c` |
-| 内含 skyward | 8,655,096 字节 · `0ec8397febf8931e8aafc37bb1e428e7f2c7a1780458cf575187a505164c9a87` |
-| ramdisk | 50,623,471 字节 · 1062 条 |
+| SHA-256 | `714dfc27be9ae76c18366ebd36fc5dff587a9fa4c17873a803d55c8aa1210ba5` |
+| 内含 skyward | 8,655,096 字节 · `fb67d123ac80eae2d71ba9fac706a8e577a2cf3532edda48550a2c1161452629` |
+| ramdisk | 50,669,556 字节 · 1062 条 |
 | 底包 | OS4.0.2.0.XOLCNXM（Android 17） |
-| zip | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,801,113 字节 · `e8df16ad…d636` |
+| zip | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,840,075 字节 · `ab7bb064…6f62` |
 | 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · `ce538507…cd3357` |
 
 ### 改了什么
@@ -26,6 +26,11 @@
 - **WLAN**：`[wlan]` 配置 `qca_cld3_wcn7750` + `rfkill`，`wpss_boot` / `wlan_en_delay`，固件从 vendor 与 persist 取；`wlan.rs` 对 `EBUSY` 重试、启动自动开 WLAN；`wpa-aidl-shim` 让 AIDL supplicant 跳过 recovery 不认的 `addService`；UI 保存上次网络并在下次启动自动加入。
 - **振动**：AW8697 的 sysfs 后端（`activate` / `duration` / `effect_id` / `gain`），`skyward haptic` 可测。
 - **UI**：图 1 滑动锁屏（有 4–8 位 recovery 密码时改数字键盘）；**每次息屏再点亮都先显示**，解锁回原页；开机首屏滑动后自动进入解密页；双击亮屏；AVB 2.0 禁用页（未测）。控制中心已按用户要求删除。
+- **记住密码**：解密页可记住手机锁屏密码，下次开机滑动后自动打开 user 0；密码换掉时自动失败、清空并回到手动输入；密码明文存 `/metadata`（0600）。
+- **解密倒计时**：data 打开后「完成 · N 秒后进入主界面」，3 秒自动回主界面。
+- **下载**：主界面「下载」；键盘「确定」打开文本网页，「开始下载」才下载；`link.txt`、二维码回传网页；文件存 `/sdcard/Download`，进度显示网速，可暂停/继续/停止；user 999 不再阻塞解密页。
+- **网页**：内置文本浏览器（HTTP/HTTPS、重定向、HTML 取字/标题、滚动）；**无 JavaScript/CSS/图片**，不是 Chromium；`ys.mihoyo.com` 可显示标题与文本。
+- **高级**：Skyward 更新与禁用 AVB 2.0 移到「高级」，设置页不再放。
 - **Skyward 更新**：检查 `Remoparrot/skyward-onyx` 的 Release，asset 命名 `skyward-<tag>-onyx-*.zip`；版本比较按 `0.3.0-onyx.N`。
 - **打包**：`skyward-pack recovery --extra RAMDISK=HOST`；`build-phone.sh` 编 shim，`build-image.sh` 把 shim 放进 `skyward/`。
 
@@ -43,7 +48,8 @@
 ### 已知限制
 
 - user 0 CE 已用用户锁屏密码 + `skyward data --credential` 验证；
-- 锁屏滑动已用注入触摸验证；4–8 位键盘、双击亮屏未逐项点过；
+- 锁屏滑动、记住密码/自动解密、解密倒计时已用注入触摸验证；4–8 位键盘、双击亮屏未逐项点过；
+- 下载页/二维码表单/本地 HTTP 下载/文本网页已验证；暂停/继续的 UI 按钮已实现，未在慢速大文件上逐项点过；
 - AVB 2.0 按要求未测试；
 - WLAN 密码明文存 `/metadata`（0600）；
 - Skyward 在线更新只验证到配置/API，缺更高版本可测完整写入。

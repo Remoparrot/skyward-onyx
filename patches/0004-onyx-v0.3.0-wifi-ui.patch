@@ -1,8 +1,21 @@
 diff --git a/Cargo.lock b/Cargo.lock
-index 20fa21a..a8021a4 100644
+index 20fa21a..379919d 100644
 --- a/Cargo.lock
 +++ b/Cargo.lock
-@@ -2238,7 +2238,7 @@ checksum = "33f4fe9184a62d842c9ef383018f3306d8ba224fd9d836f56d7288308847c256"
+@@ -1814,6 +1814,12 @@ dependencies = [
+  "syn 2.0.119",
+ ]
+ 
++[[package]]
++name = "qrcodegen"
++version = "1.8.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "4339fc7a1021c9c1621d87f5e3505f2805c8c105420ba2f2a4df86814590c142"
++
+ [[package]]
+ name = "quote"
+ version = "1.0.47"
+@@ -2238,7 +2244,7 @@ checksum = "33f4fe9184a62d842c9ef383018f3306d8ba224fd9d836f56d7288308847c256"
  
  [[package]]
  name = "skyward"
@@ -11,7 +24,7 @@ index 20fa21a..a8021a4 100644
  dependencies = [
   "anyhow",
   "clap",
-@@ -2269,7 +2269,7 @@ dependencies = [
+@@ -2269,7 +2275,7 @@ dependencies = [
  
  [[package]]
  name = "skyward-backup"
@@ -20,7 +33,7 @@ index 20fa21a..a8021a4 100644
  dependencies = [
   "anyhow",
   "libc",
-@@ -2283,7 +2283,7 @@ dependencies = [
+@@ -2283,7 +2289,7 @@ dependencies = [
  
  [[package]]
  name = "skyward-binder"
@@ -29,7 +42,7 @@ index 20fa21a..a8021a4 100644
  dependencies = [
   "anyhow",
   "libc",
-@@ -2292,7 +2292,7 @@ dependencies = [
+@@ -2292,7 +2298,7 @@ dependencies = [
  
  [[package]]
  name = "skyward-block"
@@ -38,7 +51,7 @@ index 20fa21a..a8021a4 100644
  dependencies = [
   "anyhow",
   "libc",
-@@ -2303,7 +2303,7 @@ dependencies = [
+@@ -2303,7 +2309,7 @@ dependencies = [
  
  [[package]]
  name = "skyward-bootimg"
@@ -47,7 +60,7 @@ index 20fa21a..a8021a4 100644
  dependencies = [
   "abootimg-oxide",
   "anyhow",
-@@ -2315,7 +2315,7 @@ dependencies = [
+@@ -2315,7 +2321,7 @@ dependencies = [
  
  [[package]]
  name = "skyward-config"
@@ -56,7 +69,7 @@ index 20fa21a..a8021a4 100644
  dependencies = [
   "anyhow",
   "serde",
-@@ -2324,7 +2324,7 @@ dependencies = [
+@@ -2324,7 +2330,7 @@ dependencies = [
  
  [[package]]
  name = "skyward-crypto"
@@ -65,7 +78,7 @@ index 20fa21a..a8021a4 100644
  dependencies = [
   "aes-gcm",
   "anyhow",
-@@ -2339,7 +2339,7 @@ dependencies = [
+@@ -2339,7 +2345,7 @@ dependencies = [
  
  [[package]]
  name = "skyward-files"
@@ -74,7 +87,7 @@ index 20fa21a..a8021a4 100644
  dependencies = [
   "anyhow",
   "libc",
-@@ -2347,7 +2347,7 @@ dependencies = [
+@@ -2347,7 +2353,7 @@ dependencies = [
  
  [[package]]
  name = "skyward-info"
@@ -83,7 +96,7 @@ index 20fa21a..a8021a4 100644
  dependencies = [
   "anyhow",
   "libc",
-@@ -2361,7 +2361,7 @@ dependencies = [
+@@ -2361,7 +2367,7 @@ dependencies = [
  
  [[package]]
  name = "skyward-install"
@@ -92,7 +105,7 @@ index 20fa21a..a8021a4 100644
  dependencies = [
   "abootimg-oxide",
   "anyhow",
-@@ -2391,7 +2391,7 @@ dependencies = [
+@@ -2391,7 +2397,7 @@ dependencies = [
  
  [[package]]
  name = "skyward-lp"
@@ -101,7 +114,7 @@ index 20fa21a..a8021a4 100644
  dependencies = [
   "anyhow",
   "sha2 0.10.9",
-@@ -2400,7 +2400,7 @@ dependencies = [
+@@ -2400,7 +2406,7 @@ dependencies = [
  
  [[package]]
  name = "skyward-modules"
@@ -110,7 +123,7 @@ index 20fa21a..a8021a4 100644
  dependencies = [
   "anyhow",
   "libc",
-@@ -2409,7 +2409,7 @@ dependencies = [
+@@ -2409,7 +2415,7 @@ dependencies = [
  
  [[package]]
  name = "skyward-mtp"
@@ -119,7 +132,7 @@ index 20fa21a..a8021a4 100644
  dependencies = [
   "anyhow",
   "jiff",
-@@ -2421,7 +2421,7 @@ dependencies = [
+@@ -2421,7 +2427,7 @@ dependencies = [
  
  [[package]]
  name = "skyward-net"
@@ -128,7 +141,7 @@ index 20fa21a..a8021a4 100644
  dependencies = [
   "aes",
   "anyhow",
-@@ -2441,7 +2441,7 @@ dependencies = [
+@@ -2441,7 +2447,7 @@ dependencies = [
  
  [[package]]
  name = "skyward-pack"
@@ -137,7 +150,7 @@ index 20fa21a..a8021a4 100644
  dependencies = [
   "anyhow",
   "clap",
-@@ -2455,7 +2455,7 @@ dependencies = [
+@@ -2455,7 +2461,7 @@ dependencies = [
  
  [[package]]
  name = "skyward-preview"
@@ -146,7 +159,7 @@ index 20fa21a..a8021a4 100644
  dependencies = [
   "anyhow",
   "png",
-@@ -2472,7 +2472,7 @@ dependencies = [
+@@ -2472,7 +2478,7 @@ dependencies = [
  
  [[package]]
  name = "skyward-sys"
@@ -155,7 +168,7 @@ index 20fa21a..a8021a4 100644
  dependencies = [
   "anyhow",
   "libc",
-@@ -2481,7 +2481,7 @@ dependencies = [
+@@ -2481,7 +2487,7 @@ dependencies = [
  
  [[package]]
  name = "skyward-system-init"
@@ -164,7 +177,7 @@ index 20fa21a..a8021a4 100644
  dependencies = [
   "anyhow",
   "libc",
-@@ -2494,7 +2494,7 @@ dependencies = [
+@@ -2494,7 +2500,7 @@ dependencies = [
  
  [[package]]
  name = "skyward-systems"
@@ -173,7 +186,7 @@ index 20fa21a..a8021a4 100644
  dependencies = [
   "abootimg-oxide",
   "anyhow",
-@@ -2512,7 +2512,7 @@ dependencies = [
+@@ -2512,7 +2518,7 @@ dependencies = [
  
  [[package]]
  name = "skyward-ui"
@@ -182,15 +195,18 @@ index 20fa21a..a8021a4 100644
  dependencies = [
   "ab_glyph",
   "ab_glyph_rasterizer",
-@@ -2526,6 +2526,7 @@ dependencies = [
+@@ -2524,8 +2530,10 @@ dependencies = [
+  "libc",
+  "png",
   "proc-macro2",
++ "qrcodegen",
   "serde",
   "serde_json",
 + "sha2 0.10.9",
   "skyward-info",
   "skyward-install",
   "skyward-net",
-@@ -2541,7 +2542,7 @@ dependencies = [
+@@ -2541,7 +2549,7 @@ dependencies = [
  
  [[package]]
  name = "skyward-vab"
@@ -285,6 +301,96 @@ index 441ee4e..c83b12e 100644
                  }
              }
          }
+diff --git a/crates/skyward-net/src/download.rs b/crates/skyward-net/src/download.rs
+index 4f96153..d2101f1 100644
+--- a/crates/skyward-net/src/download.rs
++++ b/crates/skyward-net/src/download.rs
+@@ -202,6 +202,85 @@ fn fetch_as<D: Digest>(agent: &ureq::Agent, url: &str, path: &Path, sum: &str, s
+     fs::rename(&part, path).with_context(|| format!("name {} {}", part.display(), path.display()))
+ }
+ 
++/// The name a URL's last path segment gives a file, made safe for a
++/// filesystem; `download.bin` where it names none.
++pub fn name_of(url: &str) -> String {
++    let path = url.split(['?', '#']).next().unwrap_or(url);
++    let path = path.split_once("://").map_or(path, |(_, rest)| rest);
++    let last = path.rsplit('/').next().unwrap_or("");
++    let mut name = String::new();
++    let bytes = last.as_bytes();
++    let mut i = 0;
++    while i < bytes.len() {
++        let c = bytes[i];
++        if c == b'%' && i + 2 < bytes.len() {
++            if let Ok(v) = u8::from_str_radix(&last[i + 1..i + 3], 16) {
++                if v.is_ascii_alphanumeric() || matches!(v, b'.' | b'-' | b'_' | b'(' | b')' | b' ') {
++                    name.push(v as char);
++                } else {
++                    name.push('_');
++                }
++                i += 3;
++                continue;
++            }
++        }
++        let ch = last[i..].chars().next().unwrap_or('_');
++        if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_' | '(' | ')' | ' ') {
++            name.push(ch);
++        } else {
++            name.push('_');
++        }
++        i += ch.len_utf8();
++    }
++    let name = name.trim().trim_end_matches('.').trim_start_matches('.');
++    if name.is_empty() || name == ".." {
++        "download.bin".into()
++    } else {
++        name.chars().take(120).collect()
++    }
++}
++
++/// Save whatever `url` answers into `path`, with no digest to check it
++/// against, telling how far it has come. The part is named once the whole
++/// answer is there.
++pub fn save(agent: &ureq::Agent, url: &str, path: &Path, stop: &AtomicBool, paused: &AtomicBool, progress: &mut dyn FnMut(Progress)) -> Result<()> {
++    let mut response = agent.get(url).call().context("start the download")?;
++    let status = response.status().as_u16();
++    if !(200..300).contains(&status) {
++        bail!(Refused(status));
++    }
++    let total = content_length(response.headers()).unwrap_or(0);
++    let part = partial(path);
++    let dir = path.parent().context("a download's path is in a folder")?;
++    fs::create_dir_all(dir).with_context(|| format!("make {}", dir.display()))?;
++    let mut file = File::create(&part).with_context(|| format!("open {}", part.display()))?;
++    let mut body = response.body_mut().with_config().limit(u64::MAX).reader();
++    let mut buf = vec![0u8; CHUNK];
++    let mut done = 0u64;
++    progress(Progress::Downloading { done, total });
++    loop {
++        while paused.load(Ordering::Relaxed) {
++            if stop.load(Ordering::Relaxed) {
++                bail!(crate::Stopped);
++            }
++            std::thread::sleep(std::time::Duration::from_millis(100));
++        }
++        if stop.load(Ordering::Relaxed) {
++            bail!(crate::Stopped);
++        }
++        let n = body.read(&mut buf).context("download the file")?;
++        if n == 0 {
++            break;
++        }
++        file.write_all(&buf[..n]).with_context(|| format!("write {}", part.display()))?;
++        done += n as u64;
++        progress(Progress::Downloading { done, total });
++    }
++    file.sync_all().with_context(|| format!("write {} through", part.display()))?;
++    drop(file);
++    fs::rename(&part, path).with_context(|| format!("name {} {}", part.display(), path.display()))
++}
++
+ /// The length a response says its body has.
+ pub(crate) fn content_length(headers: &ureq::http::HeaderMap) -> Option<u64> {
+     headers.get(ureq::http::header::CONTENT_LENGTH)?.to_str().ok()?.parse().ok()
 diff --git a/crates/skyward-net/src/github.rs b/crates/skyward-net/src/github.rs
 index ff45a89..9d08f2b 100644
 --- a/crates/skyward-net/src/github.rs
@@ -373,10 +479,15 @@ index f76770d..145cc73 100644
              // and logd stops as soon as it cannot find the one it asks for.
              if rd.find(paths::TASK_PROFILES).is_none() {
 diff --git a/crates/skyward-ui/Cargo.toml b/crates/skyward-ui/Cargo.toml
-index 47dcfd7..db16d30 100644
+index 47dcfd7..6a1c2e1 100644
 --- a/crates/skyward-ui/Cargo.toml
 +++ b/crates/skyward-ui/Cargo.toml
-@@ -17,6 +17,8 @@ png = "0.17.16"
+@@ -14,9 +14,13 @@ icu_locale_core = { version = "2.4.0", features = ["alloc"] }
+ jiff = { version = "0.2.38", default-features = false, features = ["std", "tzdb-bundle-always"] }
+ # Screenshots are saved as PNG.
+ png = "0.17.16"
++# The download page shows a QR code that sends a URL from another phone.
++qrcodegen = "1.8.0"
  # The settings are kept between starts as a JSON file.
  serde = { workspace = true }
  serde_json = "1.0.154"
@@ -386,7 +497,7 @@ index 47dcfd7..db16d30 100644
  skyward-install = { path = "../skyward-install" }
  skyward-net = { path = "../skyward-net" }
 diff --git a/crates/skyward-ui/src/app.rs b/crates/skyward-ui/src/app.rs
-index fe3a1b6..46ea5bd 100644
+index fe3a1b6..48ec1d4 100644
 --- a/crates/skyward-ui/src/app.rs
 +++ b/crates/skyward-ui/src/app.rs
 @@ -33,8 +33,15 @@ use skyward_vab::{BootSlots, Hold, Slot, SnapshotState, Standing};
@@ -405,7 +516,49 @@ index fe3a1b6..46ea5bd 100644
      Reboot,
      Wipe,
      /// Mounting and unmounting the slot's partitions.
-@@ -557,6 +564,10 @@ pub enum Switch {
+@@ -135,6 +142,11 @@ pub enum Screen {
+     /// A network added by hand: its name, how it is protected and its
+     /// password, typed on the screen's keyboard.
+     WlanAdd,
++    /// A file downloaded from a URL, or from a link another phone sends by
++    /// the page the QR code opens.
++    Download,
++    /// A web page's text, opened from the download page.
++    Web,
+ }
+ 
+ /// How far asking the update server for the newest system has come.
+@@ -160,6 +172,29 @@ pub enum Have {
+     Whole(u64),
+ }
+ 
++/// A web page read as text: what the URL answered, its title and the text
++/// the tags leave.
++#[derive(Clone, Debug, PartialEq)]
++pub struct WebPage {
++    pub url: String,
++    pub title: String,
++    pub text: String,
++}
++
++/// A file downloading from a URL, as the download page shows it.
++#[derive(Clone, Debug, PartialEq)]
++pub struct UrlJob {
++    pub url: String,
++    pub name: String,
++    pub progress: Option<Progress>,
++    pub ended: Option<Result<String, String>>,
++    pub paused: bool,
++    /// Bytes a second, from the last two readings, and those readings.
++    pub rate: u64,
++    pub last_ms: u64,
++    pub last_done: u64,
++}
++
+ /// Downloading the newest system's full package, as the update page shows
+ /// it: how far it has come, how fast, and how it ended.
+ #[derive(Clone, Debug, PartialEq, Eq)]
+@@ -557,8 +592,15 @@ pub enum Switch {
      /// over.
      KeepRecovery,
      Wlan,
@@ -415,8 +568,13 @@ index fe3a1b6..46ea5bd 100644
 +    DoubleTap,
      /// Show the password typed rather than a dot for each character.
      ShowPassword,
++    /// Remember the phone's screen lock so the owner's files open without
++    /// asking at the next start.
++    RememberData,
  }
-@@ -829,6 +840,36 @@ pub enum Data {
+ 
+ /// What a backup can take, in the order the backup page lists it.
+@@ -829,6 +871,36 @@ pub enum Data {
      Erased,
  }
  
@@ -453,7 +611,7 @@ index fe3a1b6..46ea5bd 100644
  impl Data {
      /// Whether the owner's internal storage can be read: the partition is
      /// open, and so are the owner's own files, which open first.
-@@ -877,6 +918,10 @@ pub enum Confirm {
+@@ -877,6 +949,10 @@ pub enum Confirm {
      RemoveSystem,
      /// Install the system the installer holds with the room chosen.
      InstallSystem,
@@ -464,7 +622,7 @@ index fe3a1b6..46ea5bd 100644
  }
  
  /// What the wipe page erases: everything a factory reset erases, or any of
-@@ -1169,6 +1214,13 @@ pub enum Action {
+@@ -1169,6 +1245,13 @@ pub enum Action {
      Skip,
      /// Try opening the data partition again, after it did not open.
      OpenData,
@@ -478,7 +636,26 @@ index fe3a1b6..46ea5bd 100644
      Back,
      Theme { dark: bool },
      Toggle(Switch),
-@@ -1667,6 +1719,15 @@ pub struct State {
+@@ -1295,6 +1378,18 @@ pub enum Action {
+     AddNetwork,
+     /// Type into this field of the page that adds a network.
+     TypeInto(Field),
++    /// Confirm and tidy the URL typed on the download page, without
++    /// downloading it.
++    ConfirmDownloadUrl,
++    /// Download the URL typed on the download page.
++    StartDownload,
++    /// Pause or carry on the download under way.
++    PauseDownload,
++    ResumeDownload,
++    /// Stop the download under way.
++    StopDownloadUrl,
++    /// Read /sdcard/Download/link.txt into the download page's field.
++    ReadDownloadLink,
+     /// Open the protections a network added by hand can have.
+     ChooseSecurity,
+     /// Take this protection, and close the list.
+@@ -1667,9 +1762,24 @@ pub struct State {
      /// Why the second system's start stopped, as its first program told
      /// it, which the systems page shows.
      pub system_notice: Option<String>,
@@ -486,6 +663,10 @@ index fe3a1b6..46ea5bd 100644
 +    pub double_tap: bool,
 +    /// The recovery's own lock, its code kept as a salted hash.
 +    pub lock: Option<crate::settings::Lock>,
++    /// Whether the phone's screen lock is remembered so the owner's files
++    /// open without asking at the next start, and the password itself.
++    pub remember_data: bool,
++    pub data_password: String,
 +    /// The WLAN joins the network it last joined as the recovery starts.
 +    pub wlan_auto: bool,
 +    /// That network, and the password it was joined with.
@@ -494,19 +675,82 @@ index fe3a1b6..46ea5bd 100644
      /// Where the data partition stands, and what is typed at the screen
      /// lock its users' own files wait on.
      pub data: Data,
-@@ -1797,6 +1858,11 @@ impl Default for State {
++    /// Seconds left before the decrypt page goes home by itself, or 0.
++    pub home_left: u8,
+     pub code: String,
+     /// What is typed in the search field.
+     pub search: String,
+@@ -1737,6 +1847,16 @@ pub struct State {
+     /// network, and whether it shows.
+     pub password: String,
+     pub show_password: bool,
++    /// What is typed on the download page, and the URL its QR code sends
++    /// another phone to.
++    pub download_url: String,
++    pub download_server: Option<String>,
++    /// The page the download page's URL opened, as it is read or why not.
++    pub web_url: String,
++    pub web_page: Option<Result<WebPage, String>>,
++    pub web_loading: bool,
++    /// The download under way, or how it last ended.
++    pub download_job: Option<UrlJob>,
+     /// The phone maker's update server is known, and the update page asks
+     /// it.
+     pub update_server: bool,
+@@ -1797,7 +1917,15 @@ impl Default for State {
              system_pick: None,
              systems_work: None,
              system_notice: None,
 +            double_tap: true,
 +            lock: None,
++            remember_data: false,
++            data_password: String::new(),
 +            wlan_auto: true,
 +            saved_wlan: None,
 +            wlan_password: None,
              data: Data::Closed,
++            home_left: 0,
              code: String::new(),
              search: String::new(),
-@@ -2124,6 +2190,8 @@ pub enum Effect {
+             layer: Layer::Letters,
+@@ -1828,6 +1956,12 @@ impl Default for State {
+             adding: None,
+             password: String::new(),
+             show_password: false,
++            download_url: String::new(),
++            download_server: None,
++            web_url: String::new(),
++            web_page: None,
++            web_loading: false,
++            download_job: None,
+             update_server: false,
+             check: Check::Idle,
+             have: Have::Nothing,
+@@ -2007,6 +2141,23 @@ pub enum Effect {
+     /// List the folder at this path from the top of a place, to choose a
+     /// file to install in, telling what it holds with [`App::set_place`].
+     ReadPlace(Place, String),
++    /// Download `url` into /sdcard/Download as `name`, telling how it goes
++    /// with [`App::download_url_progress`] and [`App::download_url_ended`].
++    DownloadUrl { url: String, name: String },
++    /// Pause or carry on the URL download under way.
++    PauseDownloadUrl,
++    ResumeDownloadUrl,
++    /// Stop the URL download under way.
++    StopDownloadUrl,
++    /// Read /sdcard/Download/link.txt and tell its text with
++    /// [`App::download_link`].
++    ReadDownloadLink,
++    /// Serve the page the download page's QR code opens, which sends a URL
++    /// back, telling it with [`App::download_server_url`].
++    StartDownloadServer,
++    /// Read the web page at `url` as text, telling it with
++    /// [`App::web_fetched`].
++    FetchWeb(String),
+     /// Open the data partition as far as it opens with nothing a user
+     /// knows, telling what waits with [`App::data_waiting`] or why it did
+     /// not open with [`App::data_failed`].
+@@ -2124,6 +2275,8 @@ pub enum Effect {
      /// Merge the update that waits in the slot the phone runs from,
      /// telling how it goes with [`App::set_update`].
      Merge,
@@ -515,7 +759,7 @@ index fe3a1b6..46ea5bd 100644
  }
  
  enum Drag {
-@@ -2186,6 +2254,11 @@ const TOAST_MS: u64 = 2000;
+@@ -2186,6 +2339,11 @@ const TOAST_MS: u64 = 2000;
  /// How long a text field's cursor shows and then hides, as the stock
  /// fields blink it.
  const BLINK_MS: u64 = 500;
@@ -527,7 +771,7 @@ index fe3a1b6..46ea5bd 100644
  /// The spring the home page's search bar moves to the search page's field
  /// on, and back: critically damped, fitted to frames of the stock settings
  /// on a Xiaomi 17 Ultra.
-@@ -2604,6 +2677,12 @@ pub struct App {
+@@ -2604,6 +2762,19 @@ pub struct App {
      /// The first of the power key and volume down gone down, waiting for
      /// the other to take a screenshot, and when it went down.
      chord: Option<(Key, u64)>,
@@ -537,19 +781,62 @@ index fe3a1b6..46ea5bd 100644
 +    /// The lock screen a wake put over the page, so unlocking it goes back
 +    /// to that page rather than to the decrypt page.
 +    wake_lock: bool,
++    /// The phone's screen lock typed on the decrypt page, kept until the
++    /// secure world takes it, and whether the saved one has been tried.
++    pending_password: Option<String>,
++    auto_tried: bool,
++    auto_unlocking: bool,
++    /// When the decrypt page, its data open, goes home by itself.
++    home_due: Option<u64>,
      /// The page scrolling of its own accord, to show the control the keys
      /// moved to or to fold its search bar whole or not at all: where it
      /// comes to rest, and the spring taking it there.
-@@ -2742,6 +2821,8 @@ impl App {
+@@ -2742,6 +2913,12 @@ impl App {
              keys: start == Screen::Fastboot,
              button: None,
              chord: None,
 +            last_tap: None,
 +            wake_lock: false,
++            pending_password: None,
++            auto_tried: false,
++            auto_unlocking: false,
++            home_due: None,
              seek: None,
              knob: None,
              adjusting: false,
-@@ -3129,6 +3210,16 @@ impl App {
+@@ -2866,7 +3043,7 @@ impl App {
+         };
+         let blink = self.blink_at(now).filter(|_| self.display_on).map(|(_, next)| next);
+         let chord = self.chord.map(|(_, at)| at + CHORD_MS);
+-        [self.toast.as_ref().map(|t| t.1), easing, self.idle_due(), held, repeat, blink, darkens, chord].into_iter().flatten().min()
++        [self.toast.as_ref().map(|t| t.1), easing, self.idle_due(), held, repeat, blink, darkens, chord, self.home_due].into_iter().flatten().min()
+     }
+ 
+     /// Whether a text field's cursor shows at `now`, and when it next turns;
+@@ -2907,6 +3084,22 @@ impl App {
+     /// deadline goes away.
+     pub fn tick(&mut self, now: u64) -> Vec<Effect> {
+         let mut fx = Vec::new();
++        if let Some(due) = self.home_due {
++            if now >= due {
++                if self.display_on && self.screen() == Screen::Decrypt && matches!(self.state.data, Data::Open) {
++                    self.go_home_from_decrypt();
++                } else {
++                    self.home_due = None;
++                    self.state.home_left = 0;
++                }
++            } else {
++                let left = ((due.saturating_sub(now) + 999) / 1000) as u8;
++                if left != self.state.home_left {
++                    self.state.home_left = left;
++                    self.dirty = true;
++                }
++            }
++        }
+         // The key waiting for its partner in a screenshot, left alone long
+         // enough, does what it does alone.
+         if self.chord.is_some_and(|(_, at)| now >= at + CHORD_MS) {
+@@ -3129,6 +3322,16 @@ impl App {
              self.dirty = true;
              self.darkening = None;
              self.curtain.set(true, now);
@@ -566,7 +853,54 @@ index fe3a1b6..46ea5bd 100644
          }
          self.woke_at = Some(now);
          self.stir(now);
-@@ -3587,6 +3678,22 @@ impl App {
+@@ -3189,6 +3392,8 @@ impl App {
+     /// now, then the panel goes off. A finger on the glass lets go of what
+     /// it held, and the page stops where it is.
+     fn sleep(&mut self, now: u64) {
++        self.home_due = None;
++        self.state.home_left = 0;
+         self.darkening = self.panel(now);
+         self.curtain.set(false, now);
+         self.display_on = false;
+@@ -3280,6 +3485,10 @@ impl App {
+     /// those of `waiting`, the user and the control their screen lock is
+     /// answered with, still closed.
+     pub fn data_waiting(&mut self, waiting: Option<(u32, Keys)>) {
++        if waiting.is_some() {
++            self.home_due = None;
++            self.state.home_left = 0;
++        }
+         self.state.data = match waiting {
+             Some((user, keys)) => Data::Locked { user, keys, checking: false },
+             None => Data::Open,
+@@ -3291,6 +3500,8 @@ impl App {
+     /// The data partition did not open, and why.
+     pub fn data_failed(&mut self, why: String) {
+         self.state.data = Data::Failed(why);
++        self.home_due = None;
++        self.state.home_left = 0;
+         self.refresh();
+     }
+ 
+@@ -3300,6 +3511,17 @@ impl App {
+         if let Data::Locked { checking, .. } = &mut self.state.data {
+             *checking = false;
+         }
++        self.pending_password = None;
++        if self.auto_unlocking {
++            // The saved one is no longer the phone's: ask for the new one.
++            self.auto_unlocking = false;
++            self.auto_tried = true;
++            self.state.remember_data = false;
++            self.state.data_password.clear();
++            self.refresh();
++            self.report(&format!("{why}；保存的密码已失效，请手动输入"), now);
++            return;
++        }
+         self.refresh();
+         self.report(&why, now);
+     }
+@@ -3587,6 +3809,22 @@ impl App {
          if self.state.wlan.as_ref() == Some(&w) {
              return;
          }
@@ -589,7 +923,7 @@ index fe3a1b6..46ea5bd 100644
          self.state.wlan = Some(w);
          if matches!(self.screen(), Screen::Home | Screen::Wlan | Screen::WlanNetwork | Screen::Update | Screen::SkywardUpdate) {
              self.refresh();
-@@ -4784,7 +4891,9 @@ impl App {
+@@ -4784,7 +5022,9 @@ impl App {
      /// and in a place, until it reaches the place's top.
      fn back(&mut self, now: u64) -> Vec<Effect> {
          let (l, mut fx) = (self.state.lang, Vec::new());
@@ -600,10 +934,96 @@ index fe3a1b6..46ea5bd 100644
              return fx;
          }
          let morph = self.screen() == Screen::Search && self.stack[self.stack.len() - 2].0 == Screen::Home;
-@@ -5137,6 +5246,46 @@ impl App {
+@@ -5099,6 +5339,7 @@ impl App {
+                 vec![Effect::CheckSkyward]
+             }
+             Screen::Wlan if self.state.wlan.as_ref().is_some_and(|w| w.power == Power::On) => vec![Effect::ScanWlan],
++            Screen::Download => vec![Effect::StartDownloadServer],
+             _ => Vec::new(),
+         }
+     }
+@@ -5137,15 +5378,131 @@ impl App {
                  return self.arrive_at(s);
              }
              Action::OpenData => return self.open_data(),
+-            Action::Skip => {
+-                self.leave(true);
+-                if self.stack.len() > 1 {
+-                    self.stack.pop();
++            Action::ConfirmDownloadUrl => {
++                let mut url = self.state.download_url.trim().to_string();
++                if !url.starts_with("http://") && !url.starts_with("https://") {
++                    if !url.contains("://") {
++                        url = format!("https://{url}");
++                    }
++                }
++                if !(url.starts_with("http://") || url.starts_with("https://")) {
++                    self.say(l.pick(["请输入完整的 http 或 https 网址", "請輸入完整的 http 或 https 網址", "Enter a full http or https URL"]), now);
+                 } else {
+-                    *self.top_mut() = (Screen::Home, 0.0, Focus::Unset);
++                    self.state.download_url = url.clone();
++                    self.state.web_url = url.clone();
++                    self.state.web_page = None;
++                    self.state.web_loading = true;
++                    self.open(Screen::Web);
++                    return vec![Effect::FetchWeb(url)];
+                 }
+-                self.settle_page();
++            }
++            Action::PauseDownload => {
++                if let Some(job) = &mut self.state.download_job {
++                    if job.ended.is_none() && !job.paused {
++                        job.paused = true;
++                        job.rate = 0;
++                        self.refresh();
++                        return vec![Effect::PauseDownloadUrl];
++                    }
++                }
++            }
++            Action::ResumeDownload => {
++                if let Some(job) = &mut self.state.download_job {
++                    if job.ended.is_none() && job.paused {
++                        job.paused = false;
++                        job.last_ms = now;
++                        self.refresh();
++                        return vec![Effect::ResumeDownloadUrl];
++                    }
++                }
++            }
++            Action::StartDownload => {
++                let url = self.state.download_url.trim().to_string();
++                if !(url.starts_with("http://") || url.starts_with("https://")) {
++                    self.say(l.pick(["请输入完整的 http 或 https 网址", "請輸入完整的 http 或 https 網址", "Enter a full http or https URL"]), now);
++                    return Vec::new();
++                }
++                if !self.state.place_open(Place::Storage) {
++                    self.say(l.pick(["请先在「解密」中打开 data", "請先在「解密」中開啟 data", "Open data in Decrypt first"]), now);
++                    return Vec::new();
++                }
++                if self.state.download_job.as_ref().is_some_and(|j| j.ended.is_none()) {
++                    self.say(l.pick(["正在下载，请稍候", "正在下載，請稍候", "A download is under way"]), now);
++                    return Vec::new();
++                }
++                let name = skyward_net::download::name_of(&url);
++                self.state.download_job = Some(UrlJob {
++                    url: url.clone(),
++                    name: name.clone(),
++                    progress: None,
++                    ended: None,
++                    paused: false,
++                    rate: 0,
++                    last_ms: now,
++                    last_done: 0,
++                });
+                 self.refresh();
++                return vec![Effect::DownloadUrl { url, name }];
++            }
++            Action::StopDownloadUrl => {
++                if self.state.download_job.as_ref().is_some_and(|j| j.ended.is_none()) {
++                    return vec![Effect::StopDownloadUrl];
++                }
++            }
++            Action::ReadDownloadLink => return vec![Effect::ReadDownloadLink],
 +            Action::Unlock => {
 +                let code = std::mem::take(&mut self.state.code);
 +                let ok = match &self.state.lock {
@@ -644,19 +1064,49 @@ index fe3a1b6..46ea5bd 100644
 +                self.state.code.clear();
 +                self.back(now);
 +            }
-             Action::Skip => {
-                 self.leave(true);
-                 if self.stack.len() > 1 {
-@@ -5171,6 +5320,8 @@ impl App {
++            Action::Skip => {
++                if self.screen() == Screen::Decrypt {
++                    self.go_home_from_decrypt();
++                } else {
++                    self.leave(true);
++                    if self.stack.len() > 1 {
++                        self.stack.pop();
++                    } else {
++                        *self.top_mut() = (Screen::Home, 0.0, Focus::Unset);
++                    }
++                    self.settle_page();
++                    self.refresh();
++                }
+             }
+             Action::Back | Action::CloseSearch => return self.back(now),
+             Action::Theme { dark } => {
+@@ -5163,6 +5520,14 @@ impl App {
+                 self.refresh();
+                 return vec![Effect::Wlan(on)];
+             }
++            Action::Toggle(Switch::RememberData) => {
++                self.state.remember_data = !self.state.remember_data;
++                if !self.state.remember_data {
++                    self.state.data_password.clear();
++                }
++                self.refresh();
++                return Vec::new();
++            }
+             Action::Toggle(switch) => {
+                 let on = match switch {
+                     Switch::Vibrate => &mut self.state.vibrate,
+@@ -5171,7 +5536,10 @@ impl App {
                      Switch::Verify => &mut self.state.verify,
                      Switch::Signature => &mut self.state.check_signature,
                      Switch::KeepRecovery => &mut self.state.keep_recovery,
 +                    Switch::WlanAuto => &mut self.state.wlan_auto,
 +                    Switch::DoubleTap => &mut self.state.double_tap,
                      Switch::ShowPassword => &mut self.state.show_password,
++                    Switch::RememberData => unreachable!("the remembering switch is turned above"),
                      Switch::Wlan => unreachable!("the WLAN switch is turned above"),
                  };
-@@ -5685,7 +5836,7 @@ impl App {
+                 *on = !*on;
+@@ -5685,9 +6053,10 @@ impl App {
      fn typing(&mut self) -> &mut String {
          match self.screen() {
              Screen::Search => &mut self.state.search,
@@ -664,8 +1114,164 @@ index fe3a1b6..46ea5bd 100644
 +            Screen::Decrypt | Screen::Lock | Screen::LockSet => &mut self.state.code,
              Screen::Rename => &mut self.state.new_name,
              Screen::WlanPassword => &mut self.state.password,
++            Screen::Download => &mut self.state.download_url,
              Screen::WlanAdd => {
-@@ -5881,6 +6032,14 @@ impl App {
+                 let a = self.state.adding.as_mut().expect("the page adds a network");
+                 match a.field {
+@@ -5699,6 +6068,110 @@ impl App {
+         }
+     }
+ 
++    /// The data partition is open, and the decrypt page counts three
++    /// seconds before going home by itself.
++    pub fn start_home_countdown(&mut self, now: u64) {
++        if matches!(self.state.data, Data::Open) && self.screen() == Screen::Decrypt {
++            self.home_due = Some(now + 3000);
++            self.state.home_left = 3;
++            self.refresh();
++        }
++    }
++
++    /// Leave the decrypt page for the home page, as the countdown ending
++    /// does.
++    fn go_home_from_decrypt(&mut self) {
++        self.home_due = None;
++        self.state.home_left = 0;
++        self.leave(true);
++        if self.stack.len() > 1 {
++            self.stack.pop();
++        } else {
++            *self.top_mut() = (Screen::Home, 0.0, Focus::Unset);
++        }
++        self.settle_page();
++        self.refresh();
++    }
++
++    /// How the URL download has come, as the runtime read it.
++    pub fn download_url_progress(&mut self, progress: Progress, now: u64) {
++        if let Some(job) = &mut self.state.download_job {
++            let done = match progress {
++                Progress::Downloading { done, .. } => done,
++                Progress::Checking { done, .. } => done,
++            };
++            if now > job.last_ms {
++                job.rate = (done.saturating_sub(job.last_done)) * 1000 / (now - job.last_ms);
++            }
++            job.last_ms = now;
++            job.last_done = done;
++            job.progress = Some(progress);
++            self.refresh();
++        }
++    }
++
++    /// How the URL download ended, saved at the path or why not.
++    pub fn download_url_ended(&mut self, ended: Result<String, String>, now: u64) {
++        if let Some(job) = &mut self.state.download_job {
++            job.ended = Some(ended.clone());
++            job.paused = false;
++            job.rate = 0;
++            self.refresh();
++            match ended {
++                Ok(path) => self.say(&format!("已保存到 {path}"), now),
++                Err(why) => self.report(&why, now),
++            }
++        }
++    }
++
++    /// The download was paused or carried on, as the runtime did.
++    pub fn download_url_paused(&mut self, paused: bool) {
++        if let Some(job) = &mut self.state.download_job {
++            job.paused = paused;
++            if paused {
++                job.rate = 0;
++            }
++            self.refresh();
++        }
++    }
++
++    /// What /sdcard/Download/link.txt held, or why it could not be read.
++    pub fn download_link(&mut self, link: Result<String, String>, now: u64) {
++        match link {
++            Ok(text) => {
++                let url = text.trim().to_string();
++                if url.is_empty() {
++                    self.say(self.state.lang.pick(["link.txt 是空的", "link.txt 是空的", "link.txt is empty"]), now);
++                } else {
++                    self.state.download_url = url;
++                    self.say(self.state.lang.pick(["已读取链接", "已讀取連結", "Link read"]), now);
++                    self.refresh();
++                }
++            }
++            Err(why) => self.report(&why, now),
++        }
++    }
++
++    /// The URL the QR code sends another phone to, where the page is served.
++    pub fn download_server_url(&mut self, url: Option<String>) {
++        self.state.download_server = url;
++        self.refresh();
++    }
++
++    /// A URL another phone sent through the page the QR code opens.
++    pub fn download_url_from_phone(&mut self, url: String, now: u64) {
++        self.state.download_url = url;
++        self.say(self.state.lang.pick(["已收到链接", "已收到連結", "Link received"]), now);
++        self.refresh();
++    }
++
++    /// The web page read as text, or why it could not be read.
++    pub fn web_fetched(&mut self, page: Result<WebPage, String>) {
++        self.state.web_loading = false;
++        self.state.web_page = Some(page);
++        self.refresh();
++    }
++
+     /// Where the entry the file page shows is.
+     fn entry_path(&self) -> String {
+         let entry = self.state.file.as_ref().expect("the file page shows an entry");
+@@ -5768,11 +6241,41 @@ impl App {
+     /// checked, and nothing more is entered until it has been.
+     fn unlock(&mut self, code: String) -> Vec<Effect> {
+         let Data::Locked { user, keys, .. } = self.state.data else { unreachable!("only a screen lock waiting takes what is entered") };
++        self.pending_password = if self.state.remember_data { Some(code.clone()) } else { None };
++        self.auto_unlocking = false;
+         self.state.data = Data::Locked { user, keys, checking: true };
+         self.refresh();
+         vec![Effect::Unlock { user, code }]
+     }
+ 
++    /// The phone's screen lock the settings kept, for the runtime to try as
++    /// the data partition opens; once a start.
++    pub fn auto_credential(&mut self) -> Option<(u32, String)> {
++        if self.auto_tried || !self.state.remember_data || self.state.data_password.is_empty() {
++            return None;
++        }
++        let Data::Locked { user, .. } = self.state.data else { return None };
++        if user != 0 {
++            return None;
++        }
++        self.auto_tried = true;
++        self.auto_unlocking = true;
++        self.refresh();
++        Some((0, self.state.data_password.clone()))
++    }
++
++    /// What the phone's screen lock was taken: the one typed is kept when
++    /// the page is set to remember it.
++    pub fn unlock_succeeded(&mut self) {
++        if let Some(code) = self.pending_password.take() {
++            if self.state.remember_data {
++                self.state.data_password = code;
++            }
++        }
++        self.auto_unlocking = false;
++        self.refresh();
++    }
++
+     /// A key of the keyboard on the editor page: a character or a space
+     /// goes in at the cursor, Enter breaks the line there and backspace
+     /// takes away what is before it; the layer keys change the keyboard.
+@@ -5881,6 +6384,14 @@ impl App {
                      let code = std::mem::take(&mut self.state.code);
                      return self.unlock(code);
                  }
@@ -680,7 +1286,7 @@ index fe3a1b6..46ea5bd 100644
                  // A name the folder cannot take is turned down here, in
                  // the user's words; an unchanged one leaves the page.
                  Screen::Rename => {
-@@ -5905,6 +6064,7 @@ impl App {
+@@ -5905,6 +6416,7 @@ impl App {
                          Some(why) => self.say(why, now),
                          None => {
                              let password = Secret(std::mem::take(&mut self.state.password));
@@ -688,7 +1294,15 @@ index fe3a1b6..46ea5bd 100644
                              let mut fx = self.back(now);
                              fx.push(Effect::JoinWlan { ssid: network.ssid, name: network.name, security: network.security, password });
                              return fx;
-@@ -5938,6 +6098,7 @@ impl App {
+@@ -5913,6 +6425,7 @@ impl App {
+                 }
+                 // So is a name no network can have; the keyboard then types
+                 // into the field turned down.
++                Screen::Download => return self.act(Action::ConfirmDownloadUrl, now),
+                 Screen::WlanAdd => {
+                     let a = self.state.adding.as_mut().expect("the page adds a network");
+                     let (field, why) = match a.name.len() {
+@@ -5938,6 +6451,7 @@ impl App {
                                  true => Secret(std::mem::take(&mut self.state.password)),
                                  false => Secret::default(),
                              };
@@ -696,7 +1310,7 @@ index fe3a1b6..46ea5bd 100644
                              let mut fx = self.back(now);
                              fx.push(Effect::JoinWlan { ssid: name.clone().into_bytes(), name, security, password });
                              return fx;
-@@ -5959,11 +6120,27 @@ impl App {
+@@ -5959,11 +6473,27 @@ impl App {
      }
  
      pub fn touch(&mut self, ev: Touch, f: &Fonts, now: u64) -> Vec<Effect> {
@@ -726,7 +1340,7 @@ index fe3a1b6..46ea5bd 100644
          // A finger on the charging screen sends it away for the page, and
          // does nothing else until it lifts.
          if self.charge_shown() {
-@@ -6570,6 +6747,8 @@ impl App {
+@@ -6570,6 +7100,8 @@ impl App {
                      self.refresh();
                  }
              }
@@ -735,7 +1349,7 @@ index fe3a1b6..46ea5bd 100644
          }
          fx
      }
-@@ -9768,6 +9947,26 @@ mod tests {
+@@ -9768,6 +10300,26 @@ mod tests {
          assert_eq!(first.arrive(), vec![Effect::OpenData], "a recovery that starts on the page opens it as well");
      }
  
@@ -763,7 +1377,7 @@ index fe3a1b6..46ea5bd 100644
      fn leaving_the_decrypt_page_goes_back_to_where_it_was_opened_from() {
          let (f, i) = (fonts(), info());
 diff --git a/crates/skyward-ui/src/pages.rs b/crates/skyward-ui/src/pages.rs
-index 5216cb6..678a412 100644
+index 5216cb6..943c105 100644
 --- a/crates/skyward-ui/src/pages.rs
 +++ b/crates/skyward-ui/src/pages.rs
 @@ -63,8 +63,11 @@ pub struct Band {
@@ -778,7 +1392,12 @@ index 5216cb6..678a412 100644
          Screen::Reboot => reboot(cx),
          Screen::Wipe => wipe(cx),
          Screen::Mount => mount(cx),
-@@ -112,6 +115,114 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
+@@ -109,9 +112,119 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
+         Screen::WlanPassword => wlan_password(cx),
+         Screen::WlanNetwork => wlan_network(cx),
+         Screen::WlanAdd => wlan_add(cx),
++        Screen::Download => download(cx),
++        Screen::Web => web(cx),
      }
  }
  
@@ -893,7 +1512,7 @@ index 5216cb6..678a412 100644
  /// Label and colour of each swipe-to-confirm control: the filesystem
  /// page's as `s` says what it is to do.
  pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
-@@ -137,6 +248,8 @@ pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
+@@ -137,6 +250,8 @@ pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
          Confirm::SwitchSystem => (["滑动以切换并重启", "滑動以切換並重新啟動", "Slide to switch and reboot"], false),
          Confirm::RemoveSystem => (["滑动以删除", "滑動以刪除", "Slide to remove"], true),
          Confirm::InstallSystem => (INSTALL, false),
@@ -902,7 +1521,23 @@ index 5216cb6..678a412 100644
      };
      (s.lang.pick(label), danger)
  }
-@@ -363,7 +476,10 @@ pub fn settings(cx: &Ctx) -> Frame {
+@@ -290,6 +405,7 @@ pub fn home(cx: &Ctx) -> Frame {
+         Row::new(l.pick(["备份", "備份", "Backup"])).icon(BLUE, Icon::Backup),
+         Row::new(l.pick(["恢复", "還原", "Restore"])).icon(PURPLE, Icon::Restore),
+         Row::new(l.pick(["挂载", "掛載", "Mount"])).icon(SLATE, Icon::Mount),
++        Row::new(l.pick(["下载", "下載", "Download"])).icon(BLUE, Icon::Globe),
+         Row::new(l.pick(DECRYPT)).icon(BLUE, Icon::Lock).trail(Trail::Value(fmt::data(l, &cx.state.data))),
+     ]);
+     out.extend(hits(&tools.rows, &[
+@@ -297,6 +413,7 @@ pub fn home(cx: &Ctx) -> Frame {
+         Action::Open(Screen::Backup),
+         Action::Open(Screen::Restore),
+         Action::Open(Screen::Mount),
++        Action::Open(Screen::Download),
+         Action::Open(Screen::Decrypt),
+     ]));
+     y = tools.bottom + t.m.card_gap;
+@@ -363,7 +480,10 @@ pub fn settings(cx: &Ctx) -> Frame {
      if let Some(r) = slider.below {
          out.push(Hit { rect: r, action: Action::Open(Screen::ScreenOff) });
      }
@@ -914,7 +1549,7 @@ index 5216cb6..678a412 100644
      let below = Row::new(l.pick(["触摸振动", "觸控震動", "Touch vibration"])).trail(Trail::Switch(s.vibrate));
      let vibration = widgets::slider_card(&mut c, t, f, y, Caption::Vibrate, l.pick(["振动强度", "震動強度", "Vibration intensity"]), s.vibration, Some(below));
      out.push(Hit { rect: vibration.track, action: Action::Slider(Slider::Vibration) });
-@@ -376,7 +492,14 @@ pub fn settings(cx: &Ctx) -> Frame {
+@@ -376,7 +496,13 @@ pub fn settings(cx: &Ctx) -> Frame {
          Row::new(l.pick(TIME_ZONE)).icon(ORANGE, Icon::Clock).trail(Trail::Value(l.pick(TIME_ZONES[s.time_zone].0))),
      ]);
      out.extend(hits(&general.rows, &[Action::Open(Screen::Language), Action::Open(Screen::TimeZone)]));
@@ -923,14 +1558,64 @@ index 5216cb6..678a412 100644
 +    let lock_value = l.pick(if s.lock.is_some() { ["已开启", "已開啟", "On"] } else { ["未设置", "未設定", "Off"] });
 +    let security = widgets::list(&mut c, t, f, y, &[
 +        Row::new(l.pick(["恢复模式锁屏", "復原模式鎖屏", "Recovery lock"])).icon(BLUE, Icon::Lock).trail(Trail::Value(lock_value)),
-+        Row::new(l.pick(["禁用 AVB 2.0", "停用 AVB 2.0", "Disable AVB 2.0"])).icon(RED, Icon::Shield).subtitle(l.pick(["关闭 dm-verity 与启动校验", "關閉 dm-verity 與啟動驗證", "Turn off dm-verity and verification"])),
 +    ]);
-+    out.extend(hits(&security.rows, &[Action::Open(Screen::LockSet), Action::Open(Screen::Avb)]));
++    out.extend(hits(&security.rows, &[Action::Open(Screen::LockSet)]));
 +    y = widgets::section(&mut c, t, f, security.bottom + t.m.card_gap, "USB");
      let usb = widgets::list(&mut c, t, f, y, &[Row::new(l.pick(["文件传输", "檔案傳輸", "File transfer"])).icon(BLUE, Icon::Usb).trail(Trail::Switch(s.file_transfer))]);
      out.extend(hits(&usb.rows, &[Action::Toggle(Switch::FileTransfer)]));
      let note = l.pick([
-@@ -786,7 +909,7 @@ fn code(cx: &Ctx, mut c: Canvas, user: u32, keys: Keys, checking: bool) -> Frame
+@@ -389,16 +515,8 @@ pub fn settings(cx: &Ctx) -> Frame {
+     let debug = widgets::list(&mut c, t, f, y, &[Row::new(l.pick(TERMINAL)).icon(SLATE, Icon::Terminal)]);
+     out.extend(hits(&debug.rows, &[Action::Open(Screen::Terminal)]));
+     y = widgets::section(&mut c, t, f, debug.bottom, l.pick(["关于", "關於", "About"]));
+-    let mut rows = vec![Row::new(l.pick(ABOUT)).trail(Trail::Value(VERSION))];
+-    let mut opens = vec![Action::Open(Screen::About)];
+-    if s.offers(Screen::SkywardUpdate) {
+-        let row = Row::new(l.pick(SKYWARD_UPDATE));
+-        rows.push(match skyward_value(cx) {
+-            Some(value) => row.trail(Trail::Value(value)),
+-            None => row,
+-        });
+-        opens.push(Action::Open(Screen::SkywardUpdate));
+-    }
++    let rows = vec![Row::new(l.pick(ABOUT)).trail(Trail::Value(VERSION))];
++    let opens = vec![Action::Open(Screen::About)];
+     let about = widgets::list(&mut c, t, f, y, &rows);
+     out.extend(hits(&about.rows, &opens));
+     Frame::new(t, fit(c, t, about.bottom), out, l.pick(SETTINGS), top)
+@@ -735,8 +853,14 @@ fn data_status(cx: &Ctx, mut c: Canvas, icon: Icon, title: &str, note: Option<&s
+         out.push(Hit { rect: again, action: Action::OpenData });
+     }
+     let leave_cy = m.h as f32 - m.dp(64.0);
+-    let leave = l.pick(if matches!(cx.state.data, Data::Open | Data::Erased) { ["完成", "完成", "Done"] } else { NOT_NOW });
+-    c.text_center(&f.heading, leave, x, leave_cy, m.row_title_px, t.pal.accent);
++    let leave = match (&cx.state.data, cx.state.home_left) {
++        (Data::Open, left) if left > 0 => {
++            tr!(l, "完成 · {left} 秒后进入主界面", "完成 · {left} 秒後進入主介面", "Done · home in {left}s")
++        }
++        (Data::Open | Data::Erased, _) => l.pick(["完成", "完成", "Done"]).to_string(),
++        _ => l.pick(NOT_NOW).to_string(),
++    };
++    c.text_center(&f.heading, &leave, x, leave_cy, m.row_title_px, t.pal.accent);
+     out.push(Hit { rect: Rect::new(x - m.dp(80.0), leave_cy - m.dp(24.0), m.dp(160.0), m.dp(48.0)), action: Action::Skip });
+     Frame { header: false, ..Frame::new(t, c, out, l.pick(DECRYPT), 0.0) }
+ }
+@@ -764,6 +888,14 @@ fn code(cx: &Ctx, mut c: Canvas, user: u32, keys: Keys, checking: bool) -> Frame
+     let note = l.pick(if checking { ["正在验证", "正在驗證", "Checking"] } else { ["解密后可查看本机文件", "解密後可查看本機檔案", "Decrypt to see the phone's files"] });
+     c.text_center(&f.heading, &title, x, m.dp(130.0), m.dp(24.0), t.pal.text);
+     c.text_center(&f.body, note, x, m.dp(166.0), m.sub_px, t.pal.subtitle);
++    let remember = l.pick([
++        "记住密码，下次自动解密",
++        "記住密碼，下次自動解密",
++        "Remember it and decrypt next time",
++    ]);
++    let keep = l.pick(["保存在 /metadata（0600）", "儲存在 /metadata（0600）", "Kept in /metadata (0600)"]);
++    let row = widgets::list(&mut c, t, f, m.dp(202.0), &[Row::new(remember).subtitle(keep).trail(Trail::Switch(s.remember_data))]);
++    out.extend(hits(&row.rows, &[Action::Toggle(Switch::RememberData)]));
+     let mut pattern = None;
+     let bottom = match keys {
+         Keys::Letters => {
+@@ -786,7 +918,7 @@ fn code(cx: &Ctx, mut c: Canvas, user: u32, keys: Keys, checking: bool) -> Frame
          }
          Keys::Digits => {
              let top = m.h as f32 - widgets::keypad_height(t);
@@ -939,7 +1624,220 @@ index 5216cb6..678a412 100644
              if !checking {
                  out.extend(caps.into_iter().map(|(rect, cap)| Hit { rect, action: Action::Type(cap) }));
              }
-@@ -2881,7 +3004,13 @@ pub fn wlan(cx: &Ctx) -> Frame {
+@@ -2197,25 +2329,41 @@ const STOP: Text = ["停止", "停止", "Stop"];
+ 
+ /// Tools for the experienced.
+ pub fn advanced(cx: &Ctx) -> Frame {
+-    let (t, f, l) = (cx.t, cx.f, cx.state.lang);
++    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+     let mut c = page(cx);
+     let top = t.m.content_top;
+-    let tools = widgets::list(&mut c, t, f, top, &[
++    let mut rows = vec![
+         Row::new(l.pick(FILES)).icon(BLUE, Icon::Folder),
+         Row::new(l.pick(TERMINAL)).icon(SLATE, Icon::Terminal),
+         Row::new(l.pick(RELABEL)).icon(PURPLE, Icon::Shield),
+         Row::new(l.pick(FILESYSTEMS)).icon(RED, Icon::Mount),
+         Row::new(l.pick(LOGS)).icon(ORANGE, Icon::Log),
+         Row::new(l.pick(UPDATE)).icon(GREEN, Icon::Layers).trail(Trail::Value(update_value(cx))),
+-    ]);
+-    let out = hits(&tools.rows, &[
++    ];
++    let mut actions = vec![
+         Action::Open(Screen::Files),
+         Action::Open(Screen::Terminal),
+         Action::Open(Screen::Relabel),
+         Action::Open(Screen::Filesystems),
+         Action::Open(Screen::Logs),
+         Action::Open(Screen::Update),
+-    ]);
++    ];
++    if s.offers(Screen::SkywardUpdate) {
++        let row = Row::new(l.pick(SKYWARD_UPDATE)).icon(BLUE, Icon::Globe);
++        rows.push(match skyward_value(cx) {
++            Some(value) => row.trail(Trail::Value(value)),
++            None => row,
++        });
++        actions.push(Action::Open(Screen::SkywardUpdate));
++    }
++    rows.push(
++        Row::new(l.pick(["禁用 AVB 2.0", "停用 AVB 2.0", "Disable AVB 2.0"]))
++            .icon(RED, Icon::Shield)
++            .subtitle(l.pick(["关闭 dm-verity 与启动校验", "關閉 dm-verity 與啟動驗證", "Turn off dm-verity and verification"])),
++    );
++    actions.push(Action::Open(Screen::Avb));
++    let tools = widgets::list(&mut c, t, f, top, &rows);
++    let out = hits(&tools.rows, &actions);
+     Frame::new(t, c, out, l.pick(ADVANCED), top)
+ }
+ 
+@@ -2872,6 +3020,165 @@ fn skyward_online(c: &mut Canvas, cx: &Ctx, y: f32, out: &mut Vec<Hit>) -> f32 {
+ 
+ /// The WLAN switch; then the network chosen and how joining it goes, and
+ /// the networks in range, strongest first.
++/// A web page read as text: the URL, its title, and what the tags leave.
++/// There is no JavaScript or CSS engine here, and no pictures: this is a
++/// reader for pages whose words are in the HTML.
++pub fn web(cx: &Ctx) -> Frame {
++    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
++    let m = &t.m;
++    let mut c = long_page(cx);
++    let out = Vec::new();
++    let top = m.content_top;
++    let mut y = widgets::section_first(&mut c, t, f, top, l.pick(["网页", "網頁", "Web"]));
++    y = widgets::footnote(&mut c, t, f, y, &s.web_url);
++    let mut title = l.pick(["正在读取网页", "正在讀取網頁", "Reading the page"]).to_string();
++    let mut text = String::new();
++    match &s.web_page {
++        Some(Ok(page)) => {
++            title = if page.title.trim().is_empty() { s.web_url.clone() } else { page.title.clone() };
++            text = page.text.clone();
++        }
++        Some(Err(why)) => {
++            title = l.pick(["未能打开网页", "無法開啟網頁", "Couldn't open the page"]).to_string();
++            text = why.clone();
++        }
++        None => {}
++    }
++    y = widgets::section(&mut c, t, f, y, &title);
++    if !text.trim().is_empty() {
++        y = widgets::paragraph(&mut c, t, f, y, &text);
++    } else if s.web_page.is_some() {
++        y = widgets::footnote(&mut c, t, f, y, l.pick([
++            "页面没有可显示的文本；它可能要靠 JavaScript 才能显示。",
++            "頁面沒有可顯示的文字；它可能要靠 JavaScript 才能顯示。",
++            "The page leaves no text to read; it may need JavaScript to show.",
++        ]));
++    }
++    let note = l.pick([
++        "文本模式：不运行 JavaScript 和 CSS，不显示图片。",
++        "文字模式：不執行 JavaScript 和 CSS，不顯示圖片。",
++        "Text mode: no JavaScript, CSS or pictures.",
++    ]);
++    y = widgets::footnote(&mut c, t, f, y, note);
++    Frame::new(t, fit(c, t, y), out, l.pick(["网页", "網頁", "Web"]), top)
++}
++
++/// Downloading a file from a URL typed here, or from a link another phone
++/// sends through the page the QR code opens; `/sdcard/Download/link.txt`
++/// fills the field too.
++pub fn download(cx: &Ctx) -> Frame {
++    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
++    let m = &t.m;
++    let (w, x) = (m.w as f32, m.w as f32 / 2.0);
++    let mut c = page(cx);
++    let mut out = Vec::new();
++    let top = m.content_top;
++    let field_top = top + m.dp(6.0);
++    let (below, caret) = widgets::text_field(&mut c, t, f, field_top, &s.download_url);
++    if s.download_url.is_empty() {
++        c.text(&f.body, l.pick(["粘贴或输入完整网址", "貼上或輸入完整網址", "Paste or type a full URL"]), m.margin + m.dp(18.0), field_top + m.dp(34.0), m.sub_px, t.pal.subtitle, None);
++    }
++    let button = widgets::button(&mut c, t, f, below + m.card_gap, l.pick(["开始下载", "開始下載", "Start download"]));
++    out.push(Hit { rect: button, action: Action::StartDownload });
++    let link_y = button.y + button.h + m.dp(26.0);
++    let link_label = l.pick(["从 /sdcard/Download/link.txt 读链接", "從 /sdcard/Download/link.txt 讀取連結", "Read /sdcard/Download/link.txt"]);
++    c.text_center(&f.body, link_label, x, link_y, m.sub_px, t.pal.accent);
++    out.push(Hit { rect: Rect::new(m.margin, link_y - m.dp(18.0), w - m.margin * 2.0, m.dp(36.0)), action: Action::ReadDownloadLink });
++    let kb_top = m.h as f32 - widgets::keyboard_height(t);
++    if let Some(job) = &s.download_job {
++        let (title, detail, done) = match (&job.ended, &job.progress) {
++            (Some(Ok(path)), _) => (l.pick(["下载完成", "下載完成", "Downloaded"]).to_string(), path.clone(), Some(1.0)),
++            (Some(Err(why)), _) => (l.pick(["下载失败", "下載失敗", "Download failed"]).to_string(), why.clone(), None),
++            (None, Some(Progress::Downloading { done, total })) => {
++                let base = if *total == 0 {
++                    fmt::bytes(*done)
++                } else {
++                    format!("{} / {} · {}/s", fmt::bytes(*done), fmt::bytes(*total), fmt::bytes(job.rate))
++                };
++                let share = if *total == 0 { None } else { Some(*done as f32 / *total as f32) };
++                let title = if job.paused {
++                    l.pick(["已暂停", "已暫停", "Paused"]).to_string()
++                } else {
++                    l.pick(["正在下载", "正在下載", "Downloading"]).to_string()
++                };
++                (title, base, share)
++            }
++            (None, Some(Progress::Checking { done, total })) => {
++                (l.pick(["正在检查", "正在檢查", "Checking"]).to_string(), format!("{done} / {total} B"), None)
++            }
++            (None, None) => (l.pick(["准备下载", "準備下載", "Starting"]).to_string(), job.url.clone(), None),
++        };
++        let title = format!("{} · {}", title, job.name);
++        let card_top = link_y + m.dp(18.0);
++        let bottom = widgets::progress_card(&mut c, t, f, card_top, &title, &detail, done);
++        if job.ended.is_none() {
++            let r = m.dp(25.0);
++            let cx = m.w as f32 - m.margin - m.dp(31.0);
++            let cy = card_top + m.dp(40.0);
++            c.fill_circle(cx, cy, r, t.pal.accent);
++            if job.paused {
++                let k = r * 0.5;
++                c.line(cx - k * 0.45, cy - k, cx + k * 0.7, cy, m.stroke, Rgba::rgb(255, 255, 255));
++                c.line(cx + k * 0.7, cy, cx - k * 0.45, cy + k, m.stroke, Rgba::rgb(255, 255, 255));
++                c.line(cx - k * 0.45, cy + k, cx - k * 0.45, cy - k, m.stroke, Rgba::rgb(255, 255, 255));
++            } else {
++                let k = r * 0.45;
++                c.line(cx - k * 0.35, cy - k, cx - k * 0.35, cy + k, m.stroke, Rgba::rgb(255, 255, 255));
++                c.line(cx + k * 0.55, cy - k, cx + k * 0.55, cy + k, m.stroke, Rgba::rgb(255, 255, 255));
++            }
++            let action = if job.paused { Action::ResumeDownload } else { Action::PauseDownload };
++            out.push(Hit { rect: Rect::new(cx - r, cy - r, r * 2.0, r * 2.0), action });
++            let stop = widgets::button(&mut c, t, f, bottom + m.card_gap, l.pick(["停止下载", "停止下載", "Stop"]));
++            out.push(Hit { rect: stop, action: Action::StopDownloadUrl });
++        } else {
++            let again = widgets::button(&mut c, t, f, bottom + m.card_gap, l.pick(["再次下载", "再次下載", "Download again"]));
++            out.push(Hit { rect: again, action: Action::StartDownload });
++        }
++    } else {
++        let qr_top = link_y + m.dp(34.0);
++        let room = (kb_top - qr_top - m.dp(138.0)).max(m.dp(120.0));
++        let size = room.min(m.dp(286.0));
++        let qr_x = x - size / 2.0;
++        let shown = s.download_server.as_ref().is_some_and(|url| qr(&mut c, t, url, qr_x, qr_top, size));
++        if !shown {
++            let side = size;
++            c.fill_round_rect(qr_x, qr_top, side, side, m.dp(20.0), t.pal.card);
++            let note = l.pick(["连上 WLAN 后这里显示二维码", "連上 Wi-Fi 後這裡顯示 QR 碼", "The QR code shows once WLAN is joined"]);
++            c.text_center(&f.body, note, x, qr_top + side / 2.0, m.sub_px, t.pal.subtitle);
++        }
++        let note_y = qr_top + size + m.dp(18.0);
++        let how = l.pick([
++            "用另一台手机扫这个码，在网页里输入网址，发回来就填进上面的框。",
++            "用另一台手機掃這個碼，在網頁裡輸入網址，傳回來就填進上面的框。",
++            "Scan this with another phone, enter the URL on its page, and send it back.",
++        ]);
++        let saved = l.pick(["文件保存到 /sdcard/Download，名字取网址里最后一段。", "檔案儲存到 /sdcard/Download，名字取網址最後一段。", "Files go to /sdcard/Download, named after the URL's last part."]);
++        let note_bottom = widgets::paragraph(&mut c, t, f, note_y, how);
++        widgets::paragraph(&mut c, t, f, note_bottom, saved);
++    }
++    keyboard_hits(&mut c, t, f, s, l.pick(["确定", "確定", "OK"]), &mut out);
++    Frame { caret: Some(caret), ..Frame::new(t, c, out, l.pick(["下载", "下載", "Download"]), top) }
++}
++
++/// The QR code of `url`, black on a white card, its top left at `x, y`; whether
++/// it could be drawn.
++fn qr(c: &mut Canvas, t: &Theme, url: &str, x: f32, y: f32, size: f32) -> bool {
++    let Ok(code) = qrcodegen::QrCode::encode_text(url, qrcodegen::QrCodeEcc::Medium) else { return false };
++    let m = &t.m;
++    let pad = (size * 0.06).max(m.dp(10.0));
++    c.fill_round_rect(x - pad, y - pad, size + pad * 2.0, size + pad * 2.0, m.dp(18.0), Rgba::rgb(255, 255, 255));
++    let n = code.size() as f32;
++    let cell = size / n;
++    for row in 0..code.size() {
++        for col in 0..code.size() {
++            if code.get_module(col, row) {
++                c.fill_rect(x + col as f32 * cell, y + row as f32 * cell, cell.ceil(), cell.ceil(), Rgba::rgb(0, 0, 0));
++            }
++        }
++    }
++    true
++}
++
+ pub fn wlan(cx: &Ctx) -> Frame {
+     let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+     let w = s.wlan.as_ref().expect("the WLAN page shows on a phone whose WLAN is brought up");
+@@ -2881,7 +3188,13 @@ pub fn wlan(cx: &Ctx) -> Frame {
      let on = !matches!(w.power, Power::Off | Power::Failed(_));
      let switch = widgets::list(&mut c, t, f, top, &[Row::new(l.pick(WLAN)).trail(Trail::Switch(on))]);
      out.extend(hits(&switch.rows, &[Action::Toggle(Switch::Wlan)]));
@@ -955,7 +1853,7 @@ index 5216cb6..678a412 100644
          Power::Off => {
              let note = l.pick([
 diff --git a/crates/skyward-ui/src/settings.rs b/crates/skyward-ui/src/settings.rs
-index 9dcecdc..74d3170 100644
+index 9dcecdc..ca4149d 100644
 --- a/crates/skyward-ui/src/settings.rs
 +++ b/crates/skyward-ui/src/settings.rs
 @@ -5,10 +5,12 @@
@@ -972,7 +1870,7 @@ index 9dcecdc..74d3170 100644
  
  /// How long settings stand unchanged before they are written, so a slider
  /// dragged across the page is written once, after the hand stops.
-@@ -49,11 +51,97 @@ pub struct Settings {
+@@ -49,11 +51,101 @@ pub struct Settings {
      pub vibration: f32,
      /// A computer connected over USB is offered internal storage.
      pub file_transfer: bool,
@@ -980,6 +1878,10 @@ index 9dcecdc..74d3170 100644
 +    pub double_tap: bool,
 +    /// The recovery's own lock, its code kept as a salted hash.
 +    pub lock: Option<Lock>,
++    /// Whether the phone's screen lock is remembered so the owner's files
++    /// open without asking at the next start, and the password itself.
++    pub remember_data: bool,
++    pub data_password: String,
 +    /// The WLAN network joined, for the next start to join again.
 +    pub wlan: Wlan,
      pub install: Install,
@@ -1070,12 +1972,14 @@ index 9dcecdc..74d3170 100644
  /// The install page's options.
  #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
  #[serde(default)]
-@@ -126,6 +214,15 @@ impl Settings {
+@@ -126,6 +218,17 @@ impl Settings {
              vibrate: state.vibrate,
              vibration: state.vibration,
              file_transfer: state.file_transfer,
 +            double_tap: state.double_tap,
 +            lock: state.lock.clone(),
++            remember_data: state.remember_data && !state.data_password.is_empty(),
++            data_password: if state.remember_data { state.data_password.clone() } else { String::new() },
 +            wlan: Wlan {
 +                auto: state.wlan_auto,
 +                ssid: state.saved_wlan.as_ref().map_or_else(String::new, |w| w.ssid.clone()),
@@ -1086,7 +1990,7 @@ index 9dcecdc..74d3170 100644
              install: Install { check_signature: state.check_signature, keep_recovery: state.keep_recovery },
              backup: Backup {
                  parts: names(&state.backup, &PARTS),
-@@ -184,6 +281,19 @@ impl Settings {
+@@ -184,6 +287,21 @@ impl Settings {
              state.vibration = self.vibration;
          }
          state.file_transfer = self.file_transfer;
@@ -1094,6 +1998,8 @@ index 9dcecdc..74d3170 100644
 +        if self.lock.as_ref().is_some_and(|l| !l.hash.is_empty() && !l.salt.is_empty()) {
 +            state.lock = self.lock.clone();
 +        }
++        state.remember_data = self.remember_data && !self.data_password.is_empty();
++        state.data_password = if state.remember_data { self.data_password.clone() } else { String::new() };
 +        state.wlan_auto = self.wlan.auto;
 +        if !self.wlan.ssid.is_empty() {
 +            state.saved_wlan = Some(SavedWlan {
@@ -1307,10 +2213,33 @@ index ad36bfb..8163438 100644
      file.sync_all().with_context(|| format!("write {WRITING}"))?;
      fs::rename(WRITING, FILE).with_context(|| format!("move {WRITING} over {FILE}"))?;
 diff --git a/crates/skyward/src/ui.rs b/crates/skyward/src/ui.rs
-index 3144b83..ae43031 100644
+index 3144b83..0c5098c 100644
 --- a/crates/skyward/src/ui.rs
 +++ b/crates/skyward/src/ui.rs
-@@ -67,7 +67,6 @@ const TOUCH_WAIT: Duration = Duration::from_secs(5);
+@@ -37,7 +37,7 @@ use skyward_systems::Who;
+ use skyward_ui::app::{
+     App, Asked, BackupAt, BackupEnd, BackupEntry, BackupRefusal, ClashChoice, Data, DownloadEnd, Effect, EraseStop, FileKind, FileOp,
+     FileRow, FileTask, FsAction, FsRow, Have, Held, ItemEnd, ItemState, JobEnd, Keys, MountFailure, Part, PartKind, PartStop, Place,
+-    RenameRefused, Screen, Shot, SkywardEnd, SkywardStage, Target, UsbDrive, UsbLink, Wipe, DATA_OPENING, DATA_PARTITION, DOWNLOADS,
++    RenameRefused, Screen, Shot, SkywardEnd, SkywardStage, Target, UsbDrive, UsbLink, WebPage, Wipe, DATA_OPENING, DATA_PARTITION, DOWNLOADS,
+     INSTALL_UNFINISHED, USB_DRIVE,
+ };
+ use skyward_ui::settings::Keeper;
+@@ -46,9 +46,12 @@ use skyward_ui::{Canvas, Fonts, Lang, Surface};
+ use skyward_vab::{Merge, Standing};
+ use std::collections::{BTreeSet, VecDeque};
+ use std::fs;
+-use std::io::Write;
++use std::io::{Read, Write};
++use std::net::{TcpListener, UdpSocket};
+ use std::os::unix::fs::MetadataExt;
+ use std::path::{Path, PathBuf};
++use std::sync::atomic::{AtomicBool, Ordering};
++use std::sync::mpsc;
+ use std::sync::{Arc, Mutex};
+ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+ 
+@@ -67,7 +70,6 @@ const TOUCH_WAIT: Duration = Duration::from_secs(5);
  /// How long a panel gone dark rests, ready to light again at once, before
  /// the display turns off; the phone's own system keeps its panel dozing
  /// about as long after the screen goes off.
@@ -1318,7 +2247,16 @@ index 3144b83..ae43031 100644
  
  /// Where logs saved to the temporary folder go, in the recovery service's
  /// own folder, and where in internal storage the others do.
-@@ -1061,7 +1060,10 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+@@ -842,7 +844,7 @@ fn show_closed(app: &mut App, closed: &[Closed]) -> Result<()> {
+             skyward_sys::kmsg(&format!("the files of user {} stay closed: {why}", c.user))?;
+         }
+     }
+-    let waiting = closed.iter().find(|c| !c.made_up).map(|c| {
++    let waiting = closed.iter().find(|c| !c.made_up && c.user == 0).map(|c| {
+         let keys = match c.lock {
+             Lock::PATTERN => Keys::Pattern,
+             Lock::PIN => Keys::Digits,
+@@ -1061,7 +1063,10 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
      let control = Control::open()?;
      let mut haptics = cfg.haptics.as_ref().map(Haptics::open).transpose()?;
      let mut backlight = Backlight::open()?;
@@ -1330,7 +2268,7 @@ index 3144b83..ae43031 100644
          Work::Fastboot => Screen::Fastboot,
          Work::PromptWipeData => Screen::CantStart,
          Work::Unsupported(_) => Screen::Unhandled,
-@@ -1077,14 +1079,18 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+@@ -1077,14 +1082,18 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
          | Work::SwitchSystem { .. }
          | Work::SystemStopped => start,
      };
@@ -1355,7 +2293,7 @@ index 3144b83..ae43031 100644
      let locale = request.locale.as_deref().or(info.locale.as_deref());
      let named = locale.map(Lang::for_locale).transpose()?;
      app.take_settings(kept.settings(), named);
-@@ -1125,7 +1131,6 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+@@ -1125,7 +1134,6 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
      // panel; cleared once a real frame is shown again.
      let mut blanked = false;
      // When the panel gone dark began to rest.
@@ -1363,7 +2301,7 @@ index 3144b83..ae43031 100644
      // Started for fastboot, the port goes to the phone's own fastbootd. The
      // page says whether it came up and how far a computer has the port;
      // why it did not come up goes to the kernel log and on screen.
-@@ -1354,6 +1359,26 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+@@ -1354,11 +1362,35 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
          }
          None => None,
      };
@@ -1390,7 +2328,16 @@ index 3144b83..ae43031 100644
      let mut scanned_at = Instant::now();
      app.state.update_server = cfg.update.is_some();
      // Asking the update server, and downloading the full package.
-@@ -1474,17 +1499,11 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+     let mut checker: Option<updates::Worker> = None;
+     let mut downloader: Option<updates::Worker> = None;
++    // A file downloading from a URL, and the page its QR code opens.
++    let mut url_downloader: Option<UrlDownloader> = None;
++    let mut url_form: Option<UrlForm> = None;
++    let mut web_fetcher: Option<WebFetcher> = None;
+     // Asking GitHub for Skyward's newest release, and updating to it.
+     let mut skyward_checker: Option<updates::Worker> = None;
+     let mut skyward_updater: Option<updates::Worker> = None;
+@@ -1474,17 +1506,11 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
              // Lit, a panel that came on again switches to its fastest
              // refresh.
              surface.speed_up()?;
@@ -1413,17 +2360,131 @@ index 3144b83..ae43031 100644
          }
          // A page at rest draws the rows it has yet to while nothing else
          // is to be done, a band at a time, looking for input between bands.
-@@ -1495,8 +1514,7 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+@@ -1495,8 +1521,8 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
          let floor = if shown { 0 } else { 1 };
          let until_due = app.deadline(now).map(|d| d.saturating_sub(now) as i32);
          // A resting panel turns off once its rest is over.
 -        let rest_left = rested_at.map(|at| REST.saturating_sub(at.elapsed()).as_millis() as i32);
 -        let timeout = if ahead { 0 } else { until_due.into_iter().chain(rest_left).min().map_or(1000, |t| t.clamp(floor, 1000)) };
 +        let timeout = if ahead { 0 } else { until_due.into_iter().min().map_or(1000, |t| t.clamp(floor, 1000)) };
++        let timeout = if url_downloader.is_some() || web_fetcher.is_some() { timeout.min(100) } else { timeout };
          // With the display off, the phone sleeps unless something needs it
          // awake: work under way, fastboot or sideload, a restart on its way,
          // a command running in the terminal, a network being joined, the
-@@ -2473,6 +2491,37 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+@@ -2035,6 +2061,11 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+                     }
+                     closed = opening.closed;
+                     show_closed(&mut app, &closed)?;
++                    app.start_home_countdown(now);
++                    if let Some((user, code)) = app.auto_credential() {
++                        let job = decrypt::Job::Unlock { closed: closed.clone(), user, credential: code.into_bytes() };
++                        decryptor = Some(Decryptor::start(job)?);
++                    }
+                 }
+                 decrypt::Ended::Opened(Err(why)) => {
+                     skyward_sys::kmsg(&format!("the data partition stays closed: {why}"))?;
+@@ -2053,6 +2084,8 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+                 decrypt::Ended::Unlocked(Ok(still)) => {
+                     closed = still;
+                     show_closed(&mut app, &closed)?;
++                    app.unlock_succeeded();
++                    app.start_home_countdown(now);
+                 }
+                 decrypt::Ended::Unlocked(Err(why)) => {
+                     skyward_sys::kmsg(&format!("what was entered did not open the user's files: {why}"))?;
+@@ -2081,6 +2114,34 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+                 }
+             }
+         }
++            // A URL sent from the page the QR code opens fills the download
++            // page's field; a download under way tells how it goes.
++            if let Some(form) = &url_form {
++                while let Ok(url) = form.requests.try_recv() {
++                    app.download_url_from_phone(url, now);
++                }
++            }
++            let mut url_ended = false;
++            if let Some(d) = &url_downloader {
++                while let Ok(event) = d.events.try_recv() {
++                    match event {
++                        UrlEvent::Progress(progress) => app.download_url_progress(progress, now),
++                        UrlEvent::Ended(ended) => {
++                            app.download_url_ended(ended, now);
++                            url_ended = true;
++                        }
++                    }
++                }
++            }
++            if url_ended {
++                url_downloader = None;
++            }
++            if let Some(w) = &web_fetcher {
++                if let Ok(page) = w.events.try_recv() {
++                    app.web_fetched(page);
++                    web_fetcher = None;
++                }
++            }
+         if let Some(sh) = &mut shell {
+             let wrote = sh.read()?;
+             if !wrote.is_empty() {
+@@ -2291,6 +2352,56 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+                         systems_worker.as_mut().context("this phone holds no second system")?.send(systems::Task::Remove);
+                     }
+                     Effect::InstallSystem { size } => installer.as_ref().context("no installer holds a system")?.install_system(size),
++                    Effect::FetchWeb(url) => {
++                        ensure!(web_fetcher.is_none(), "a web page is being read already");
++                        match WebFetcher::start(url, servers.clone()) {
++                            Ok(w) => web_fetcher = Some(w),
++                            Err(e) => app.web_fetched(Err(format!("{e:#}"))),
++                        }
++                    }
++                    Effect::DownloadUrl { url, name } => {
++                        ensure!(url_downloader.is_none(), "a URL download is under way");
++                        match UrlDownloader::start(url, name, servers.clone()) {
++                            Ok(d) => url_downloader = Some(d),
++                            Err(e) => app.download_url_ended(Err(format!("{e:#}")), now),
++                        }
++                    }
++                    Effect::PauseDownloadUrl => {
++                        if let Some(d) = &url_downloader {
++                            d.pause();
++                            app.download_url_paused(true);
++                        }
++                    }
++                    Effect::ResumeDownloadUrl => {
++                        if let Some(d) = &url_downloader {
++                            d.resume();
++                            app.download_url_paused(false);
++                        }
++                    }
++                    Effect::StopDownloadUrl => {
++                        if let Some(d) = &url_downloader {
++                            d.stop();
++                        }
++                    }
++                    Effect::ReadDownloadLink => {
++                        let path = Path::new(skyward_crypto::data::SDCARD).join("Download/link.txt");
++                        let link = fs::read_to_string(&path).map_err(|e| format!("读取 {} 失败：{e}", path.display()));
++                        app.download_link(link, now);
++                    }
++                    Effect::StartDownloadServer => {
++                        if url_form.is_none() {
++                            match UrlForm::start() {
++                                Ok(form) => {
++                                    app.download_server_url(Some(form.addr.clone()));
++                                    url_form = Some(form);
++                                }
++                                Err(e) => {
++                                    app.download_server_url(None);
++                                    app.report(&format!("无法启动扫码页面：{e:#}"), now);
++                                }
++                            }
++                        }
++                    }
+                     // The decrypt page shows meanwhile that the work is
+                     // under way, and takes nothing more until it is done.
+                     Effect::OpenData => {
+@@ -2473,6 +2584,37 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
                          wlan_worker(&wlan)?.send(wlan::Command::Join { ssid, name, security, password: password.0 })
                      }
                      Effect::LeaveWlan => wlan_worker(&wlan)?.send(wlan::Command::Leave),
@@ -1461,7 +2522,7 @@ index 3144b83..ae43031 100644
                      // What the installed system is called is the page's to
                      // report when it cannot be read.
                      Effect::CheckUpdate => {
-@@ -2502,7 +2551,8 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+@@ -2502,7 +2644,8 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
                      Effect::CheckSkyward => {
                          ensure!(skyward_checker.is_none(), "GitHub is being asked already");
                          let probe = cfg.wlan.as_ref().context("the phone's WLAN is not brought up")?.probe.clone();
@@ -1471,6 +2532,301 @@ index 3144b83..ae43031 100644
                          skyward_checker = Some(updates::Worker::start(task, servers.clone())?);
                      }
                      // The zip goes into the recovery's own folder, which is
+@@ -2646,3 +2789,294 @@ pub fn run(cfg: &DeviceConfig, font: &Path, mono: &Path, request: bcb::Request,
+         }
+     }
+ }
++/// A file downloading from a URL: the messages the thread sends, the switch
++/// that stops it, and the thread.
++enum UrlEvent {
++    Progress(download::Progress),
++    Ended(Result<String, String>),
++}
++
++struct UrlDownloader {
++    events: mpsc::Receiver<UrlEvent>,
++    stop: Arc<AtomicBool>,
++    paused: Arc<AtomicBool>,
++    thread: Option<std::thread::JoinHandle<()>>,
++}
++
++impl UrlDownloader {
++    fn start(url: String, name: String, servers: Servers) -> Result<UrlDownloader> {
++        let (tx, events) = mpsc::channel();
++        let stop = Arc::new(AtomicBool::new(false));
++        let paused = Arc::new(AtomicBool::new(false));
++        let (stopping, holding) = (stop.clone(), paused.clone());
++        let thread = std::thread::Builder::new().name("url-download".into()).spawn(move || {
++            let agent = skyward_net::http::agent(servers);
++            let path = Path::new(skyward_crypto::data::SDCARD).join("Download").join(&name);
++            let mut tell = |progress| {
++                let _ = tx.send(UrlEvent::Progress(progress));
++            };
++            let ended = download::save(&agent, &url, &path, &stopping, &holding, &mut tell)
++                .map(|()| path.display().to_string())
++                .map_err(|e| format!("{e:#}"));
++            let _ = tx.send(UrlEvent::Ended(ended));
++        })?;
++        Ok(UrlDownloader { events, stop, paused, thread: Some(thread) })
++    }
++
++    fn stop(&self) {
++        self.stop.store(true, Ordering::Relaxed);
++    }
++
++    fn pause(&self) {
++        self.paused.store(true, Ordering::Relaxed);
++    }
++
++    fn resume(&self) {
++        self.paused.store(false, Ordering::Relaxed);
++    }
++}
++
++impl Drop for UrlDownloader {
++    fn drop(&mut self) {
++        self.stop.store(true, Ordering::Relaxed);
++        if let Some(thread) = self.thread.take() {
++            let _ = thread.join();
++        }
++    }
++}
++
++/// The page the download page's QR code opens: another phone enters a URL,
++/// and the page sends it back to the recovery.
++struct UrlForm {
++    addr: String,
++    requests: mpsc::Receiver<String>,
++}
++
++impl UrlForm {
++    fn start() -> Result<UrlForm> {
++        let mut bound = None;
++        for port in 8080..8090 {
++            if let Ok(listener) = TcpListener::bind(("0.0.0.0", port)) {
++                bound = Some((listener, port));
++                break;
++            }
++        }
++        let (listener, port) = bound.context("no port from 8080 to 8089 could be bound")?;
++        listener.set_nonblocking(true).context("make the QR page's listener non-blocking")?;
++        let ip = local_ip().unwrap_or_else(|| "127.0.0.1".into());
++        let addr = format!("http://{ip}:{port}/");
++        let (tx, requests) = mpsc::channel();
++        std::thread::Builder::new().name("url-form".into()).spawn(move || serve_url_form(listener, tx))?;
++        Ok(UrlForm { addr, requests })
++    }
++}
++
++/// The address another phone can reach this recovery at, as the route to
++/// the outside world names it.
++fn local_ip() -> Option<String> {
++    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
++    socket.connect("8.8.8.8:80").ok()?;
++    Some(socket.local_addr().ok()?.ip().to_string())
++}
++
++fn serve_url_form(listener: TcpListener, requests: mpsc::Sender<String>) {
++    loop {
++        match listener.accept() {
++            Ok((mut stream, _)) => {
++                let _ = answer_url_form(&mut stream, &requests);
++            }
++            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => std::thread::sleep(Duration::from_millis(100)),
++            Err(_) => std::thread::sleep(Duration::from_millis(200)),
++        }
++    }
++}
++
++fn answer_url_form(stream: &mut std::net::TcpStream, requests: &mpsc::Sender<String>) -> Result<()> {
++    stream.set_read_timeout(Some(Duration::from_secs(2)))?;
++    stream.set_write_timeout(Some(Duration::from_secs(2)))?;
++    let mut buf = vec![0u8; 8192];
++    let n = stream.read(&mut buf)?;
++    let request = String::from_utf8_lossy(&buf[..n]);
++    let path = request.lines().next().and_then(|line| line.split_whitespace().nth(1)).unwrap_or("/");
++    if let Some(query) = path.strip_prefix("/send?") {
++        let url = query.split('&').find_map(|pair| pair.strip_prefix("url=")).map(url_query_decode).unwrap_or_default();
++        if !url.is_empty() {
++            let _ = requests.send(url);
++        }
++        let body = "<!doctype html><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Skyward</title><body style=\"background:#111;color:#eee;font:18px system-ui;padding:2em\"><h2>已发回手机</h2><p>回到 recovery 的下载页查看。</p>";
++        write_http(stream, "200 OK", body)?;
++        return Ok(());
++    }
++    if path == "/" || path.starts_with("/?") {
++        let body = "<!doctype html><html><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Skyward Download</title></head><body style=\"background:#111;color:#eee;font:18px system-ui;padding:2em;max-width:680px;margin:auto\"><h1>发一个下载链接</h1><p>在下面输入完整网址，发回 recovery 的下载页。</p><form action=\"/send\" method=\"get\"><input name=\"url\" type=\"url\" required placeholder=\"https://example.com/rom.zip\" style=\"width:100%;box-sizing:border-box;font:18px system-ui;padding:.8em;border:1px solid #555;border-radius:12px;background:#222;color:#eee\"><button style=\"margin-top:1em;width:100%;font:18px system-ui;padding:.9em;border:0;border-radius:12px;background:#4d8dff;color:#fff\">发回手机</button></form><p style=\"color:#aaa\">服务只在 recovery 运行时可用。</p></body></html>";
++        write_http(stream, "200 OK", body)?;
++        return Ok(());
++    }
++    write_http(stream, "404 Not Found", "not found")?;
++    Ok(())
++}
++
++fn write_http(stream: &mut std::net::TcpStream, status: &str, body: &str) -> Result<()> {
++    write!(
++        stream,
++        "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
++        body.len()
++    )?;
++    stream.flush()?;
++    Ok(())
++}
++
++fn url_query_decode(text: &str) -> String {
++    let bytes = text.as_bytes();
++    let mut out = Vec::with_capacity(bytes.len());
++    let mut i = 0;
++    while i < bytes.len() {
++        match bytes[i] {
++            b'+' => out.push(b' '),
++            b'%' if i + 2 < bytes.len() => {
++                if let Ok(v) = u8::from_str_radix(&text[i + 1..i + 3], 16) {
++                    out.push(v);
++                    i += 3;
++                    continue;
++                }
++                out.push(b'%');
++            }
++            b => out.push(b),
++        }
++        i += 1;
++    }
++    String::from_utf8_lossy(&out).into_owned()
++}
++/// A web page being read as text: the thread's answer, once.
++struct WebFetcher {
++    events: mpsc::Receiver<Result<WebPage, String>>,
++    thread: Option<std::thread::JoinHandle<()>>,
++}
++
++impl WebFetcher {
++    fn start(url: String, servers: Servers) -> Result<WebFetcher> {
++        let (tx, events) = mpsc::channel();
++        let thread = std::thread::Builder::new().name("web".into()).spawn(move || {
++            let agent = skyward_net::http::agent(servers);
++            let page = fetch_web(&agent, &url);
++            let _ = tx.send(page);
++        })?;
++        Ok(WebFetcher { events, thread: Some(thread) })
++    }
++}
++
++impl Drop for WebFetcher {
++    fn drop(&mut self) {
++        if let Some(thread) = self.thread.take() {
++            let _ = thread.join();
++        }
++    }
++}
++
++fn fetch_web(agent: &ureq::Agent, url: &str) -> Result<WebPage, String> {
++    let mut response = agent.get(url).call().map_err(|e| format!("{e:#}"))?;
++    let status = response.status().as_u16();
++    if !(200..400).contains(&status) {
++        return Err(format!("the server answered {status}"));
++    }
++    let mut bytes = Vec::new();
++    response
++        .body_mut()
++        .with_config()
++        .limit(4 << 20)
++        .reader()
++        .take(4 << 20)
++        .read_to_end(&mut bytes)
++        .map_err(|e| format!("read the page: {e}"))?;
++    let html = String::from_utf8_lossy(&bytes).into_owned();
++    let title = html_title(&html);
++    let text = html_text(&html);
++    Ok(WebPage { url: url.to_string(), title, text })
++}
++
++fn html_title(html: &str) -> String {
++    let lower = html.to_ascii_lowercase();
++    let Some(at) = lower.find("<title") else { return String::new() };
++    let Some(open) = lower[at..].find('>') else { return String::new() };
++    let start = at + open + 1;
++    let Some(end) = lower[start..].find("</title>") else { return String::new() };
++    decode_entities(html[start..start + end].trim())
++}
++
++fn html_text(html: &str) -> String {
++    let mut out = String::new();
++    let bytes = html.as_bytes();
++    let mut i = 0;
++    while i < bytes.len() {
++        if bytes[i] == b'<' {
++            let Some(close) = html[i..].find('>') else { break };
++            let tag = html[i + 1..i + close].trim();
++            let name = tag.split_whitespace().next().unwrap_or("").trim_start_matches('/').to_ascii_lowercase();
++            i += close + 1;
++            if matches!(name.as_str(), "script" | "style" | "noscript") && !tag.starts_with('/') {
++                let end = format!("</{name}>");
++                if let Some(at) = html[i..].to_ascii_lowercase().find(&end) {
++                    i += at + end.len();
++                }
++                continue;
++            }
++            if matches!(
++                name.as_str(),
++                "br" | "p" | "div" | "li" | "tr" | "td" | "th" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "section" | "article" | "header" | "footer" | "blockquote" | "pre" | "hr" | "table" | "ul" | "ol"
++            ) {
++                out.push('\n');
++            }
++            continue;
++        }
++        let ch = html[i..].chars().next().unwrap_or(' ');
++        out.push(ch);
++        i += ch.len_utf8();
++    }
++    let decoded = decode_entities(&out);
++    let mut lines: Vec<String> = Vec::new();
++    for line in decoded.lines() {
++        let clean = line.split_whitespace().collect::<Vec<_>>().join(" ");
++        if clean.is_empty() {
++            if lines.last().is_some_and(|l| !l.is_empty()) {
++                lines.push(String::new());
++            }
++        } else {
++            lines.push(clean);
++        }
++    }
++    let mut text = lines.join("\n");
++    text.truncate(40000);
++    text
++}
++
++fn decode_entities(text: &str) -> String {
++    let mut out = String::with_capacity(text.len());
++    let mut rest = text;
++    while let Some(at) = rest.find('&') {
++        out.push_str(&rest[..at]);
++        rest = &rest[at..];
++        let Some(end) = rest.find(';') else {
++            out.push_str(rest);
++            return out;
++        };
++        let entity = &rest[1..end];
++        let decoded = match entity {
++            "amp" => Some('&'),
++            "lt" => Some('<'),
++            "gt" => Some('>'),
++            "quot" => Some('"'),
++            "apos" => Some('\''),
++            "nbsp" => Some(' '),
++            _ if entity.starts_with("#x") || entity.starts_with("#X") => u32::from_str_radix(&entity[2..], 16).ok().and_then(char::from_u32),
++            _ if entity.starts_with('#') => entity[1..].parse().ok().and_then(char::from_u32),
++            _ => None,
++        };
++        match decoded {
++            Some(ch) => out.push(ch),
++            None => out.push_str(&rest[..=end]),
++        }
++        rest = &rest[end + 1..];
++    }
++    out.push_str(rest);
++    out
++}
 diff --git a/crates/skyward/src/updates.rs b/crates/skyward/src/updates.rs
 index 26c8ad3..ff7dcc3 100644
 --- a/crates/skyward/src/updates.rs

@@ -23,9 +23,9 @@
 
 | 文件 | 用途 | SHA-256 |
 | --- | --- | --- |
-| `recovery.img` | 要刷的 Skyward recovery | `73016303620c5d59a72b608ba2dd1684bbc888b1ec4620cf3aed0eec26fd760c` |
+| `recovery.img` | 要刷的 Skyward recovery | `714dfc27be9ae76c18366ebd36fc5dff587a9fa4c17873a803d55c8aa1210ba5` |
 | `recovery-stock-OS4.0.2.0.XOLCNXM.img` | 回滚用官方 recovery | `ce53850714fe2ca9ab22600a00e71813df2775dc94244192c83a224d7ecd3357` |
-| `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` | 官方格式 zip（内含同一个 img，供在线更新） | `e8df16ad67ef8e9e79fe20f4d5219d67230323d8b6b4ce16ca422e45baa2d636` |
+| `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` | 官方格式 zip（内含同一个 img，供在线更新） | `ab7bb0644fb9f04b87559211bad6d636253db057bb5ca2c6e669eee46ecf6f62` |
 | `SHA256SUMS` | 校验和 | — |
 
 ```sh
@@ -113,6 +113,24 @@ fastboot reboot recovery
 - 在设置 → 安全 → 「恢复模式锁屏」可另设 4–8 位 recovery 密码；设了之后每次亮屏先显示数字键盘，只保存 salt + SHA-256；
 - 启动时 `/data` 不打开，滑动/解锁后才进「解密」；
 - 忘记 recovery 密码时，可在 recovery 的 adb root 下删 `/metadata/skyward/settings.json` 的 `lock` 字段（或整个文件）。
+
+### 4.1.3 记住密码与自动进入主界面
+
+- 解密页的「记住密码，下次自动解密」打开后，输入手机锁屏密码并成功解锁即保存；下次开机滑动锁屏后，会直接用保存的密码打开 user 0，不再问密码；
+- 密码明文保存在 `/metadata/skyward/settings.json`（0600）；换机、共享镜像或送修前删掉该文件的 `data_password` / `remember_data`（或整个文件）；
+- 如果手机锁屏密码换了，保存的密码会解锁失败：页面会提示并清空保存值，改回手动输入；输入新密码并保持开关打开会重新保存；
+- 解密页只等 **user 0**；user 999（第二空间）仍打不开，但不会再卡住主流程；
+- data 打开后，「完成」后面显示「完成 · N 秒后进入主界面」，3 秒后自动回主界面；点「完成」可立即走。
+
+### 4.1.4 下载
+
+- 主界面「下载」打开下载页；地址栏可用 Skyward 自带键盘输入，键盘「确定」打开文本网页，「开始下载」才下载；也可以点「从 /sdcard/Download/link.txt 读链接」；
+- 点「开始下载」才真正下载，文件保存到 `/sdcard/Download`，名字取 URL 最后一段（无名字时 `download.bin`）；需要先解密 data 并连上 WLAN；
+- 进度卡片显示已下载/总量和网速；右侧圆形按钮暂停/继续，下面「停止下载」；
+- 二维码打开 recovery 里的一个极简网页（端口 8080–8089），另一台手机扫码后输入网址，发回来会填进地址栏；这个网页只在 recovery 运行时可用，没有登录/鉴权，仅限可信局域网；
+- HTTP/HTTPS 下载、重定向和文件名解析由 `skyward-net` 的 ureq 客户端完成；网页表单仅用于回传 URL。
+- 键盘「确定」会打开内置**文本浏览器**：HTTP/HTTPS、重定向、HTML 转文字、标题与触摸滚动；**没有 JavaScript/CSS/图片**，不是 Chromium/WebView。`ys.mihoyo.com` 可打开并显示标题和文本，但动态页面不会完整渲染。
+- 「Skyward 更新」和「禁用 AVB 2.0」现在都在主界面「高级」里；设置页不再放这两项。
 
 ### 4.2 用 adb（可选）
 

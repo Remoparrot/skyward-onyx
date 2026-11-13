@@ -16,9 +16,9 @@
 | --- | --- |
 | 最新 release | [`v0.3.0-onyx.1`](https://github.com/Remoparrot/skyward-onyx/releases/tag/v0.3.0-onyx.1) |
 | 镜像 | `recovery.img` · **104,857,600 字节**（整分区） |
-| SHA-256 | `73016303620c5d59a72b608ba2dd1684bbc888b1ec4620cf3aed0eec26fd760c` |
-| ramdisk | 50,623,471 字节（LZ4）· 1062 个 cpio 条目 |
-| 内含 skyward | 8,655,096 字节 · `0ec8397febf8931e8aafc37bb1e428e7f2c7a1780458cf575187a505164c9a87` |
+| SHA-256 | `714dfc27be9ae76c18366ebd36fc5dff587a9fa4c17873a803d55c8aa1210ba5` |
+| ramdisk | 50,669,556 字节（LZ4）· 1062 个 cpio 条目 |
+| 内含 skyward | 8,655,096 字节 · `fb67d123ac80eae2d71ba9fac706a8e577a2cf3532edda48550a2c1161452629` |
 | 底包 | HyperOS **OS4.0.2.0.XOLCNXM**（Android 17） |
 | 上游 | `kirklin/skyward` @ `ff1668f`（v0.2.0）+ 4 个补丁 |
 | 真机 | ✅ 已刷入 onyx 并验证：触摸服务、`/data` 自动挂载、user 0 CE（`/data/media/0` 与相册 JPEG 可读）、WLAN 自动连接（`CMCC-A9s7-5G`，`192.168.1.227`）、振动驱动；用 `sendevent` 注入触摸验证滑动锁屏；电源键注入验证息屏/点亮后先显示滑动锁屏；唤醒黑屏已修（面板不再 rest/off，息屏只关背光） |
@@ -33,17 +33,21 @@
 | 触摸 | ✅ | 拉起 `/odm/bin/touch_report_debug`，由 `libtouchreport.so` 把 raw 帧转成触摸 |
 | `/data` 设备级解密 | ✅ | qseecomd / keymint / gatekeeper / secure_element / weaver / boot 六个服务就位，开机自动挂载 |
 | user 0 CE（相册 / 微信） | ✅ | 锁屏密码 → gatekeeper 绑定的第二份 protector → SP → CE key；真机验证 JPEG / 微信目录可读 |
-| user 999（第二空间 / 应用分身） | ❌ | 只有 weaver 绑定的 protector，recovery 里没有 eSE 通道 |
+| user 999（第二空间 / 应用分身） | ❌ | 只有 weaver 绑定的 protector，recovery 里没有 eSE 通道；解密页现在只等 user 0，不再被 999 卡住 |
 | adb root | ✅ | recovery 内 adb 是 root，无需手机授权 |
 | 备份 / 安装 / 文件管理 / 终端 | ⚠️ | 上游能力，随镜像提供；未逐项真机验证 |
 | MTP | ⚠️ | 已带 `skyward-mtp.rc`，未逐项验证 |
 | WLAN | ✅ | `qca_cld3_wcn7750` + `rfkill` 从 vendor_dlkm 加载；wpa_supplicant 用 `skyward/wpa-aidl-shim.so` 跳过 recovery 不认的 AIDL 注册；开机自动连接上次网络（密码存 `/metadata`，0600） |
-| Skyward 在线更新 | ✅ | 查 `Remoparrot/skyward-onyx` 的 Release，按 `onyx` 取 zip；需要 WLAN |
+| Skyward 在线更新 | ✅ | 高级 → 「Skyward 更新」；查 `Remoparrot/skyward-onyx` 的 Release，按 `onyx` 取 zip；需要 WLAN |
 | 振动 | ✅ | AW8697（`awinic_haptic`，i2c 5-005a）的 `activate` / `duration` / `gain`；设置页滑杆与触摸反馈走同一路径 |
 | recovery 锁屏 | ✅ | 每次息屏再点亮都先显示图 1 的滑动锁屏（日期 / 时钟 / 电量 / 滑动解锁），解锁回原页面；开机首屏滑动后进解密页；设置 4–8 位 recovery 密码后改为数字键盘；只存 salt + SHA-256 |
 | 双击亮屏 | ✅ | 息屏后 400 ms 内两次点击点亮；设置页可关 |
-| 禁用 AVB 2.0 | ⚠️ | 设置里的「禁用 AVB 2.0」页，写入当前槽位 vbmeta；**按要求未在真机点过** |
+| 下载 | ✅ | 主界面「下载」：输入 URL 或用 `/sdcard/Download/link.txt`；键盘「确定」打开网页，「开始下载」才下载；文件存 `/sdcard/Download`，名字取 URL 最后一段；进度显示网速，可暂停/继续/停止；二维码打开本机网页，另一台手机可扫码回传 URL |
+| 网页（文本） | ⚠️ | 「确定」打开内置文本浏览器：HTTP/HTTPS、重定向、HTML 取字/标题，支持触摸滚动；**不运行 JavaScript/CSS，不显示图片**，不是 Chromium。已打开 `ys.mihoyo.com` 并显示标题/文本 |
+| 禁用 AVB 2.0 | ⚠️ | 高级 → 「禁用 AVB 2.0」页，写入当前槽位 vbmeta；**按要求未在真机点过** |
 | 自动打开解密页 | ✅ | 正常进 recovery 首屏即「解密」，自动打开 `/data`；有 recovery 锁屏时先锁屏 |
+| 记住解锁密码 | ✅ | 解密页「记住密码，下次自动解密」打开后，成功解锁即保存；下次开机自动解密 user 0。密码明文存 `/metadata/skyward/settings.json`（0600），换机/共享镜像前删掉 |
+| 解密完成倒计时 | ✅ | data 打开后「完成」后面显示「完成 · N 秒后进入主界面」，3 秒后自动回主界面；点「完成」可立即走 |
 | 双系统 / OTA / fastbootd | ⚠️ | 未在 onyx 上验证，不建议依赖 |
 
 ---

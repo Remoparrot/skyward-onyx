@@ -14,10 +14,10 @@
 | 版本 | `v0.3.0-onyx.1`（OS4 底包 + WLAN / 振动 / UI） |
 | 构建日期 | 2026-11-13 |
 | 镜像 | `recovery.img` · 104,857,600 字节 |
-| 镜像 SHA-256 | `73016303620c5d59a72b608ba2dd1684bbc888b1ec4620cf3aed0eec26fd760c` |
-| ramdisk | 50,623,471 字节（LZ4）· 1062 个 cpio 条目 |
-| 内含 skyward | 8,655,096 字节 · `0ec8397febf8931e8aafc37bb1e428e7f2c7a1780458cf575187a505164c9a87` |
-| zip（在线更新用） | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,801,113 字节 · `e8df16ad67ef8e9e79fe20f4d5219d67230323d8b6b4ce16ca422e45baa2d636` |
+| 镜像 SHA-256 | `714dfc27be9ae76c18366ebd36fc5dff587a9fa4c17873a803d55c8aa1210ba5` |
+| ramdisk | 50,669,556 字节（LZ4）· 1062 个 cpio 条目 |
+| 内含 skyward | 8,655,096 字节 · `fb67d123ac80eae2d71ba9fac706a8e577a2cf3532edda48550a2c1161452629` |
+| zip（在线更新用） | `skyward-v0.3.0-onyx.1-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,840,075 字节 · `ab7bb0644fb9f04b87559211bad6d636253db057bb5ca2c6e669eee46ecf6f62` |
 | 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · 104,857,600 字节 · `ce53850714fe2ca9ab22600a00e71813df2775dc94244192c83a224d7ecd3357` |
 | 上游 | `kirklin/skyward` @ `ff1668fdb72a46f22152a6540f49728c42081aba`（v0.2.0）+ 0001–0004 |
 | 真机 | ✅ 已刷入 onyx：触摸服务、`/data` 自动挂载、WLAN 自动连接、振动驱动、自动进入解密页；锁屏（每次息屏点亮）已实现，见第 3 节 |
@@ -32,7 +32,7 @@
 | v2 | `9ae3c85e…9dd` | 密度修好；仍无触摸 |
 | v3 | `b1374ccd…b5ee` | 触摸、`/data` 设备级解密修好；user 0 CE 仍锁 |
 | v4 | `b41bee5b…f83f` | user 0 CE 解开；OS3.0.306.0 底包 |
-| v0.3.0-onyx.1 | `73016303…760c` | **当前**；OS4.0.2.0 底包；WLAN / 振动 / 锁屏（每次亮屏）/ 双击亮屏 / 自动解密页 / AVB 页；控制中心已按用户要求删除 |
+| v0.3.0-onyx.1 | `714dfc27…0ba5` | **当前**；OS4.0.2.0 底包；WLAN / 振动 / 锁屏（每次亮屏）/ 双击亮屏 / 自动解密页 / AVB 页；控制中心已按用户要求删除 |
 
 ---
 
@@ -53,6 +53,11 @@
 | recovery 锁屏（启动） | 无 recovery 密码时为图 1 的滑动锁屏（日期 / 时钟 / 电量 / 滑动解锁）；种入 4 位恢复密码后为数字键盘；启动时 `/data` 不打开，滑动/解锁后才进「解密」 |
 | 每次息屏点亮锁屏 | 用 `sendevent` 注入 `pmic_pwrkey` 电源键：息屏后背光 0，再按点亮背光；`App::wake()` 把 `Lock` 压栈，解锁后回原页 |
 | 唤醒黑屏修复 | 第一版 `wake` 后物理屏黑、后台截图却是锁屏页；原因是面板被 `surface.rest()`/`turn_off()` 后本机不恢复。改为息屏只关背光、面板保持 On，唤醒后背光 10926、DPMS On，锁屏帧重新 present |
+| 记住密码 / 自动解密 | 解密页打开「记住密码」并输入手机锁屏密码后成功；重启 recovery，滑动锁屏后日志从 `[0, 999]` 变为 `[999]`，user 0 自动打开，页面显示「data 分区已解密」 |
+| 解密完成倒计时 | 自动解密后截图「完成 · 3 秒后进入主界面」；3 秒后自动回到主界面，主界面已有「下载」行 |
+| 下载页 | 主界面「下载」；键盘「确定」打开文本网页；二维码页面 `http://192.168.1.227:8080/` 可打开并回传 URL；用 `adb reverse` 的本地 HTTP 服务下载 `test.bin` 到 `/sdcard/Download`，内容校验一致 |
+| 文本网页 | 键盘「确定」打开 `https://ys.mihoyo.com`，显示标题《原神》官方网站…和文本；无 JS/CSS/图片，不是 Chromium |
+| 高级页面 | Skyward 更新、禁用 AVB 2.0 已从设置移到高级；设置页不再有这两行 |
 | 锁屏滑动（注入触摸） | 用 `sendevent` 往 `/dev/input/event7` 注入从滑锁轨道左到右的拖动：`/data` 挂载、进入解密页 |
 | 自动连接持久化 | 自动连接之后 settings 中的 `wlan.password` 仍为原密码（修复了首次自动连接会把密码写空的问题） |
 
@@ -65,7 +70,7 @@
 | 项 | 状态 | 说明 |
 | --- | --- | --- |
 | user 0 CE（相册 / 微信） | ✅ | 用用户锁屏密码通过 `skyward data --credential` 验证：`/data/media/0` 真实文件名，`DCIM/Camera` 的 JPEG 可读 |
-| user 999（第二空间 / 应用分身） | ❌ | 只有 weaver 绑定的 protector；recovery 没有 eSE 通道 |
+| user 999（第二空间 / 应用分身） | ❌ | 只有 weaver 绑定的 protector；recovery 没有 eSE 通道；不再作为解密页的等待项 |
 | recovery 锁屏（输入解锁） | ⚠️ | 图 1 的滑动锁屏已用注入触摸验证；开机解锁进解密页，亮屏解锁回原页；4–8 位数字键盘未手动点过 |
 | 双击亮屏 | ⚠️ | 已实现（息屏 400 ms 内两次点击）；有注入触摸手段，但未逐项点过 |
 | 禁用 AVB 2.0 | ⚠️ | 页面与 `avbctl` 调用已实现；**按要求未测试** |
@@ -109,7 +114,7 @@
 ## 6. 发布检查单
 
 - [x] 镜像大小 104,857,600
-- [x] 头部 v4 / kernel 0 / ramdisk 50,623,471
+- [x] 头部 v4 / kernel 0 / ramdisk 50,669,556
 - [x] `system/bin/recovery`、`skyward/system-init`、`skyward/device.toml`、`skyward/wpa-aidl-shim.so` 存在
 - [x] 镜像内二进制与编译产物 sha256 一致
 - [x] 原厂 recovery 的 sha256 与配置 `[stock] recovery` 一致（`ce538507…`）
