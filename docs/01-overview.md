@@ -10,7 +10,7 @@
 [Skyward](https://github.com/kirklin/skyward) 是一个用 Rust 从零写的 Android recovery，不是 TWRP 的分支，也不是 AOSP recovery 的换皮。它有几个和传统 recovery 不同的地方：
 
 - **不基于 AOSP 源码树**：它直接以设备原厂 recovery 镜像为底，替换 `system/bin/recovery` 和少量依赖，再按原分区大小重新打包；
-- **复用原厂的安全世界服务**：qseecomd、keymint、gatekeeper、secure_element、weaver、boot 都由设备的 vendor 分区提供，recovery 只负责把它们拉起来；
+- **复用原厂的安全世界服务**：qseecomd、keymint、gatekeeper、secure_element、weaver、boot 都由设备自己的分区提供；v0.3.1 起由 `skyward-programs` 从安装系统的 `system_ext` / `vendor` / `odm` 读 init 与 VINTF 描述，按手机自己的顺序拉起；
 - **UI 是 HyperOS / miuix 风格**：触摸、深浅色、中文界面；
 - **功能齐全**：解密 data、安装 zip / img、备份恢复、文件管理、终端、MTP、双系统、OTA（具体到某台设备是否可用，要看移植）。
 
@@ -23,7 +23,7 @@
 | 差异 | 影响 |
 | --- | --- |
 | 触摸控制器只回传 raw 帧 | 直接读 `/dev/input/eventN` 收不到触摸，必须拉起小米自己的 `touch_report_debug` |
-| 用户密钥绑在 NXP eSE 的 weaver 插槽 | recovery 里没有 system_server 的 OMAPI 服务，weaver 没法查槽位 |
+| 用户密钥绑在 NXP eSE 的 weaver 插槽 | recovery 里没有 system_server 的 OMAPI 服务（v0.3.1 起上游自带桥并自动起，但 user 0 仍不依赖它） |
 | 但 user 0 还有第二份 gatekeeper 绑定的 protector | 可以绕过 weaver，用同一个锁屏密码解开 CE |
 | 屏幕 1280 × 2772，400 dp 宽 | density 必须是 512，按屏高反推会算成 1109 |
 | 安全世界服务依赖 VINTF fragment | 目录里一个坏文件就会让整份清单变 NULL，所有服务注册失败 |
@@ -35,7 +35,7 @@
 **是**：
 
 - onyx 的设备配置 `devices/onyx.toml`；
-- 相对上游 v0.2.0 的三个补丁（Windows 构建、OMAPI 桥、CE 回退）；
+- 相对上游 v0.3.1 的六个补丁（Windows 构建、CE 回退、配置/WLAN/振动/库路径、下载与更新、UI、版本）；
 - 可复现的构建脚本（取上游、取原厂镜像、编译、打包、校验）；
 - 真机验证记录、设计思路、踩坑、排错、版本记录；
 - 一个可以直接刷的 Release 镜像。
@@ -79,7 +79,7 @@
 | 禁用 AVB 2.0 | ⚠️ | 已实现；按要求未测试 |
 | 双系统 / OTA / fastbootd | ⚠️ | 未验证，不建议依赖 |
 
-「⚠️」表示二进制里有、上游也支持，但**没有在 onyx 上逐项跑过**。不要把它当成「已经能用」对外承诺；v0.3.0-onyx.1 的诚实边界见 [`00-status.md`](00-status.md)。
+「⚠️」表示二进制里有、上游也支持，但**没有在 onyx 上逐项跑过**。不要把它当成「已经能用」对外承诺；v0.3.1-onyx.1 的诚实边界见 [`00-status.md`](00-status.md)。
 
 ## 6. 四次迭代
 
@@ -90,6 +90,7 @@
 | v3 | 改 `touch_report_debug`；补 qseecomd / keymint / gatekeeper / secure_element / weaver / boot | 触摸正常，`/data` 自动解密；CE 仍锁 |
 | v4 | `data.rs` 在 weaver 不可用时回退到 gatekeeper 绑定的 protector | **user 0 CE 解开**；相册、微信可读 |
 | v0.3.0-onyx.1 | OS4 底包；WLAN + 自动连接；AW8697 振动；首屏自动解密；锁屏（每次亮屏）/ 双击亮屏 / AVB 页；控制中心已删 | 真机：`/data` 自动打开、WLAN 自动连、振动驱动；其余见状态页 |
+| v0.3.1-onyx.1 | 同步上游 v0.3.1（UI 状态机、密钥服务自动发现、自带 OMAPI）；onyx 的 WLAN/振动/锁屏/读数/下载全部保留；修复 keymint 缺 `libvndksupport.so` | 真机：`/data` 自动挂载、user 0 CE 自动解开、WLAN 5 GHz 上网、锁屏与读数截图确认；触摸/振动未复测 |
 
 完整哈希与验证见 [`00-status.md`](00-status.md) 和 [`07-changelog.md`](07-changelog.md)。
 
