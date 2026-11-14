@@ -34,7 +34,7 @@ recovery 是**会刷坏分区、会让手机起不来**的东西，比普通 App
 
 ```
 接手确认
-- 当前版本：v0.3.0-onyx.5（recovery.img ac9be2c5…）
+- 当前版本：v0.3.1-onyx.1（recovery.img 27fbfc1c…）
 - 设备与底包：onyx / OS4.0.2.0.XOLCNXM
 - 本次目标：<一句话>
 - 是否需要真机 / 是否会刷机：<是 / 否>
@@ -217,8 +217,11 @@ devices/onyx.toml             设备配置（屏幕、触摸、安全世界服�
 patches/
   README.md                   补丁说明 + 上游 commit
   0001-windows-host-build.patch
-  0002-omapi-se-bridge.patch
-  0003-onyx-ce-fallback.patch
+  0002-onyx-ce-fallback.patch
+  0003-onyx-config-wlan-haptics.patch
+  0004-onyx-updates-downloads.patch
+  0005-onyx-ui.patch
+  0006-onyx-version.patch
 scripts/
   bootstrap.sh                取上游 + 打补丁
   env.sh                      公共环境（NDK / 工具链 / 临时目录）

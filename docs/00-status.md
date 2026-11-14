@@ -2,7 +2,7 @@
 
 > 状态：**现行**
 > 最后更新：2026-11-14
-> 对应版本：`v0.3.0-onyx.5`
+> 对应版本：`v0.3.1-onyx.1`
 > 设备：Redmi Turbo 4 Pro（`onyx`）· 底包 OS4.0.2.0.XOLCNXM（Android 17）
 
 ---
@@ -11,16 +11,16 @@
 
 | 项 | 值 |
 | --- | --- |
-| 版本 | `v0.3.0-onyx.5`（OS4 底包 + WLAN / 振动 / UI + 锁屏模糊与滑块 + 512 并行下载，下载页回归） |
+| 版本 | `v0.3.1-onyx.1`（上游 v0.3.1：新 UI 状态机、密钥服务自动发现、自带 OMAPI；onyx 的 WLAN / 振动 / 锁屏 / 读数 / 下载全部保留） |
 | 构建日期 | 2026-11-14 |
 | 镜像 | `recovery.img` · 104,857,600 字节 |
-| 镜像 SHA-256 | `ac9be2c5f8d9604e2384d57c99f544df3c002c3f65b430ceb0b1f822fc9e0de2` |
-| ramdisk | 50,692,327 字节（LZ4）· 1062 个 cpio 条目 |
-| 内含 skyward | 8,769,040 字节 · `4b712147e584ab227d56f5006187b8306fbb1b9f3b7fbec66c3e7a7e2fc0c846` |
-| zip（在线更新用） | `skyward-v0.3.0-onyx.5-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,860,277 字节 · `6f54c7ec721e7ed25c012a9ddbbd5ce3d9765810ba5cf5a1011e79e5ffbd5c91` |
+| 镜像 SHA-256 | `27fbfc1c442b969fa3134fa9577f83031a34ed0979c0e697cbfa5f805f73cf5f` |
+| ramdisk | 50,668,045 字节（LZ4）· 1062 个 cpio 条目 |
+| 内含 skyward | 8,955,824 字节 · `81e6e4d92b8afa0da5c74c7d626ce1ee87cc6cd8f7990385ac1c10c17b4c66f1` |
+| zip（在线更新用） | 本次未打；在线更新优先取 release 里的裸 `recovery.img`，不需要 zip |
 | 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · 104,857,600 字节 · `ce53850714fe2ca9ab22600a00e71813df2775dc94244192c83a224d7ecd3357` |
-| 上游 | `kirklin/skyward` @ `ff1668fdb72a46f22152a6540f49728c42081aba`（v0.2.0）+ 0001–0008 |
-| 真机 | ✅ 已刷入 onyx：触摸服务、`/data` 自动挂载、WLAN 自动连接、振动驱动、开机直接进解密页（解密前不锁屏）；锁屏背景为上一页的模糊快照（浅色/深色），滑块拖动时背景保持模糊；见第 3 节 |
+| 上游 | `kirklin/skyward` @ `bd34c05`（v0.3.1）+ 0001–0006 |
+| 真机 | ✅ 已刷入 onyx：`/data` 自动挂载、user 0 CE 自动解开（旧版保存的锁屏密码）、WLAN 自动连接 5 GHz 并上网、首页读数、息屏再点亮先出锁屏（模糊快照）、设置页新滑块/开关；触摸与振动未逐项复测，见第 2/3 节 |
 
 发布资产在 [Releases](https://github.com/Remoparrot/skyward-onyx/releases)；仓库内只有源码、补丁、配置和文档。
 
@@ -36,7 +36,8 @@
 | v0.3.0-onyx.2 | `ebed2df2…3060` | 首页机型卡片四列读数；在线更新接受裸 `recovery.img`、支持本地刷入 |
 | v0.3.0-onyx.3 | `d0a67128…60c5` | 更新下载最多 512 连接并行；可用空间读数在解密后补齐；更新页对本地刷入显示进度/结果 |
 | v0.3.0-onyx.4 | `239d0fbb…f3ea` | 旧版；「下载」页改成图形浏览器（HTML/CSS 子集 + 图片 + 链接）；URL 下载走 512 并行；关于本机署名加上 Remoparrot。浏览器在 onyx.5 删除 |
-| v0.3.0-onyx.5 | `ac9be2c5…0de2` | **当前**；删掉浏览器、下载页回归；锁屏背景模糊 + 强度滑杆 + 滑块拖动修复（浅色/深色）；5 GHz WLAN（监管域/扫描/PMF）；解密前不锁屏；同日重建：调色恢复采样原值（撤销 P3 + 饱和度 0.68 校正）；不再有色彩风格切换 |
+| v0.3.0-onyx.5 | `ac9be2c5…0de2` | 删掉浏览器、下载页回归；锁屏背景模糊 + 强度滑杆 + 滑块拖动修复（浅色/深色）；5 GHz WLAN（监管域/扫描/PMF）；解密前不锁屏；同日重建：调色恢复采样原值（撤销 P3 + 饱和度 0.68 校正）；不再有色彩风格切换 |
+| v0.3.1-onyx.1 | `27fbfc1c…cf5f` | **当前**；上游同步到 v0.3.1（UI 状态机拆分、`skyward-programs` 自动发现密钥服务、自带 `skyward-omapi`）；onyx 的 WLAN / 振动 / 锁屏模糊与滑块 / 首页读数 / 下载页全部移植；补丁 6 个；同日修复 keymint 因缺 `libvndksupport.so` 启动失败（库路径加安装系统 `/system/lib64` 与 bootstrap） |
 
 ---
 
@@ -75,6 +76,22 @@
 | 自动连接持久化 | 自动连接之后 settings 中的 `wlan.password` 仍为原密码（修复了首次自动连接会把密码写空的问题） |
 
 > 早期测试中两次黑屏重启，均对应执行了 `setprop ctl.stop recovery`；之后不再使用该命令。
+
+### v0.3.1-onyx.1 复验（2026-11-14）
+
+| 项 | 证据 |
+| --- | --- |
+| 版本 | `dmesg`：`skyward: onyx 0.3.1-onyx.1 recovery up, misc command "boot-recovery"`；`/tmp/skyward info`：`recovery = 0.3.1-onyx.1` |
+| 密钥服务自动发现 | `skyward keys`：qseecomd / ssgtzd / hlosminkdaemon / keymint / gatekeeper / secure_element(eSE1) / OMAPI / weaver / boot-control 共 8 个程序；`dmesg`：`keymint ... ready with IKeyMintDevice/default` |
+| `/data` | `dmesg`：`/dev/block/dm-9 holds f2fs at /data` |
+| user 0 CE | `dmesg`：`the users whose own files are still closed: [999]`（user 0 已开）；`ls /sdcard/DCIM/Camera` 列出真实 JPEG（`IMG_20260713_143045.jpg` 等，大小正常） |
+| 自动解密 | 未在本次手动输入密码；旧版本存在 `/metadata/skyward/settings.json` 的「记住密码」，新版本启动后自动解开 user 0（说明 0.3.0 → 0.3.1 的 settings 兼容） |
+| WLAN 自动连接（5 GHz） | `iw dev wlan0 link`：`SSID: CMCC-A9s7-5G`、`freq: 5260`；`dmesg`：`wlan0 has 192.168.1.227`、`the network on wlan0 reaches the internet` |
+| 首页读数 | 截图：`B / 当前槽位`、`已解密 / 数据分区`、`175.6GB / 可用空间`、`67% / 充电中` |
+| 锁屏 | 电源键注入息屏→点亮：截图显示日期 / 时钟 / 电量 / 模糊快照 /「滑动解锁」胶囊；解锁回原页 |
+| 设置页 | 截图：浅色/深色、屏幕亮度、锁屏背景模糊滑杆（「中」）、双击亮屏开关都在 |
+| 关于本机 | 截图：`0.3.1-onyx.1`、`© 2026 Kirk Lin & Remoparrot` |
+| 未验证 | 触摸服务未重新注入复测（0.3.0 已验证）；振动未听感复测；下载页/网页页/AVB 页未点；纯数字键盘锁屏未点 |
 
 ---
 
@@ -118,7 +135,7 @@
 | 组件 | 版本 |
 | --- | --- |
 | 宿主 | Windows 10/11 + MSYS2 bash |
-| Rust | 1.99.1 `stable-x86_64-pc-windows-gnu`，target `aarch64-linux-android` |
+| Rust | 1.100.0 `1.100.0-x86_64-pc-windows-gnu`，target `aarch64-linux-android` |
 | Android NDK | r29（29.0.14206865） |
 | MinGW-w64 | gcc 16.2.0 + binutils 2.47 |
 | lz4 | 1.10.0（PATH） |
@@ -131,11 +148,11 @@
 ## 6. 发布检查单
 
 - [x] 镜像大小 104,857,600
-- [x] 头部 v4 / kernel 0 / ramdisk 50,692,327
+- [x] 头部 v4 / kernel 0 / ramdisk 50,668,045
 - [x] `system/bin/recovery`、`skyward/system-init`、`skyward/device.toml`、`skyward/wpa-aidl-shim.so` 存在
 - [x] 镜像内二进制与编译产物 sha256 一致
 - [x] 原厂 recovery 的 sha256 与配置 `[stock] recovery` 一致（`ce538507…`）
-- [x] 真机：触摸服务 / `/data` 自动打开 / user 0 CE / WLAN 自动连接 / 振动驱动
+- [x] 真机：`/data` 自动打开 / user 0 CE / WLAN 自动连接（5 GHz）/ 首页读数 / 锁屏（本版未复测触摸与振动）
 - [x] `SHA256SUMS` 已更新
 - [x] `docs/07-changelog.md` 顶部已记录
 - [x] README 版本 / 哈希表已更新

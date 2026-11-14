@@ -1,7 +1,7 @@
 # 构建
 
 > 状态：**现行**
-> 对应版本：`v0.3.0-onyx.5`
+> 对应版本：`v0.3.1-onyx.1`
 > 参考环境：Windows 10/11 + MSYS2 bash；Linux 理论可行但未实测。
 
 ---
@@ -10,7 +10,7 @@
 
 | 组件 | 版本 / 位置 | 用途 |
 | --- | --- | --- |
-| Rust | 1.99.1，宿主 `x86_64-pc-windows-gnu`，target `aarch64-linux-android` | 编手机侧二进制 + 宿主打包器 |
+| Rust | 1.100.0，宿主 `x86_64-pc-windows-gnu`，target `aarch64-linux-android` | 编手机侧二进制 + 宿主打包器（上游 `rust-toolchain.toml` 钉 1.100.0） |
 | Android NDK | r29（29.0.14206865） | 交叉编译手机侧 |
 | MinGW-w64 | gcc 16.2.0 + binutils 2.47 | Windows 上链接宿主 `skyward-pack` |
 | lz4 | 1.10.0，在 `PATH` 上 | 打包 ramdisk |
@@ -24,8 +24,8 @@
 
 ```powershell
 # Rust（gnu 宿主 + Android target）
-rustup toolchain install stable-x86_64-pc-windows-gnu --profile minimal
-rustup target add aarch64-linux-android --toolchain stable-x86_64-pc-windows-gnu
+rustup toolchain install 1.100.0-x86_64-pc-windows-gnu --profile minimal
+rustup target add aarch64-linux-android --toolchain 1.100.0-x86_64-pc-windows-gnu
 
 # Rust 的 bin 目录进 PATH
 $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
@@ -56,8 +56,8 @@ scripts/bootstrap.sh
 它做三件事：
 
 1. `git clone https://github.com/kirklin/skyward.git vendor/skyward`；
-2. 检出固定 commit `ff1668fdb72a46f22152a6540f49728c42081aba`（v0.2.0）；
-3. 按顺序应用 `patches/0001`–`0004`，并写 `vendor/skyward/.onyx-patched` 标记。
+2. 检出固定 commit `bd34c05`（v0.3.1）；
+3. 按顺序应用 `patches/0001`–`0006`，并写 `vendor/skyward/.onyx-patched` 标记。
 
 重来一遍：
 
@@ -135,7 +135,7 @@ scripts/build-image.sh
 输出：
 
 ```
-out/skyward-v0.3.0-onyx.1-OS4.0.2.0.XOLCNXM.img
+out/skyward-v0.3.1-onyx.1-OS4.0.2.0.XOLCNXM.img
 ```
 
 脚本会检查大小必须正好 `104857600`，并打印 SHA-256。
@@ -143,7 +143,7 @@ out/skyward-v0.3.0-onyx.1-OS4.0.2.0.XOLCNXM.img
 校验：
 
 ```sh
-scripts/verify-image.sh out/skyward-v0.3.0-onyx.1-OS4.0.2.0.XOLCNXM.img
+scripts/verify-image.sh out/skyward-v0.3.1-onyx.1-OS4.0.2.0.XOLCNXM.img
 ```
 
 它会检查：
@@ -157,9 +157,9 @@ scripts/verify-image.sh out/skyward-v0.3.0-onyx.1-OS4.0.2.0.XOLCNXM.img
 
 ```
 大小：104857600 字节
-header v4  kernel 0 bytes  ramdisk 50625278 bytes  OsVersionPatch(0.0.0, 2000-00)
+header v4  kernel 0 bytes  ramdisk 50668045 bytes  OsVersionPatch(0.0.0, 2000-00)
 ramdisk 条目：1062
-SHA-256：714dfc27be9ae76c18366ebd36fc5dff587a9fa4c17873a803d55c8aa1210ba5
+SHA-256：27fbfc1c442b969fa3134fa9577f83031a34ed0979c0e697cbfa5f805f73cf5f
 ```
 
 ---
@@ -174,7 +174,7 @@ SHA-256：714dfc27be9ae76c18366ebd36fc5dff587a9fa4c17873a803d55c8aa1210ba5
 4. 加 `system/bin/{7za,avbctl,resetprop,zstd}` 符号链接（都指向 recovery，按 argv[0] 分派）；
 5. 加 `skyward/{device.toml,system-init,字体,字体许可}`；
 6. 改 `prop.default`：`ro.secure=0`、`ro.adb.secure=0`、`ro.debuggable=1`、`ro.ota.allow_downgrade=true`；
-7. `--extra RAMDISK_PATH=HOST_PATH` 额外加文件（本仓库用它把 `skyward/wpa-aidl-shim.so` 放进 ramdisk）；
+7. `--extra RAMDISK_PATH=HOST_PATH` 额外加文件（本仓库用它把 `skyward/wpa-aidl-shim.so` 放进 ramdisk）；Windows 上打包器用 `--no-default-features` 编译，不编需要 `skyward-programs` 的 `described` 子命令；
 8. 重压 ramdisk（LZ4 legacy 帧），按原分区大小补齐，写未签名 AVB footer，`OriginalImageSize` 指向真正内容大小。
 
 对应源码（上游）：
@@ -207,7 +207,7 @@ link: extra operand '...'
 解法：`scripts/env.sh` 已强制：
 
 ```sh
-export RUSTUP_TOOLCHAIN=stable-x86_64-pc-windows-gnu
+export RUSTUP_TOOLCHAIN=1.100.0-x86_64-pc-windows-gnu
 ```
 
 ### 7.2 `dlltool` 在 `%TEMP%` 建不了临时文件
@@ -281,7 +281,7 @@ Cannot create temporary file in C:\Users\...\AppData\Local\Temp\: Permission den
 | system-init（手机） | `build/system-init/aarch64-linux-android/release/system-init` | ❌ |
 | skyward-pack（宿主） | `build/host/release/skyward-pack[.exe]` | ❌ |
 | 原厂 recovery | `stock/recovery.img` | ❌（Release 提供） |
-| 整分区镜像 | `out/skyward-v0.3.0-onyx.1-OS4.0.2.0.XOLCNXM.img` | ❌（Release 提供） |
+| 整分区镜像 | `out/skyward-v0.3.1-onyx.1-OS4.0.2.0.XOLCNXM.img` | ❌（Release 提供） |
 | zip | `out/*.zip`（可选，手动打） | ❌ |
 
 仓库只保留源码、补丁、配置、脚本、文档和 `SHA256SUMS`。

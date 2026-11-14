@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# 取回固定版本的 Skyward 源码，并打上本仓库的三个补丁。
+# 取回固定版本的 Skyward 源码，并打上本仓库的设备补丁。
 #
 #   UPSTREAM_URL     默认 https://github.com/kirklin/skyward.git
-#   UPSTREAM_COMMIT  默认 ff1668fdb72a46f22152a6540f49728c42081aba（v0.2.0）
+#   UPSTREAM_COMMIT  默认 bd34c05（v0.3.1）
 #   SKYWARD_SRC      默认 <repo>/vendor/skyward
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UPSTREAM_URL="${UPSTREAM_URL:-https://github.com/kirklin/skyward.git}"
-UPSTREAM_COMMIT="${UPSTREAM_COMMIT:-ff1668fdb72a46f22152a6540f49728c42081aba}"
+UPSTREAM_COMMIT="${UPSTREAM_COMMIT:-bd34c05}"
 SKYWARD_SRC="${SKYWARD_SRC:-$ROOT/vendor/skyward}"
 
 if [[ -f "$SKYWARD_SRC/.onyx-patched" ]]; then

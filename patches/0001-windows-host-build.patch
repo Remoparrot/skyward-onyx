@@ -55,3 +55,92 @@ index a266fa3..a724589 100644
  mod tests {
      use super::*;
  
+diff --git a/crates/skyward-pack/Cargo.toml b/crates/skyward-pack/Cargo.toml
+index cc4f55a..227f19e 100644
+--- a/crates/skyward-pack/Cargo.toml
++++ b/crates/skyward-pack/Cargo.toml
+@@ -9,6 +9,13 @@ publish = false
+ name = "skyward-pack"
+ path = "src/main.rs"
+ 
++[features]
++# The `described` subcommand reads a phone's stock build on its server, which
++# needs the crates that also run on the phone. A host that cannot build those,
++# as Windows, leaves it out and builds the packer without it.
++default = ["described"]
++described = ["dep:skyward-programs"]
++
+ [dependencies]
+ anyhow = { workspace = true }
+ clap = { version = "4.5.51", features = ["derive"] }
+@@ -20,7 +27,7 @@ rust-fs-erofs = "0.6.0"
+ sha2 = "0.10.9"
+ skyward-bootimg = { path = "../skyward-bootimg" }
+ skyward-config = { path = "../skyward-config" }
+-skyward-programs = { path = "../skyward-programs" }
++skyward-programs = { path = "../skyward-programs", optional = true }
+ tempfile = "3.27.0"
+ # Takes the stock recovery partition out of a full update package on its
+ # server, reading only what that partition takes, and reads the other
+diff --git a/crates/skyward-pack/src/main.rs b/crates/skyward-pack/src/main.rs
+index a4b9a90..2fe45be 100644
+--- a/crates/skyward-pack/src/main.rs
++++ b/crates/skyward-pack/src/main.rs
+@@ -7,6 +7,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
+ use std::path::{Path, PathBuf};
+ 
+ mod avb;
++#[cfg(feature = "described")]
+ mod described;
+ 
+ use skyward_bootimg::{BootImage, Ramdisk};
+@@ -68,6 +69,10 @@ enum Cmd {
+         /// The monospaced typeface's licence, which goes with it.
+         #[arg(long)]
+         mono_license: PathBuf,
++        /// A file to add, as RAMDISK_PATH=HOST_PATH, where the ramdisk path
++        /// starts at the recovery's root as its entries are named.
++        #[arg(long = "extra", value_name = "RAMDISK_PATH=HOST_PATH")]
++        extra: Vec<String>,
+         #[arg(long)]
+         out: PathBuf,
+     },
+@@ -92,6 +97,7 @@ enum Cmd {
+     /// under `out` as the partition and then the path in it. Only the
+     /// parts of the package that hold these files are downloaded, each
+     /// checked against the package's own sum of it.
++    #[cfg(feature = "described")]
+     Described {
+         /// The device configuration, devices/<codename>.toml.
+         #[arg(long)]
+@@ -125,7 +131,7 @@ fn main() -> Result<()> {
+             img.kernel = BootImage::read(&kernel)?.kernel;
+             write(&out, &img, &img.to_bytes()?)
+         }
+-        Cmd::Recovery { stock, binary, system_init, config, font, mono, mono_license, out } => {
++        Cmd::Recovery { stock, binary, system_init, config, font, mono, mono_license, extra, out } => {
+             let size = partition_size(&stock)?;
+             let mut img = BootImage::read(&stock)?;
+             let mut rd = Ramdisk::decode(&img.ramdisk)?;
+@@ -149,6 +155,13 @@ fn main() -> Result<()> {
+             rd.add(paths::FONT, 0o644, read(&font)?)?;
+             rd.add(paths::MONO, 0o644, read(&mono)?)?;
+             rd.add(paths::MONO_LICENSE, 0o644, read(&mono_license)?)?;
++            for file in &extra {
++                let (dest, host) = file
++                    .split_once('=')
++                    .with_context(|| format!("{file} is not RAMDISK_PATH=HOST_PATH"))?;
++                ensure!(dest.starts_with("skyward/") && !dest.contains(".."), "{dest} is not a path in the recovery's own folder");
++                rd.add(dest, 0o644, std::fs::read(host).with_context(|| format!("read {host}"))?)?;
++            }
+             // A stock ramdisk may run logd without any scheduling profiles,
+             // and logd stops as soon as it cannot find the one it asks for.
+             if rd.find(paths::TASK_PROFILES).is_none() {
+@@ -180,6 +193,7 @@ fn main() -> Result<()> {
+                 None => Ok(()),
+             }
+         }
++        #[cfg(feature = "described")]
+         Cmd::Described { config, partitions, out } => {
+             let stock = skyward_config::DeviceConfig::load(&config)?.stock.with_context(|| format!("{} names no stock build", config.display()))?;
+             let partitions = if partitions.is_empty() { skyward_programs::phone::PARTITIONS.map(str::to_string).to_vec() } else { partitions };

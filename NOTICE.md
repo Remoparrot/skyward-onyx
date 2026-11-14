@@ -6,7 +6,7 @@
 
 - 项目：Skyward
 - 仓库：https://github.com/kirklin/skyward
-- 版本：v0.2.0（commit `ff1668fdb72a46f22152a6540f49728c42081aba`）
+- 版本：v0.3.1（commit `bd34c05`，`chore: release 0.3.1`）
 - 许可：GPL-3.0（本仓库的 `LICENSE` 即上游同一份 GPL-3.0）
 
 `patches/` 里的补丁是对上游源码的修改；`scripts/bootstrap.sh` 会取回固定版本的上游源码再应用补丁。发布镜像中包含的 `skyward` 二进制由这份「上游 + 补丁」编译而来。
@@ -24,7 +24,11 @@
 
 ## Android 接口
 
-`patches/0002-omapi-se-bridge.patch` 按 AOSP 的 AIDL 布局实现了 `android.se.omapi` 的最小子集，并对接 `android.hardware.secure_element`。这些接口定义归 AOSP（Apache-2.0）；补丁只包含为让 NXP weaver 能在 recovery 里查询 eSE 所需的方法编号与 parcel 布局。
+`android.se.omapi` 与 `android.hardware.secure_element` 的最小实现来自上游 v0.3.1 的 `crates/skyward-omapi` 与 `crates/skyward-binder/src/serve.rs`；这些接口定义归 AOSP（Apache-2.0）。本仓库的补丁不再包含 OMAPI 实现。0.3.0 及以前由 `patches/0002-omapi-se-bridge.patch` 提供，已随版本升级退休。
+
+## 手机自己的程序
+
+0.3.1 起，qseecomd / keymint / gatekeeper / secure_element / weaver / boot-control 等程序由上游 `skyward-programs` 从手机安装系统的 `system_ext` / `vendor` / `odm` 分区**在运行时读取并启动**，本仓库不复制、不分发这些二进制；`devices/onyx.toml` 只保留触摸服务。
 
 ## 设备固件
 

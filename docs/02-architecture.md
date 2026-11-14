@@ -1,7 +1,7 @@
 # 架构
 
 > 状态：**现行**
-> 对应版本：`v0.3.0-onyx.1`
+> 对应版本：`v0.3.1-onyx.1`
 > 读者：要改代码 / 要判断某个现象该看哪一层的人。
 
 ---
@@ -13,7 +13,7 @@ Skyward 的构建分两半：**宿主侧**把上游 Rust 源码编成打包器 `
 ```mermaid
 flowchart LR
   OTA["官方全量包<br/>onyx-ota_full-OS4.0.2.0.XOLCNXM"] -->|"skyward-pack stock"| STOCK["stock/recovery.img<br/>104857600 B"]
-  UP["kirklin/skyward @ ff1668f<br/>+ patches/*.patch"] -->|"build-phone"| BIN["skyward<br/>aarch64-linux-android"]
+  UP["kirklin/skyward @ bd34c05 (v0.3.1)<br/>+ patches/*.patch"] -->|"build-phone"| BIN["skyward<br/>aarch64-linux-android"]
   UP -->|"build-system-init"| SYSINIT["system-init<br/>static aarch64"]
   STOCK --> PACK["skyward-pack recovery"]
   BIN --> PACK
@@ -35,7 +35,7 @@ flowchart LR
 | --- | --- |
 | boot header | v4 |
 | kernel | 0 字节（内核由 boot 分区提供，和原厂 recovery 一致） |
-| ramdisk | 50,625,278 字节，LZ4 legacy 帧 |
+| ramdisk | 50,668,045 字节，LZ4 legacy 帧 |
 | ramdisk 解压后 | 以 `verify-image.sh` / AVB footer 的实际值为准 |
 | cpio 条目 | 1062（原厂 1051 + 新增 11） |
 | 分区大小 | 104,857,600 字节（100 MiB） |
@@ -47,10 +47,10 @@ flowchart LR
 
 | 条目 | 变化 | 说明 |
 | --- | --- | --- |
-| `system/bin/recovery` | 替换：stock → **8,655,096** 字节 | Skyward 本体（aarch64 PIE，解释器 `/system/bin/linker64`） |
+| `system/bin/recovery` | 替换：stock → **8,955,824** 字节 | Skyward 本体（aarch64 PIE，解释器 `/system/bin/linker64`） |
 | `skyward/` | 新增目录 | 设备配置、字体、system-init |
-| `skyward/device.toml` | 新增 8,367 字节 | `devices/onyx.toml` 的副本，运行时读 |
-| `skyward/system-init` | 新增 1,038,104 字节 | 静态可执行，安装第二系统时用 |
+| `skyward/device.toml` | 新增 4,818 字节 | `devices/onyx.toml` 的副本，运行时读 |
+| `skyward/system-init` | 新增 789,032 字节 | 静态可执行，安装第二系统时用 |
 | `skyward/wpa-aidl-shim.so` | 新增 5,312 字节 | `LD_PRELOAD` 给 vendor supplicant，应答 recovery 不认的 AIDL 注册 |
 | `skyward/MiSansVF.ttf` | 新增 20,093,424 字节 | UI 字体 |
 | `skyward/KirkMono-Regular.ttf` | 新增 270,456 字节 | 终端字体 |
@@ -60,46 +60,53 @@ flowchart LR
 | `system/etc/task_profiles.json` | 新增 1,709 字节 | 性能配置 |
 | `prop.default` | 追加 | `ro.secure=0`、`ro.adb.secure=0`、`ro.debuggable=1`、`ro.ota.allow_downgrade=true` |
 
-> OS4 原厂 stock ramdisk 是 30,175,673 字节 / 1051 条；v0.3.0-onyx.1 是 50,625,278 字节 / 1062 条。旧 README 里写的「998 / 996 条」是 v2/v3 时期的数字；以 `skyward-pack list` 为准。
+> OS4 原厂 stock ramdisk 是 30,175,673 字节 / 1051 条；v0.3.1-onyx.1 是 50,668,045 字节 / 1062 条。旧 README 里写的「998 / 996 条」是 v2/v3 时期的数字；以 `skyward-pack list` 为准。
 
 ---
 
 ## 3. 启动与服务
 
-init 仍然是原厂 recovery 的 init，它启动的 `system/bin/recovery` 变成了 Skyward。Skyward 读 `skyward/device.toml`，按 `[[service]]` 拉起设备自己的 daemon，并用 `ready_property` / `ready_service` 等它们就绪：
+init 仍然是原厂 recovery 的 init，它启动的 `system/bin/recovery` 变成了 Skyward。Skyward 读 `skyward/device.toml`：
+
+1. 先按 `[[service]]` 拉起配置里写死的程序（onyx 只剩触摸服务）；
+2. 再从**安装系统的分区**读 init 脚本与 VINTF 描述，发现「用手机密钥的那批程序」，按手机自己的顺序拉起：`skyward-programs` 负责解析，`crates/skyward/src/keys.rs` 负责运行时。
 
 ```mermaid
 flowchart TB
   INIT["原厂 init"] --> REC["system/bin/recovery<br/>= skyward"]
-  REC --> TOUCH["touch_report_debug<br/>/odm/bin"]
-  REC --> QSEE["qseecomd<br/>/vendor/bin"]
-  QSEE --> KM["keymint-qti<br/>IKeyMintDevice/default"]
-  REC --> GK["gatekeeper-qti<br/>IGatekeeper/default"]
-  REC --> SE["secure_element qti<br/>ISecureElement/eSE1"]
-  REC --> WV["weaver nxp<br/>IWeaver/default"]
-  REC --> BOOT["boot control qti<br/>IBootControl/default"]
-  REC --> MTP["skyward-mtp.rc → mtp"]
-  WV -. "OMAPI（实验）" .-> OM["skyward omapi"]
-  OM -. binder .-> SE
+  REC --> TOUCH["touch_report_debug<br/>/odm/bin（配置写死）"]
+  REC --> DISCOVERY["skyward-programs<br/>读 system_ext / vendor / odm"]
+  DISCOVERY --> QSEE["qseecomd"]
+  DISCOVERY --> SSGTZ["ssgtzd"]
+  DISCOVERY --> HLOS["hlosminkdaemon"]
+  DISCOVERY --> KM["keymint-qti<br/>IKeyMintDevice/default"]
+  DISCOVERY --> GK["gatekeeper-qti<br/>IGatekeeper/default"]
+  DISCOVERY --> SE["secure_element qti<br/>ISecureElement/eSE1"]
+  DISCOVERY --> OM["skyward-omapi<br/>android.se.omapi（Skyward 自己服务）"]
+  DISCOVERY --> WV["weaver nxp<br/>IWeaver/default"]
+  DISCOVERY --> BOOT["boot control qti<br/>IBootControl/default"]
 ```
 
-`devices/onyx.toml` 里一共 7 个服务：
+onyx 上 `skyward keys` 实际发现的顺序（0.3.1-onyx.1 真机）：
 
-| 服务 | 路径 | 作用 |
+| 程序 | 用户/组 | 就绪条件 |
 | --- | --- | --- |
-| `touch_report_debug` | `/odm/bin/` | 读 `/dev/xiaomi-touch` raw 帧，转成触摸 |
-| `qseecomd` | `/vendor/bin/` | 安全世界通道；`vendor.sys.listeners.registered` 就绪 |
-| `keymint-qti` | `/vendor/bin/hw/` | 解 data 的密钥服务；同时注册 secureclock / sharedsecret / remotelyprovisioned |
-| `gatekeeper-qti` | `/vendor/bin/hw/` | 校验锁屏凭据；VINTF 用 `manifest_sun.xml` |
-| `secure_element qti` | `/vendor/bin/hw/` | eSE1 读卡器；weaver 的底层通道 |
-| `weaver nxp` | `/odm/bin/hw/` | NXP weaver HAL；`ese_weaver.so` |
-| `boot control qti` | `/vendor/bin/hw/` | 切 slot / 重启到系统 |
+| `/vendor/bin/qseecomd` | root / root drmrpc | `vendor.sys.listeners.registered`（带 socket `notify-topology`） |
+| `/vendor/bin/ssgtzd` | system / system oem_2912 wakelock | 无（两个 socket） |
+| `/vendor/bin/hlosminkdaemon` | system / system | 无（socket `hlos_mink_opener`） |
+| `/vendor/bin/hw/android.hardware.security.keymint-service-qti` | system / system drmrpc | `...IKeyMintDevice/default`，另注册 secureclock / sharedsecret / remotelyprovisioned |
+| `/vendor/bin/hw/android.hardware.gatekeeper-service-qti` | system / system | `...IGatekeeper/default` |
+| `/vendor/bin/hw/android.hardware.secure_element-service.qti` | system / nfc system | `...ISecureElement/eSE1` |
+| `android.se.omapi.ISecureElementService/default` | — | Skyward 自己服务的 OMAPI 桥 |
+| `/odm/bin/hw/android.hardware.weaver-service.nxp-qti` | vendor_nxp_weaver / vendor_nxp_weaver | `...IWeaver/default`（WAKE_ALARM） |
+| `/vendor/bin/hw/android.hardware.boot-service.qti` | root / root | `...IBootControl/default` |
 
 安全性相关的点：
 
-- `gatekeeper` 和 `secure_element` 的 VINTF 描述不在 recovery 自己的 manifest 目录里，配置用 `description = ...` 单独交给它们；
-- `weaver` 的 manifest 把接口名和实例名分开写，不能靠注册名反推，所以也用 `description`；
-- `/system/etc/vintf/manifest/` 里不能留任何坏文件——一个坏文件会让整份清单变 NULL，所有服务注册失败（见 [`06-pitfalls.md`](06-pitfalls.md)）。
+- 这些程序从**安装系统**的 `system_ext` / `vendor` / `odm` 分区读，recovery 只读挂载，不改手机上的文件；
+- 程序加载的库目录：`/system/lib64`、`/vendor/lib64`，以及 `0003` 补上的 `/vendor/lib64/hw`、`/mnt/system/system/lib64`、`/mnt/system/system/lib64/bootstrap`。Android 17 recovery 没有 `libvndksupport.so`，不加这一条 keymint 会 exit 1（见 [`06-pitfalls.md`](06-pitfalls.md)）；
+- `/system/etc/vintf/manifest/` 里不能留任何坏文件——一个坏文件会让整份清单变 NULL，所有服务注册失败；
+- 配置里只剩触摸服务：`[[service]]` 只有一个 `touch_report_debug`（读 `/dev/xiaomi-touch` raw 帧，经 `libtouchreport.so` 合成触摸事件）。
 
 ---
 
@@ -166,34 +173,22 @@ v4 的补丁只改 `data.rs` 一个文件：把 `protector()` 拆成 `protector_
 
 ---
 
-## 5. OMAPI 桥（实验，非 v4 必需）
+## 5. OMAPI 桥（上游自带，非 user 0 必需）
 
-`patches/0002` 给 `skyward-binder` 补了**服务端**能力：接收 `BR_TRANSACTION`、回 `BC_REPLY`、在等待答复时处理对方回调、传递 binder 对象。然后 `crates/skyward/src/omapi.rs` 注册：
+0.3.0 时我们自己用 `patches/0002` 给 binder 补服务端，再写 `omapi.rs`；**0.3.1 起这两样都在上游**：
+
+- `crates/skyward-binder/src/serve.rs` 提供服务端（收 `BR_TRANSACTION`、回 `BC_REPLY`、等回调、传 binder 对象）；
+- `crates/skyward-omapi/` 实现 `android.se.omapi.ISecureElementService/default`，把 `getReaders` / `openSession` / `transmit` 等转发到 `android.hardware.secure_element.ISecureElement/eSE1`；
+- 发现流程里有一个 `serve android.se.omapi.ISecureElementService/default` 步骤，keymint 那批程序就绪后自己起桥。
+
+真机日志（0.3.1-onyx.1）：
 
 ```
-android.se.omapi.ISecureElementService/default
+skyward: omapi: have the secure element's service start: the service refused the call with its error 1
+skyward: android.se.omapi.ISecureElementService/default is served, with a reader for each of 1 secure elements: eSE1
 ```
 
-把 weaver 的 `getReaders` / `getReader` / `openSession` / `openBasicChannel` / `transmit` 等方法转发到已经运行的：
-
-```
-android.hardware.secure_element.ISecureElement/eSE1
-```
-
-它有两个 CLI 入口：
-
-```sh
-skyward omapi   # 起桥接服务
-skyward se      # 只问 SE HAL「你是什么、在不在」，不需要凭据
-```
-
-但 v4 **没有**把它接进解密主路径：
-
-- 它只是 `skyward` 的子命令，不会被 init 自动启动；
-- weaver 通过它查询槽位时，SE HAL 的 `init()` 会卡住（eSE TA 未起来），历史测试中触发过黑屏重启；
-- user 0 已经有 gatekeeper 回退，不需要 eSE。
-
-保留它的原因：user 999 只有 weaver 绑定的 protector，将来要解 999 只能走这条路；同时 `skyward se` 是排查 eSE 的有用探针。**不要**在没有真机看护的情况下把它接到开机流程里。
+user 0 仍然走 `0002` 的 gatekeeper 回退，不依赖 OMAPI；保留桥的目的是 user 999（只有 weaver 绑定的 protector）与排错。**不要**在没看护时把 user 999 直接接到主流程里。
 
 ---
 
@@ -248,14 +243,14 @@ AW8697（`awinic_haptic`）在 i2c `5-005a`，input `event5` 有 FF，但它的�
 
 | 补丁 | 文件 | 改了什么 | 为什么 |
 | --- | --- | --- | --- |
-| `0001-windows-host-build.patch` | `crates/skyward-bootimg/src/ramdisk.rs` | 给 `Ramdisk::unpack` / `c_path` / `set_time` 及 imports 加 `#[cfg(unix)]`，测试模块改成 `#[cfg(all(test, unix))]` | 这些函数只在 Unix 上成立；宿主打包器只走内存里的 cpio，不需要它们。不加就无法在 Windows 上编 `skyward-pack` |
-| `0002-omapi-se-bridge.patch` | `crates/skyward-binder/src/{driver,parcel,service}.rs` | binder 服务端：收 `BR_TRANSACTION`、回 `BC_REPLY`、等待期间处理回调、传 binder 对象、注册服务时 stability=3 | weaver 只走 OMAPI；recovery 没有 system_server 的 `omapiSeService`，只能自己起一个 |
-|  | `crates/skyward/src/main.rs` | 加 `Omapi` / `Se` 两个子命令 | 手动起桥 / 探针，不进自动流程 |
-|  | `crates/skyward/src/omapi.rs`（新文件） | `android.se.omapi` 的最小子集，转发到 SE HAL | 让 NXP weaver 能在 recovery 里查 eSE 槽位 |
-| `0003-onyx-ce-fallback.patch` | `crates/skyward-crypto/src/data.rs` | 拆 `protector_ids` / `protector_named`；`open_user_files` 在 `WeaverUnusable` 时回退；抽出 `open_with_protector` | onyx user 0 有第二份 gatekeeper 绑定的 protector，不需要 weaver 就能拿 SP |
-| `0004-onyx-v0.3.0-wifi-ui.patch` | 16 个文件（config / net / pack / UI / skyward） | OS4 路径校验、WLAN preload + EBUSY 重试 + 自动连接、AW8697 sysfs 振动、锁屏（每次亮屏）/ 双击亮屏 / AVB 页、Skyward 更新仓库、`--extra` | 本次 v0.3.0 的全部代码；细节见 `patches/README.md` |
+| `0001-windows-host-build.patch` | `skyward-bootimg/src/ramdisk.rs`、`skyward-pack/{Cargo.toml,src/main.rs}` | 给 Unix-only 函数加 `#[cfg(unix)]`；把 `described` 子命令做成 feature 门控 | 宿主打包器只走内存 cpio；`described` 依赖的 `skyward-programs` 在 Windows 上编不过 |
+| `0002-onyx-ce-fallback.patch` | `skyward-crypto/src/data.rs` | 拆 `protector_ids` / `protector_named`；`open_user_files` 在 `WeaverUnusable` 时回退；抽出 `open_with_protector` | onyx user 0 有第二份 gatekeeper 绑定的 protector，不需要 weaver 就能拿 SP |
+| `0003-onyx-config-wlan-haptics.patch` | `skyward-config/src/lib.rs`、`skyward-programs/src/secure.rs`、`skyward/src/{haptics,main,settings,wlan}.rs` | 配置新增 `[wlan] preload` / `[update] skyward` / 振动四路径；`/vendor` 程序的库目录补上安装系统的 `/system/lib64` 与 bootstrap；WLAN 5 GHz 与自动连接；AW8697 振动；设置持久化；首屏解密页 | onyx 的设备差异 + 0.3.1 自动发现密钥服务的库路径修复 |
+| `0004-onyx-updates-downloads.patch` | `skyward-net/src/{download,github,http,supplicant}.rs`、`skyward/src/updates.rs` | 512 连接并行下载、DNS 缓存、自更新仓库可配、优先裸 `recovery.img`、本地 `recovery.img` 刷入 | GitHub 直连单连接约 40 KB/s，45.85 MB 要 17 分钟 |
+| `0005-onyx-ui.patch` | `skyward-ui/**`、`skyward-preview/src/main.rs`、`skyward/src/ui.rs` | 锁屏（模糊快照、强度滑杆、滑块重画）、首页读数、解密页倒计时 / 记住密码、下载页 / 二维码 / 纯文本网页、更新页、双击亮屏、AVB 页、面板不 rest | onyx.1–onyx.5 的 UI 全部移植到 0.3.1 的 `app/*` 状态机 |
+| `0006-onyx-version.patch` | `Cargo.toml`、`Cargo.lock` | 版本 `0.3.1-onyx.1` 与依赖锁 | 发布与自更新版本比较 |
 
-补丁顺序固定，`scripts/bootstrap.sh` 按 `0001 → 0002 → 0003 → 0004` 应用。上游 commit 与每个补丁的说明见 [`patches/README.md`](../patches/README.md)。
+补丁顺序固定，`scripts/bootstrap.sh` 按 `0001 → 0006` 应用。上游 commit 与每个补丁的说明见 [`patches/README.md`](../patches/README.md)。
 
 ---
 
@@ -266,7 +261,7 @@ AW8697（`awinic_haptic`）在 i2c `5-005a`，input `event5` 有 FF，但它的�
 | `[device]` | `codename = "onyx"`、`ab = true`、`os_version_prop` | 设备身份与系统版本来源 |
 | `[display]` | 1280 × 2772、density **512**、6.83" | 400 dp 宽；按屏高反推 1109 会让 UI 溢出 |
 | `[modules]` | `sources = vendor_boot, vendor_dlkm, vendor, system_dlkm`；`load = nt38771_touch, xiaomi_touch` | 触摸与分区模块 |
-| `[[service]]` × 7 | 见第 3 节 | 触摸 + 安全世界 + boot control |
+| `[[service]]` × 1 | 见第 3 节 | 只剩触摸；密钥服务由 `skyward-programs` 从系统分区发现 |
 | `[update]` | MIUI 更新服务器 + `skyward = "Remoparrot/skyward-onyx"` | 系统更新 + Skyward 自身更新 |
 | `[wlan]` | `qca_cld3_wcn7750` + `rfkill`；`wpss_boot`；`preload`；系统优先的 `libraries` | WLAN 驱动、固件、supplicant |
 | `[haptics]` | AW8697 的 `activate` / `duration` / `effect_id` / `gain` | 振动 |

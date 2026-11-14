@@ -223,3 +223,10 @@ onyx 的 DSI 面板被 `surface.rest()` 或 `surface.turn_off()` 后，再 `pres
 - v1–v3 的构建与真机结论：[`sessions/2026-11-11-onyx-bringup.md`](sessions/2026-11-11-onyx-bringup.md)
 - v4 的发现与验证：[`sessions/2026-11-12-ce-unlock-v4.md`](sessions/2026-11-12-ce-unlock-v4.md)
 - 坑的完整列表：[`06-pitfalls.md`](06-pitfalls.md)
+
+## 勘误 2026-11-14（v0.3.1-onyx.1）
+
+- 原文「方案 A：在 recovery 里实现 OMAPI → SE HAL 桥……代码留在 `patches/0002`」**已过时**：上游 v0.3.1 自带 `crates/skyward-omapi` 与 `crates/skyward-binder/src/serve.rs`，并会在密钥程序就绪后自动 `serve android.se.omapi.ISecureElementService/default`。本仓库的 `0002-omapi-se-bridge` 已删除；user 0 仍走 gatekeeper 回退，OMAPI 只留给 user 999 与排错。
+- 「设备服务写死在 `devices/onyx.toml`」**已过时**：0.3.1 的 `skyward-programs` 从安装系统的 `system_ext` / `vendor` / `odm` 分区读 init 脚本与 VINTF 描述，自动发现并启动密钥服务。onyx 的配置只剩触摸服务。
+- 自动发现带来的新坑：`/vendor` 程序的库目录必须补上安装系统的 `/system/lib64` 与 `/system/lib64/bootstrap`（`libvndksupport.so`），否则 keymint exit 1、`/data` 打不开、也没有锁屏输入。见 [`06-pitfalls.md`](06-pitfalls.md) 第 28 条。
+- 设计取舍不变：**user 0 用 gatekeeper 回退，不依赖 weaver / OMAPI**。0.3.1 只是把这个「工具链」换成上游的，解密主路径仍是 `0002` 的回退。

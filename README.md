@@ -14,14 +14,14 @@
 
 | 项 | 值 |
 | --- | --- |
-| 最新 release | [`v0.3.0-onyx.5`](https://github.com/Remoparrot/skyward-onyx/releases/tag/v0.3.0-onyx.5) |
+| 最新 release | [`v0.3.1-onyx.1`](https://github.com/Remoparrot/skyward-onyx/releases/tag/v0.3.1-onyx.1) |
 | 镜像 | `recovery.img` · **104,857,600 字节**（整分区） |
-| SHA-256 | `ac9be2c5f8d9604e2384d57c99f544df3c002c3f65b430ceb0b1f822fc9e0de2` |
-| ramdisk | 50,692,327 字节（LZ4）· 1062 个 cpio 条目 |
-| 内含 skyward | 8,769,040 字节 · `4b712147e584ab227d56f5006187b8306fbb1b9f3b7fbec66c3e7a7e2fc0c846` |
+| SHA-256 | `27fbfc1c442b969fa3134fa9577f83031a34ed0979c0e697cbfa5f805f73cf5f` |
+| ramdisk | 50,668,045 字节（LZ4）· 1062 个 cpio 条目 |
+| 内含 skyward | 8,955,824 字节 · `81e6e4d92b8afa0da5c74c7d626ce1ee87cc6cd8f7990385ac1c10c17b4c66f1` |
 | 底包 | HyperOS **OS4.0.2.0.XOLCNXM**（Android 17） |
-| 上游 | `kirklin/skyward` @ `ff1668f`（v0.2.0）+ 8 个补丁 |
-| 真机 | ✅ 已刷入 onyx 并验证：触摸服务、`/data` 自动挂载、user 0 CE（`/data/media/0` 与相册 JPEG 可读）、WLAN 自动连接（`CMCC-A9s7-5G`，`192.168.1.227`）、振动驱动；用 `sendevent` 注入触摸验证滑动锁屏；电源键注入验证息屏/点亮后先显示滑动锁屏（背景为上一页的模糊快照，浅色/深色，可调强度）；5 GHz WLAN 连上 `CMCC-A9s7-5G`（5260 MHz）；唤醒黑屏已修（面板不再 rest/off，息屏只关背光） |
+| 上游 | `kirklin/skyward` @ `bd34c05`（v0.3.1）+ 6 个补丁 |
+| 真机 | ✅ 已刷入 onyx 并验证：`/data` 自动挂载、user 0 CE（`/sdcard` 与 `DCIM/Camera` 里的 JPEG 可读，用旧版本记住的锁屏密码自动解密）、WLAN 自动连接并上网（`CMCC-A9s7-5G`，5260 MHz，`192.168.1.227`）、首页读数、息屏再点亮后的滑动锁屏（模糊快照）、双击亮屏与设置页的新滑块/开关；**触摸服务与振动沿用 0.3.0 的实测路径，这一次未逐项注入复测** |
 | 风险 | ⚠️ 需要解锁 bootloader；只刷 recovery 分区，详见[安装](docs/04-install.md) |
 
 > **一句话结论**：不需要 weaver，也不需要 OMAPI 桥。onyx 的 user 0 有两份 protector，其中一份绑在 gatekeeper 上；weaver 不可用时回退到它，用同一个锁屏密码即可拿到合成密码（SP），解开 CE。详细原理见[设计思路](docs/05-design-notes.md)。
@@ -31,10 +31,10 @@
 | 能力 | 状态 | 说明 |
 | --- | --- | --- |
 | 触摸 | ✅ | 拉起 `/odm/bin/touch_report_debug`，由 `libtouchreport.so` 把 raw 帧转成触摸 |
-| `/data` 设备级解密 | ✅ | qseecomd / keymint / gatekeeper / secure_element / weaver / boot 六个服务就位，开机自动挂载 |
+| `/data` 设备级解密 | ✅ | 0.3.1 起由上游 `skyward-programs` 从安装系统的 `system_ext` / `vendor` / `odm` 分区自动发现 qseecomd / ssgtzd / hlosminkdaemon / keymint / gatekeeper / secure_element / weaver / boot 的启动方式与就绪条件；`devices/onyx.toml` 只留触摸服务。开机自动挂载 |
 | user 0 CE（相册 / 微信） | ✅ | 锁屏密码 → gatekeeper 绑定的第二份 protector → SP → CE key；真机验证 JPEG / 微信目录可读 |
 | user 999（第二空间 / 应用分身） | ❌ | 只有 weaver 绑定的 protector，recovery 里没有 eSE 通道；解密页现在只等 user 0，不再被 999 卡住 |
-| adb root | ✅ | recovery 内 adb 是 root，无需手机授权 |
+| 密钥服务自动发现 | ✅ | 读安装系统分区的 init 脚本与 VINTF 描述，按手机自己的启动顺序拉起；onyx 上发现 8 个程序（含 secure_element eSE1 与 OMAPI 桥），不再需要手写服务表 |
 | 备份 / 安装 / 文件管理 / 终端 | ⚠️ | 上游能力，随镜像提供；未逐项真机验证 |
 | MTP | ⚠️ | 已带 `skyward-mtp.rc`，未逐项验证 |
 | WLAN | ✅ | `qca_cld3_wcn7750` + `rfkill` 从 vendor_dlkm 加载；wpa_supplicant 用 `skyward/wpa-aidl-shim.so` 跳过 recovery 不认的 AIDL 注册；开机自动连接上次网络（密码存 `/metadata`，0600） |

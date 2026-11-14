@@ -21,6 +21,10 @@ sources = ["vendor_boot", "vendor_dlkm", "vendor", "system_dlkm"]
 # Xiaomi's touch layer. Both are the phone's own vendor_dlkm modules.
 load = ["nt38771_touch", "xiaomi_touch"]
 
+# The programs that use the phone's keys are not named here: Skyward reads
+# them, how each starts and what it registers, from the installed system's
+# own partitions, so an update that renames them is followed as it is.
+
 # The driver resets the controller as it connects to it, and it comes back
 # sending only raw frames, so the panel's own input device carries no touch
 # at all: reading /dev/input/event7 directly gets nothing, which this phone
@@ -36,82 +40,6 @@ libraries = ["/odm/lib64", "/vendor/lib64", "/vendor/lib64/hw", "/system/lib64"]
 user = "root"
 groups = ["root", "uhid", "input"]
 capabilities = ["SYS_NICE"]
-
-# The secure world reaches back into Android through the listeners this
-# daemon registers; without them the key service cannot use any key.
-[[service]]
-path = "/vendor/bin/qseecomd"
-libraries = ["/system/lib64", "/vendor/lib64"]
-ready_property = "vendor.sys.listeners.registered"
-user = "root"
-groups = ["root", "drmrpc"]
-
-# The key service, which is the only thing that can unwrap the key the
-# phone's data partition is encrypted with. The same program serves the
-# secure clock and the shared secret.
-[[service]]
-path = "/vendor/bin/hw/android.hardware.security.keymint-service-qti"
-libraries = ["/system/lib64", "/vendor/lib64", "/vendor/lib64/hw", "/mnt/system/system/lib64", "/mnt/system/system/lib64/bootstrap"]
-ready_service = "android.hardware.security.keymint.IKeyMintDevice/default"
-registers = [
-    "android.hardware.security.keymint.IRemotelyProvisionedComponent/default",
-    "android.hardware.security.secureclock.ISecureClock/default",
-    "android.hardware.security.sharedsecret.ISharedSecret/default",
-]
-user = "system"
-groups = ["system", "drmrpc"]
-
-# The credential service: it is what the secure world has check a screen
-# lock, and the only thing that can hand out the note the key service wants
-# before it will use a key that screen lock guards.
-#
-# The phone describes it only in the device manifest it shares with the
-# other builds of this vendor partition, which the directory of the
-# recovery's own does not read: Android's own recovery starts this service
-# before it reads any description, so the phone never needed one there.
-# Its description is handed over apart from the others.
-[[service]]
-path = "/vendor/bin/hw/android.hardware.gatekeeper-service-qti"
-libraries = ["/system/lib64", "/vendor/lib64", "/vendor/lib64/hw", "/mnt/system/system/lib64", "/mnt/system/system/lib64/bootstrap"]
-ready_service = "android.hardware.gatekeeper.IGatekeeper/default"
-description = "/vendor/etc/vintf/manifest_sun.xml"
-user = "system"
-groups = ["system"]
-
-# The secure element, whose eSE1 reader the weaver reaches the secure
-# element through. The vendor interface's description of it sits with the
-# phone's other vendor fragments, so it is handed over with them.
-[[service]]
-path = "/vendor/bin/hw/android.hardware.secure_element-service.qti"
-libraries = ["/system/lib64", "/vendor/lib64", "/vendor/lib64/hw", "/mnt/system/system/lib64", "/mnt/system/system/lib64/bootstrap"]
-ready_service = "android.hardware.secure_element.ISecureElement/eSE1"
-user = "system"
-groups = ["system", "nfc"]
-
-# The weaver, in the NXP secure element: every user's secret is bound to a
-# slot of it, with a screen lock or without. Without it no password can be
-# checked at all. Its program loads /odm/lib64/ese_weaver.so, which talks to
-# the secure element through the service above.
-[[service]]
-path = "/odm/bin/hw/android.hardware.weaver-service.nxp-qti"
-libraries = ["/system/lib64", "/odm/lib64", "/vendor/lib64", "/vendor/lib64/hw", "/mnt/system/system/lib64", "/mnt/system/system/lib64/bootstrap"]
-ready_service = "android.hardware.weaver.IWeaver/default"
-# The description names the interface and its instance apart, which is not
-# what tells the service directory what this service registers, so it is
-# handed over rather than looked for.
-description = "/odm/etc/vintf/manifest/android.hardware.weaver-service.nxp.xml"
-user = "vendor_nxp_weaver"
-groups = ["vendor_nxp_weaver"]
-capabilities = ["WAKE_ALARM"]
-
-# The boot control, which says which slot the bootloader starts next and
-# switches it. It comes last: the phone is usable without it.
-[[service]]
-path = "/vendor/bin/hw/android.hardware.boot-service.qti"
-libraries = ["/system/lib64", "/vendor/lib64"]
-ready_service = "android.hardware.boot.IBootControl/default"
-user = "root"
-groups = ["root"]
 
 # WLAN: the WCN7750 on PCIe, driven by qca_cld3_wcn7750 over the icnss2
 # platform driver. The RF-kill module the driver's cfg80211 needs is one of

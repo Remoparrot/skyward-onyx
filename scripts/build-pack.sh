@@ -12,4 +12,6 @@ fi
 
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/build/host}"
 cd "$SKYWARD_SRC"
-exec cargo build --release -p skyward-pack "$@"
+# `described` needs the crates that only build for the phone; the packer
+# built here makes images, not the per-device stock descriptions.
+exec cargo build --release -p skyward-pack --no-default-features "$@"

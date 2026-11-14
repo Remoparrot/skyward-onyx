@@ -1,0 +1,688 @@
+diff --git a/crates/skyward-net/src/download.rs b/crates/skyward-net/src/download.rs
+index 379991f..37a38b9 100644
+--- a/crates/skyward-net/src/download.rs
++++ b/crates/skyward-net/src/download.rs
+@@ -6,13 +6,28 @@ use anyhow::{bail, Context, Result};
+ use md5::{Digest, Md5};
+ use sha2::Sha256;
+ use std::fs::{self, File, OpenOptions};
+-use std::io::{Read, Write};
++use std::io::{Read, Seek, SeekFrom, Write};
+ use std::path::{Path, PathBuf};
+-use std::sync::atomic::{AtomicBool, Ordering};
++use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
++use std::sync::{Arc, Mutex};
+ 
+ /// How much is read and written at a time.
+ const CHUNK: usize = 1 << 20;
+ 
++/// The most connections a package is fetched over at once. GitHub sends a
++/// release asset slowly to one connection; asking for its bytes side by
++/// side is what turns a package that takes half an hour into one that
++/// takes a minute.
++const MAX_CONNECTIONS: usize = 512;
++
++/// The bytes one connection is asked for. A package is divided into runs
++/// of these, and never into more than [`MAX_CONNECTIONS`] runs, so a small
++/// one does not open more connections than it has room for.
++const SEGMENT: u64 = 64 << 10;
++
++/// How many times a run is asked for again before the download fails.
++const RETRIES: u32 = 4;
++
+ /// The digest a package's server gives of it, in hex.
+ #[derive(Debug, Clone, PartialEq, Eq)]
+ pub enum Sum {
+@@ -132,59 +147,334 @@ fn fetch_as<D: Digest>(agent: &ureq::Agent, url: &str, path: &Path, sum: &str, s
+         status => bail!(Refused(status)),
+     }
+     let total = content_length(head.headers()).context("the server does not say how long the package is")?;
+-    let mut file = OpenOptions::new().create(true).read(true).append(true).open(&part).with_context(|| format!("open {}", part.display()))?;
+-    let mut have = file.metadata().with_context(|| format!("read {}", part.display()))?.len();
+-    if have > total {
++    // The file is written by offset, so a part left by an earlier download
++    // cannot be told apart from one a run cut off mid-way: it starts again
++    // from the first byte.
++    let mut file = OpenOptions::new().create(true).read(true).write(true).truncate(true).open(&part).with_context(|| format!("open {}", part.display()))?;
++    let room = skyward_block::mount::space(dir).with_context(|| format!("read the free space of {}", dir.display()))?.available;
++    if total > room {
++        bail!(NoRoom { needed: total, free: room });
++    }
++    let ranges = match fetch_ranges(agent, url, &part, total, stop, progress) {
++        Ok(ranges) => ranges,
++        Err(e) => {
++            let _ = fs::remove_file(&part);
++            return Err(e);
++        }
++    };
++    if !ranges {
++        // The server would not send a range: one connection takes it all.
+         file.set_len(0).with_context(|| format!("empty {}", part.display()))?;
+-        have = 0;
++        file.seek(SeekFrom::Start(0)).with_context(|| format!("seek {}", part.display()))?;
++        if let Err(e) = stream(agent, url, &mut file, total, stop, progress) {
++            let _ = fs::remove_file(&part);
++            return Err(e);
++        }
+     }
+-    let room = skyward_block::mount::space(dir).with_context(|| format!("read the free space of {}", dir.display()))?.available;
+-    if total - have > room {
+-        bail!(NoRoom { needed: total - have, free: room });
+-    }
+-    let mut hash = hash_of::<D>(&mut file, have, stop, progress)?;
+-    if have < total {
+-        let mut asked = agent.get(url);
+-        if have > 0 {
+-            asked = asked.header("Range", format!("bytes={have}-"));
+-        }
+-        let mut response = asked.call().context("start the download")?;
+-        match response.status().as_u16() {
+-            206 if have > 0 => {}
+-            200 => {
+-                if have > 0 {
+-                    file.set_len(0).with_context(|| format!("empty {}", part.display()))?;
+-                    have = 0;
+-                    hash = D::new();
++    file.seek(SeekFrom::Start(0)).with_context(|| format!("seek {}", part.display()))?;
++    let hash = hash_of::<D>(&mut file, total, stop, progress)?;
++    if hex::encode(hash.finalize()) != sum.to_lowercase() {
++        drop(file);
++        fs::remove_file(&part).with_context(|| format!("delete {}", part.display()))?;
++        bail!(Damaged);
++    }
++    file.sync_all().with_context(|| format!("write {} through", part.display()))?;
++    drop(file);
++    fs::rename(&part, path).with_context(|| format!("name {} {}", part.display(), path.display()))
++}
++
++/// The whole package over one connection, from its start.
++fn stream(agent: &ureq::Agent, url: &str, file: &mut File, total: u64, stop: &AtomicBool, progress: &mut dyn FnMut(Progress)) -> Result<()> {
++    let mut response = agent.get(url).call().context("start the download")?;
++    match response.status().as_u16() {
++        200 => {}
++        status => bail!(Refused(status)),
++    }
++    let mut body = response.body_mut().with_config().limit(u64::MAX).reader();
++    let mut buf = vec![0u8; CHUNK];
++    let mut done = 0u64;
++    progress(Progress::Downloading { done, total });
++    while done < total {
++        if stop.load(Ordering::Relaxed) {
++            bail!(crate::Stopped);
++        }
++        let n = body.read(&mut buf).context("download the package")?;
++        if n == 0 {
++            bail!("the server stopped sending at {done} of {total} bytes");
++        }
++        let n = n.min((total - done) as usize);
++        file.write_all(&buf[..n]).context("write the package")?;
++        done += n as u64;
++        progress(Progress::Downloading { done, total });
++    }
++    Ok(())
++}
++
++/// The runs a package `total` bytes long is fetched in, from its start.
++fn runs(total: u64) -> Vec<(u64, u64)> {
++    let count = ((total + SEGMENT - 1) / SEGMENT).clamp(1, MAX_CONNECTIONS as u64) as usize;
++    (0..count)
++        .map(|i| {
++            let start = total * i as u64 / count as u64;
++            let end = total * (i as u64 + 1) / count as u64 - 1;
++            (start, end)
++        })
++        .collect()
++}
++
++/// Fetch the package into `part` over [`MAX_CONNECTIONS`] connections at
++/// most, each writing its run where it is told; true when the runs came,
++/// false when the server answered with the whole package instead and one
++/// connection must take it.
++fn fetch_ranges(agent: &ureq::Agent, url: &str, part: &Path, total: u64, stop: &AtomicBool, progress: &mut dyn FnMut(Progress)) -> Result<bool> {
++    let spans = Arc::new(runs(total));
++    // The file is written by offset, so every connection shares one handle:
++    // a write at an offset does not move the offset the others share.
++    let writer = Arc::new(OpenOptions::new().write(true).open(part).with_context(|| format!("open {}", part.display()))?);
++    let next = Arc::new(AtomicUsize::new(0));
++    let done = Arc::new(AtomicU64::new(0));
++    let abort = Arc::new(AtomicBool::new(false));
++    let whole = Arc::new(AtomicBool::new(false));
++    let fatal: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
++    let mut workers = Vec::with_capacity(spans.len());
++    for _ in 0..spans.len() {
++        let agent = agent.clone();
++        let spans = Arc::clone(&spans);
++        let writer = Arc::clone(&writer);
++        let next = Arc::clone(&next);
++        let done = Arc::clone(&done);
++        let abort = Arc::clone(&abort);
++        let whole = Arc::clone(&whole);
++        let fatal = Arc::clone(&fatal);
++        let url = url.to_string();
++        workers.push(std::thread::spawn(move || loop {
++            let i = next.fetch_add(1, Ordering::Relaxed);
++            if i >= spans.len() || abort.load(Ordering::Relaxed) {
++                return;
++            }
++            let (start, end) = spans[i];
++            if let Err(e) = run(&agent, &url, &writer, start, end, &abort, &done, &whole) {
++                if !e.is::<crate::Stopped>() && !whole.load(Ordering::Relaxed) {
++                    let mut why = fatal.lock().unwrap_or_else(|poison| poison.into_inner());
++                    if why.is_none() {
++                        *why = Some(format!("{e:#}"));
++                    }
+                 }
++                abort.store(true, Ordering::Relaxed);
++                return;
+             }
+-            status => bail!(Refused(status)),
++        }));
++    }
++    progress(Progress::Downloading { done: 0, total });
++    loop {
++        let running = workers.iter().any(|worker| !worker.is_finished());
++        if !running || abort.load(Ordering::Relaxed) {
++            break;
++        }
++        if stop.load(Ordering::Relaxed) {
++            abort.store(true, Ordering::Relaxed);
++            break;
+         }
+-        let mut body = response.body_mut().with_config().limit(u64::MAX).reader();
+-        let mut buf = vec![0u8; CHUNK];
+-        let mut done = have;
++        let done = done.load(Ordering::Relaxed).min(total);
+         progress(Progress::Downloading { done, total });
+-        while done < total {
+-            if stop.load(Ordering::Relaxed) {
+-                bail!(crate::Stopped);
++        std::thread::sleep(std::time::Duration::from_millis(80));
++    }
++    for worker in workers {
++        let _ = worker.join();
++    }
++    if stop.load(Ordering::Relaxed) {
++        bail!(crate::Stopped);
++    }
++    if whole.load(Ordering::Relaxed) {
++        return Ok(false);
++    }
++    if let Some(why) = fatal.lock().unwrap_or_else(|poison| poison.into_inner()).take() {
++        bail!("{why}");
++    }
++    let done = done.load(Ordering::Relaxed);
++    if done < total {
++        bail!("the server stopped sending at {done} of {total} bytes");
++    }
++    progress(Progress::Downloading { done: total, total });
++    Ok(true)
++}
++
++/// One run of the package, asked for again when the server is busy, the
++/// connection drops or the run comes short, and written where it belongs.
++#[allow(clippy::too_many_arguments)]
++fn run(agent: &ureq::Agent, url: &str, writer: &File, start: u64, end: u64, abort: &AtomicBool, done: &AtomicU64, whole: &AtomicBool) -> Result<()> {
++    let mut attempt = 0u32;
++    loop {
++        if abort.load(Ordering::Relaxed) {
++            bail!(crate::Stopped);
++        }
++        attempt += 1;
++        match one_run(agent, url, writer, start, end, abort, done, whole) {
++            Ok(()) => return Ok(()),
++            Err(e) if e.is::<crate::Stopped>() || whole.load(Ordering::Relaxed) => return Err(e),
++            Err(e) => {
++                if attempt >= RETRIES {
++                    return Err(anyhow::anyhow!("bytes {start}-{end}: {e:#}"));
++                }
++                // The server is busy or the connection is young; asking
++                // again a little later is what a slow link needs.
++                std::thread::sleep(std::time::Duration::from_millis(200 * u64::from(attempt) + u64::from(start % 100)));
+             }
+-            let n = body.read(&mut buf).context("download the package")?;
+-            if n == 0 {
+-                bail!("the server stopped sending at {done} of {total} bytes");
++        }
++    }
++}
++
++/// One asking for a run: its bytes read and written as they come, and the
++/// count of what was written taken back if the run does not finish.
++fn one_run(agent: &ureq::Agent, url: &str, writer: &File, start: u64, end: u64, abort: &AtomicBool, done: &AtomicU64, whole: &AtomicBool) -> Result<()> {
++    let mut response = agent.get(url).header("Range", format!("bytes={start}-{end}")).call().with_context(|| format!("ask for bytes {start}-{end}"))?;
++    match response.status().as_u16() {
++        206 => {}
++        200 => {
++            // The whole package came for one run: the server keeps no
++            // ranges, so one connection takes the lot.
++            whole.store(true, Ordering::Relaxed);
++            abort.store(true, Ordering::Relaxed);
++            bail!("the server answered with the whole package");
++        }
++        status => bail!(Refused(status)),
++    }
++    let mut body = response.body_mut().with_config().limit(u64::MAX).reader();
++    let mut buf = vec![0u8; SEGMENT as usize];
++    let mut pos = start;
++    let mut written = 0u64;
++    while pos <= end {
++        if abort.load(Ordering::Relaxed) {
++            done.fetch_sub(written, Ordering::Relaxed);
++            bail!(crate::Stopped);
++        }
++        let n = match body.read(&mut buf) {
++            Ok(n) => n,
++            Err(e) => {
++                done.fetch_sub(written, Ordering::Relaxed);
++                return Err(e).context("download a run of the package");
+             }
+-            let n = n.min((total - done) as usize);
+-            file.write_all(&buf[..n]).with_context(|| format!("write {}", part.display()))?;
+-            hash.update(&buf[..n]);
+-            done += n as u64;
+-            progress(Progress::Downloading { done, total });
++        };
++        if n == 0 {
++            break;
+         }
+-        file.sync_all().with_context(|| format!("write {} through", part.display()))?;
++        let n = n.min((end + 1 - pos) as usize);
++        if let Err(e) = write_at(writer, &buf[..n], pos) {
++            done.fetch_sub(written, Ordering::Relaxed);
++            return Err(e).with_context(|| format!("write bytes {pos} of the package"));
++        }
++        pos += n as u64;
++        written += n as u64;
++        done.fetch_add(n as u64, Ordering::Relaxed);
+     }
+-    if hex::encode(hash.finalize()) != sum.to_lowercase() {
+-        drop(file);
+-        fs::remove_file(&part).with_context(|| format!("delete {}", part.display()))?;
+-        bail!(Damaged);
++    if pos != end + 1 {
++        done.fetch_sub(written, Ordering::Relaxed);
++        bail!("the server stopped sending at {pos} of {}", end + 1);
++    }
++    Ok(())
++}
++
++/// Write `buf` at `offset`, leaving the handle's own offset alone so the
++/// connections sharing it do not write over each other.
++#[cfg(unix)]
++fn write_at(file: &File, buf: &[u8], offset: u64) -> std::io::Result<()> {
++    use std::os::unix::fs::FileExt;
++    file.write_all_at(buf, offset)
++}
++
++#[cfg(windows)]
++fn write_at(file: &File, buf: &[u8], offset: u64) -> std::io::Result<()> {
++    use std::os::windows::fs::FileExt;
++    let mut at = offset;
++    let mut rest = buf;
++    while !rest.is_empty() {
++        let n = file.seek_write(rest, at)?;
++        if n == 0 {
++            return Err(std::io::Error::new(std::io::ErrorKind::WriteZero, "the package's file took nothing"));
++        }
++        at += n as u64;
++        rest = &rest[n..];
++    }
++    Ok(())
++}
++
++
++/// The name a URL's last path segment gives a file, made safe for a
++/// filesystem; `download.bin` where it names none.
++pub fn name_of(url: &str) -> String {
++    let path = url.split(['?', '#']).next().unwrap_or(url);
++    let path = path.split_once("://").map_or(path, |(_, rest)| rest);
++    let last = path.rsplit('/').next().unwrap_or("");
++    let mut name = String::new();
++    let bytes = last.as_bytes();
++    let mut i = 0;
++    while i < bytes.len() {
++        let c = bytes[i];
++        if c == b'%' && i + 2 < bytes.len() {
++            if let Ok(v) = u8::from_str_radix(&last[i + 1..i + 3], 16) {
++                if v.is_ascii_alphanumeric() || matches!(v, b'.' | b'-' | b'_' | b'(' | b')' | b' ') {
++                    name.push(v as char);
++                } else {
++                    name.push('_');
++                }
++                i += 3;
++                continue;
++            }
++        }
++        let ch = last[i..].chars().next().unwrap_or('_');
++        if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '-' | '_' | '(' | ')' | ' ') {
++            name.push(ch);
++        } else {
++            name.push('_');
++        }
++        i += ch.len_utf8();
+     }
++    let name = name.trim().trim_end_matches('.').trim_start_matches('.');
++    if name.is_empty() || name == ".." {
++        "download.bin".into()
++    } else {
++        name.chars().take(120).collect()
++    }
++}
++
++/// Save whatever `url` answers into `path`, with no digest to check it
++/// against, telling how far it has come. The part is named once the whole
++/// answer is there.
++pub fn save(agent: &ureq::Agent, url: &str, path: &Path, stop: &AtomicBool, paused: &AtomicBool, progress: &mut dyn FnMut(Progress)) -> Result<()> {
++    let mut response = agent.get(url).call().context("start the download")?;
++    let status = response.status().as_u16();
++    if !(200..300).contains(&status) {
++        bail!(Refused(status));
++    }
++    let total = content_length(response.headers()).unwrap_or(0);
++    let part = partial(path);
++    let dir = path.parent().context("a download's path is in a folder")?;
++    fs::create_dir_all(dir).with_context(|| format!("make {}", dir.display()))?;
++    let mut file = File::create(&part).with_context(|| format!("open {}", part.display()))?;
++    let mut body = response.body_mut().with_config().limit(u64::MAX).reader();
++    let mut buf = vec![0u8; CHUNK];
++    let mut done = 0u64;
++    progress(Progress::Downloading { done, total });
++    loop {
++        while paused.load(Ordering::Relaxed) {
++            if stop.load(Ordering::Relaxed) {
++                bail!(crate::Stopped);
++            }
++            std::thread::sleep(std::time::Duration::from_millis(100));
++        }
++        if stop.load(Ordering::Relaxed) {
++            bail!(crate::Stopped);
++        }
++        let n = body.read(&mut buf).context("download the file")?;
++        if n == 0 {
++            break;
++        }
++        file.write_all(&buf[..n]).with_context(|| format!("write {}", part.display()))?;
++        done += n as u64;
++        progress(Progress::Downloading { done, total });
++    }
++    file.sync_all().with_context(|| format!("write {} through", part.display()))?;
++    drop(file);
+     fs::rename(&part, path).with_context(|| format!("name {} {}", part.display(), path.display()))
+ }
+ 
+@@ -202,6 +492,20 @@ mod tests {
+         assert_eq!(partial(Path::new("/sdcard/downloaded_rom/a.zip")), Path::new("/sdcard/downloaded_rom/a.zip.part"));
+     }
+ 
++    #[test]
++    fn the_runs_cover_the_package_once() {
++        for total in [1u64, SEGMENT, SEGMENT + 1, 3 * SEGMENT + 7, 45_845_825, 3_800_000_000] {
++            let runs = runs(total);
++            assert_eq!(runs[0].0, 0);
++            assert_eq!(runs.last().unwrap().1, total - 1);
++            for pair in runs.windows(2) {
++                assert_eq!(pair[0].1 + 1, pair[1].0);
++            }
++            assert!(runs.len() <= MAX_CONNECTIONS, "{total} bytes over {} runs", runs.len());
++            assert!(runs.iter().all(|(start, end)| end >= start));
++        }
++    }
++
+     #[test]
+     fn what_is_there_is_read_for_its_digest() {
+         let dir = std::env::temp_dir().join(format!("skyward-net-hash-{}", std::process::id()));
+@@ -218,4 +522,5 @@ mod tests {
+         assert!(stopped.unwrap_err().is::<crate::Stopped>());
+         fs::remove_dir_all(&dir).unwrap();
+     }
++
+ }
+diff --git a/crates/skyward-net/src/github.rs b/crates/skyward-net/src/github.rs
+index ff45a89..c5ad11c 100644
+--- a/crates/skyward-net/src/github.rs
++++ b/crates/skyward-net/src/github.rs
+@@ -4,8 +4,11 @@
+ use anyhow::{bail, ensure, Context, Result};
+ use serde::Deserialize;
+ 
+-/// Where GitHub answers which release of Skyward is the newest.
+-pub const LATEST: &str = "https://api.github.com/repos/kirklin/skyward/releases/latest";
++/// Where GitHub answers which release of Skyward is the newest, for the
++/// repository `repo` names as `owner/name`.
++pub fn latest(repo: &str) -> String {
++    format!("https://api.github.com/repos/{repo}/releases/latest")
++}
+ 
+ /// The version of GitHub's API the answer is read as.
+ const API_VERSION: &str = "2022-11-28";
+@@ -35,6 +38,8 @@ pub struct Build {
+     pub size: u64,
+     /// Its SHA-256 as GitHub gives it, in hex.
+     pub sha256: String,
++    /// The file is the recovery image itself, not a zip holding it.
++    pub raw: bool,
+ }
+ 
+ impl Build {
+@@ -69,7 +74,7 @@ struct Message {
+     message: String,
+ }
+ 
+-/// The newest release that `answer`, GitHub's answer at [`LATEST`], tells
++/// The newest release that `answer`, GitHub's answer at [`latest`], tells
+ /// of, and its zip for the phone `codename` names, as the build of version
+ /// `running` sees it.
+ pub fn newest(answer: &str, codename: &str, running: &str) -> Result<Newest> {
+@@ -79,14 +84,16 @@ pub fn newest(answer: &str, codename: &str, running: &str) -> Result<Newest> {
+     let newest = semver::Version::parse(version).with_context(|| format!("the newest release is tagged {tag}"))?;
+     let this = semver::Version::parse(running).with_context(|| format!("this build's version is {running}"))?;
+     // Each zip is named skyward-, the tag, the phone's codename, and the
+-    // stock build the image is made on.
++    // stock build the image is made on. The release also carries the raw
++    // recovery image, which is preferred: it is what the updater writes.
+     let start = format!("skyward-{tag}-{codename}-");
+-    let build = match release.assets.into_iter().find(|a| a.name.starts_with(&start) && a.name.ends_with(".zip")) {
++    let raw = release.assets.iter().find(|a| a.name == "recovery.img");
++    let build = match raw.or_else(|| release.assets.iter().find(|a| a.name.starts_with(&start) && a.name.ends_with(".zip"))) {
+         None => None,
+         Some(a) => {
+             let sha256 = a.digest.as_deref().and_then(|d| d.strip_prefix("sha256:")).with_context(|| format!("GitHub gives no SHA-256 of {}", a.name))?;
+             ensure!(sha256.len() == 64 && sha256.bytes().all(|b| b.is_ascii_hexdigit()), "GitHub gives {} the SHA-256 {sha256}", a.name);
+-            Some(Build { sha256: sha256.to_lowercase(), name: a.name, url: a.url, link: a.browser_download_url, size: a.size })
++            Some(Build { sha256: sha256.to_lowercase(), name: a.name.clone(), url: a.url.clone(), link: a.browser_download_url.clone(), size: a.size, raw: a.name == "recovery.img" })
+         }
+     };
+     Ok(Newest { version: version.to_string(), newer: newest > this, build })
+@@ -94,16 +101,17 @@ pub fn newest(answer: &str, codename: &str, running: &str) -> Result<Newest> {
+ 
+ /// Ask GitHub for Skyward's newest release, and its zip for the phone
+ /// `codename` names, as the build of version `running`.
+-pub fn ask(agent: &ureq::Agent, codename: &str, running: &str) -> Result<Newest> {
++pub fn ask(agent: &ureq::Agent, repo: &str, codename: &str, running: &str) -> Result<Newest> {
++    let latest = latest(repo);
+     let mut response = agent
+-        .get(LATEST)
++        .get(&latest)
+         .header("Accept", "application/vnd.github+json")
+         .header("X-GitHub-Api-Version", API_VERSION)
+         .header("User-Agent", format!("Skyward/{running}"))
+         .call()
+-        .with_context(|| format!("ask {LATEST}"))?;
++        .with_context(|| format!("ask {latest}"))?;
+     let status = response.status();
+-    let body = response.body_mut().read_to_string().with_context(|| format!("read the answer of {LATEST}"))?;
++    let body = response.body_mut().read_to_string().with_context(|| format!("read the answer of {latest}"))?;
+     if !status.is_success() {
+         bail!(refusal(status, &body));
+     }
+diff --git a/crates/skyward-net/src/http.rs b/crates/skyward-net/src/http.rs
+index a5b8d6b..a22977e 100644
+--- a/crates/skyward-net/src/http.rs
++++ b/crates/skyward-net/src/http.rs
+@@ -2,9 +2,10 @@
+ //! gave.
+ 
+ use crate::dns;
++use std::collections::HashMap;
+ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+ use std::sync::{Arc, Mutex};
+-use std::time::Duration;
++use std::time::{Duration, Instant};
+ use ureq::config::Config;
+ use ureq::http::Uri;
+ use ureq::unversioned::resolver::{ResolvedSocketAddrs, Resolver};
+@@ -20,19 +21,40 @@ const CONNECT: Duration = Duration::from_secs(15);
+ /// taken as lost: a download read as it comes has no end to wait for.
+ const STALL: Duration = Duration::from_secs(30);
+ 
++/// How long a name's addresses are kept. A package fetched over hundreds
++/// of connections would ask the phone's DNS server once for each without
++/// this, and it starts refusing the answers.
++const KEEP: Duration = Duration::from_secs(300);
++
+ #[derive(Debug)]
+-struct Lookup(Servers);
++struct Lookup {
++    servers: Servers,
++    /// The addresses each host and port were last given, and when.
++    known: Mutex<HashMap<(String, u16), (Instant, Vec<SocketAddr>)>>,
++}
+ 
+ impl Resolver for Lookup {
+     fn resolve(&self, uri: &Uri, _config: &Config, _timeout: NextTimeout) -> Result<ResolvedSocketAddrs, ureq::Error> {
+         let host = uri.host().ok_or_else(|| ureq::Error::BadUri(format!("{uri} names no host")))?;
+         let port = uri.port_u16().unwrap_or(if uri.scheme_str() == Some("http") { 80 } else { 443 });
+-        let servers = self.0.lock().expect("the DNS servers are not held by a thread that panicked").clone();
+-        let found = dns::lookup(host, &servers).map_err(|e| ureq::Error::Io(std::io::Error::other(format!("{e:#}"))))?;
++        // The first connection to a name asks for it, and the others find it
++        // here: a hundred at once would otherwise ask a hundred times.
++        let mut known = self.known.lock().map_err(|_| ureq::Error::Io(std::io::Error::other("the DNS answers are held by a thread that panicked")))?;
++        let addrs = match known.get(&(host.to_string(), port)) {
++            Some((at, addrs)) if at.elapsed() < KEEP => addrs.clone(),
++            _ => {
++                let servers = self.servers.lock().expect("the DNS servers are not held by a thread that panicked").clone();
++                let found = dns::lookup(host, &servers).map_err(|e| ureq::Error::Io(std::io::Error::other(format!("{e:#}"))))?;
++                let addrs: Vec<SocketAddr> = found.into_iter().map(|address| SocketAddr::new(IpAddr::V4(address), port)).collect();
++                known.insert((host.to_string(), port), (Instant::now(), addrs.clone()));
++                addrs
++            }
++        };
++        drop(known);
+         let mut out = self.empty();
+         // As many as it holds; the rest are not tried.
+-        for address in found {
+-            if out.try_push(SocketAddr::new(IpAddr::V4(address), port)).is_err() {
++        for address in addrs {
++            if out.try_push(address).is_err() {
+                 break;
+             }
+         }
+@@ -50,5 +72,6 @@ pub fn agent(servers: Servers) -> ureq::Agent {
+         .timeout_per_write(Some(STALL))
+         .http_status_as_error(false)
+         .build();
+-    ureq::Agent::with_parts(config, DefaultConnector::new(), Lookup(servers))
++    let lookup = Lookup { servers, known: Mutex::new(HashMap::new()) };
++    ureq::Agent::with_parts(config, DefaultConnector::new(), lookup)
+ }
+diff --git a/crates/skyward-net/src/supplicant.rs b/crates/skyward-net/src/supplicant.rs
+index 8b90fc5..972bc0f 100644
+--- a/crates/skyward-net/src/supplicant.rs
++++ b/crates/skyward-net/src/supplicant.rs
+@@ -168,6 +168,9 @@ pub fn network_commands(id: u32, ssid: &[u8], security: Security, password: &str
+         Security::Psk => {
+             commands.push(set("key_mgmt", "WPA-PSK WPA-PSK-SHA256".into()));
+             commands.push(set("psk", psk()?));
++            // Optional: an access point that asks for the management frame
++            // protection gets it, one that does not is joined as before.
++            commands.push(set("ieee80211w", "1".into()));
+         }
+         Security::Sae => {
+             ensure!(!password.is_empty(), "a WPA3 password is not empty");
+@@ -397,7 +400,7 @@ mod tests {
+         let wpa2 = network_commands(0, "Skyward客厅".as_bytes(), Security::Psk, "pass\"word", false).unwrap();
+         assert_eq!(
+             wpa2,
+-            ["SET_NETWORK 0 ssid 536b7977617264e5aea2e58e85", "SET_NETWORK 0 key_mgmt WPA-PSK WPA-PSK-SHA256", "SET_NETWORK 0 psk \"pass\"word\""]
++            ["SET_NETWORK 0 ssid 536b7977617264e5aea2e58e85", "SET_NETWORK 0 key_mgmt WPA-PSK WPA-PSK-SHA256", "SET_NETWORK 0 psk \"pass\"word\"", "SET_NETWORK 0 ieee80211w 1"]
+         );
+         let wpa3 = network_commands(2, b"Skyward",Security::Sae, "short", false).unwrap();
+         assert_eq!(wpa3[1..], ["SET_NETWORK 2 key_mgmt SAE", "SET_NETWORK 2 sae_password 73686f7274", "SET_NETWORK 2 ieee80211w 2"]);
+diff --git a/crates/skyward/src/updates.rs b/crates/skyward/src/updates.rs
+index b5f0dae..5672f5f 100644
+--- a/crates/skyward/src/updates.rs
++++ b/crates/skyward/src/updates.rs
+@@ -41,12 +41,15 @@ pub enum Task {
+     /// Ask GitHub for Skyward's newest release and its zip for the phone
+     /// `codename` names; where that fails, `probe` says whether the network
+     /// is why.
+-    CheckSkyward { probe: String, codename: String },
++    CheckSkyward { probe: String, codename: String, repo: String },
+     /// Download `build` to `path`, check that its image is Skyward for the
+     /// phone `codename` names, and write the image into the recovery
+     /// partitions of the slot that starts next and of any other slot that
+     /// holds Skyward.
+     UpdateSkyward { build: Build, codename: String, path: PathBuf },
++    /// Write the recovery image already at `path` into the recovery
++    /// partitions; it is checked as Skyward for `codename`.
++    UpdateSkywardFile { path: PathBuf, codename: String },
+ }
+ 
+ pub enum Event {
+@@ -135,16 +138,19 @@ impl Worker {
+                     let end = fetch(&servers, release.urls.clone(), &sum, &release.name, &path, &stopping, &using, &tell, &mut refused);
+                     tell(Event::Ended(end));
+                 }
+-                Task::CheckSkyward { probe, codename } => {
++                Task::CheckSkyward { probe, codename, repo } => {
+                     let a = http::agent(servers.clone());
+                     *using.lock().expect("the agent is not held by a thread that panicked") = Some(a.clone());
+-                    let answer = github::ask(&a, &codename, skyward_info::VERSION).map_err(|e| unanswered(&e, github::LATEST, &probe, &servers));
++                    let answer = github::ask(&a, &repo, &codename, skyward_info::VERSION).map_err(|e| unanswered(&e, &github::latest(&repo), &probe, &servers));
+                     tell(Event::SkywardChecked(answer));
+                 }
+                 // GitHub's API hands the zip out at a short-lived address
+                 // of the file itself, which it gives again once one has
+                 // run out and is turned down; the release's link on
+                 // github.com is tried after it.
++                Task::UpdateSkywardFile { path, codename } => {
++                    tell(Event::Ended(write_raw(&path, &codename, &tell)));
++                }
+                 Task::UpdateSkyward { build, codename, path } => {
+                     let a = http::agent(servers.clone());
+                     *using.lock().expect("the agent is not held by a thread that panicked") = Some(a.clone());
+@@ -172,7 +178,7 @@ impl Worker {
+                         // Stopping asked for as the last of it came is
+                         // stopping still: nothing is written.
+                         End::Downloaded if stopping.load(Ordering::Relaxed) => End::Stopped,
+-                        End::Downloaded => write(&path, &codename, &tell),
++                        End::Downloaded => write(&path, &codename, &tell, build.raw),
+                         other => other,
+                     };
+                     // The zip is held in memory, and is done with once
+@@ -330,10 +336,23 @@ fn fetch(
+ /// `codename` names, into the recovery partitions of the slot that starts
+ /// next and of any other slot that holds Skyward, telling how far that has
+ /// come.
+-fn write(path: &Path, codename: &str, tell: &dyn Fn(Event)) -> End {
++fn write(path: &Path, codename: &str, tell: &dyn Fn(Event), raw: bool) -> End {
++    if raw {
++        return write_raw(path, codename, tell);
++    }
++    write_image(|| upgrade::unzip(path), codename, tell)
++}
++
++/// Write the recovery image at `path` itself, checked as Skyward for the
++/// phone, into the recovery partitions.
++fn write_raw(path: &Path, codename: &str, tell: &dyn Fn(Event)) -> End {
++    write_image(|| std::fs::read(path).with_context(|| format!("read {}", path.display())), codename, tell)
++}
++
++fn write_image(read: impl Fn() -> Result<Vec<u8>>, codename: &str, tell: &dyn Fn(Event)) -> End {
+     let dir = Path::new(skyward_block::BY_NAME);
+     let ready = || -> Result<(Vec<u8>, Vec<Slot>)> {
+-        let image = upgrade::unzip(path)?;
++        let image = read()?;
+         upgrade::check(&image, codename)?;
+         let next = skyward_vab::boot::next_slot().context("ask which slot starts next")?;
+         Ok((image, upgrade::slots(dir, next)?))

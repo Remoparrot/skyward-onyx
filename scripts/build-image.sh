@@ -5,7 +5,7 @@
 #   SKYWARD_BIN   手机侧 skyward，默认 build/phone/aarch64-linux-android/release/skyward
 #   SYSTEM_INIT   手机侧 system-init，默认 build/system-init/aarch64-linux-android/release/system-init
 #   PACK          宿主侧 skyward-pack，默认 build/host/release/skyward-pack[.exe]
-#   OUT           输出镜像，默认 out/skyward-v0.3.0-onyx.5-OS4.0.2.0.XOLCNXM.img
+#   OUT           输出镜像，默认 out/skyward-v0.3.1-onyx.1-OS4.0.2.0.XOLCNXM.img
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -14,7 +14,7 @@ SKYWARD_BIN="${SKYWARD_BIN:-$ROOT/build/phone/aarch64-linux-android/release/skyw
 SYSTEM_INIT="${SYSTEM_INIT:-$ROOT/build/system-init/aarch64-linux-android/release/system-init}"
 PACK="${PACK:-$ROOT/build/host/release/skyward-pack}"
 [[ -x "$PACK" ]] || PACK="$PACK.exe"
-OUT="${OUT:-$ROOT/out/skyward-v0.3.0-onyx.5-OS4.0.2.0.XOLCNXM.img}"
+OUT="${OUT:-$ROOT/out/skyward-v0.3.1-onyx.1-OS4.0.2.0.XOLCNXM.img}"
 FONT="${FONT:-$ROOT/vendor/skyward/resources/fonts/MiSansVF.ttf}"
 MONO="${MONO:-$ROOT/vendor/skyward/resources/fonts/KirkMono-Regular.ttf}"
 MONO_LICENSE="${MONO_LICENSE:-$ROOT/vendor/skyward/resources/fonts/KirkMono-OFL.txt}"

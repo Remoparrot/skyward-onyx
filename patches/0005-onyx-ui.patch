@@ -1,0 +1,3303 @@
+diff --git a/crates/skyward-preview/src/main.rs b/crates/skyward-preview/src/main.rs
+index d47b9f7..d5c519f 100644
+--- a/crates/skyward-preview/src/main.rs
++++ b/crates/skyward-preview/src/main.rs
+@@ -1513,7 +1513,7 @@ fn whole_page(app: &mut App, f: &Fonts, info: &DeviceInfo) -> Canvas {
+         fold.draw(&mut c, &t, &widgets::search_words(&t, f, fold.bar, fold.hint), 0.0);
+     }
+     if let Some(rows) = &frame.rows {
+-        let cx = Ctx { t: &t, f, info, state: &state, term: None, band: None };
++        let cx = Ctx { t: &t, f, info, state: &state, term: None, band: None, backdrop: None };
+         for k in 0..rows.count() {
+             let mut row = Canvas::new(c.w, (rows.edges[k + 1] - rows.edges[k]) as u32);
+             pages::row(screen, &cx, k, &mut row);
+diff --git a/crates/skyward-ui/Cargo.toml b/crates/skyward-ui/Cargo.toml
+index 47dcfd7..6a1c2e1 100644
+--- a/crates/skyward-ui/Cargo.toml
++++ b/crates/skyward-ui/Cargo.toml
+@@ -14,9 +14,13 @@ icu_locale_core = { version = "2.4.0", features = ["alloc"] }
+ jiff = { version = "0.2.38", default-features = false, features = ["std", "tzdb-bundle-always"] }
+ # Screenshots are saved as PNG.
+ png = "0.17.16"
++# The download page shows a QR code that sends a URL from another phone.
++qrcodegen = "1.8.0"
+ # The settings are kept between starts as a JSON file.
+ serde = { workspace = true }
+ serde_json = "1.0.154"
++# The recovery lock keeps a salted hash of its code, never the code.
++sha2 = "0.10.9"
+ skyward-info = { path = "../skyward-info" }
+ skyward-install = { path = "../skyward-install" }
+ skyward-net = { path = "../skyward-net" }
+diff --git a/crates/skyward-ui/examples/frames.rs b/crates/skyward-ui/examples/frames.rs
+index 5bd3aee..5d968d5 100644
+--- a/crates/skyward-ui/examples/frames.rs
++++ b/crates/skyward-ui/examples/frames.rs
+@@ -185,7 +185,7 @@ fn renders(f: &Fonts, i: &DeviceInfo, only: Option<&str>, quiet: bool) {
+     for t in [Theme::light(W, H, PPD), Theme::light(W, H, PPD).pressed()] {
+         for screen in screens.into_iter().filter(|s| only.is_none_or(|o| format!("{s:?}") == o)) {
+             let time = |band| {
+-                let cx = Ctx { t: &t, f, info: i, state: &state, term: None, band };
++                let cx = Ctx { t: &t, f, info: i, state: &state, term: None, band, backdrop: None };
+                 let mut ms: Vec<f64> = (0..5)
+                     .map(|_| {
+                         let t0 = Instant::now();
+diff --git a/crates/skyward-ui/src/app/act.rs b/crates/skyward-ui/src/app/act.rs
+index 1033f0c..20991f6 100644
+--- a/crates/skyward-ui/src/app/act.rs
++++ b/crates/skyward-ui/src/app/act.rs
+@@ -22,15 +22,131 @@ impl App {
+                 return self.arrive_at(s);
+             }
+             Action::OpenData => return self.open_data(),
+-            Action::Skip => {
+-                self.leave(true);
+-                if self.stack.len() > 1 {
+-                    self.stack.pop();
++            Action::ConfirmDownloadUrl => {
++                let mut url = self.state.download_url.trim().to_string();
++                if !url.starts_with("http://") && !url.starts_with("https://") {
++                    if !url.contains("://") {
++                        url = format!("https://{url}");
++                    }
++                }
++                if !(url.starts_with("http://") || url.starts_with("https://")) {
++                    self.say(l.pick(["请输入完整的 http 或 https 网址", "請輸入完整的 http 或 https 網址", "Enter a full http or https URL"]), now);
+                 } else {
+-                    *self.top_mut() = (Screen::Home, 0.0, Focus::Unset);
++                    self.state.download_url = url.clone();
++                    self.state.web_url = url.clone();
++                    self.state.web_page = None;
++                    self.state.web_loading = true;
++                    self.open(Screen::Web);
++                    return vec![Effect::FetchWeb(url)];
+                 }
+-                self.settle_page();
++            }
++            Action::PauseDownload => {
++                if let Some(job) = &mut self.state.download_job {
++                    if job.ended.is_none() && !job.paused {
++                        job.paused = true;
++                        job.rate = 0;
++                        self.refresh();
++                        return vec![Effect::PauseDownloadUrl];
++                    }
++                }
++            }
++            Action::ResumeDownload => {
++                if let Some(job) = &mut self.state.download_job {
++                    if job.ended.is_none() && job.paused {
++                        job.paused = false;
++                        job.last_ms = now;
++                        self.refresh();
++                        return vec![Effect::ResumeDownloadUrl];
++                    }
++                }
++            }
++            Action::StartDownload => {
++                let url = self.state.download_url.trim().to_string();
++                if !(url.starts_with("http://") || url.starts_with("https://")) {
++                    self.say(l.pick(["请输入完整的 http 或 https 网址", "請輸入完整的 http 或 https 網址", "Enter a full http or https URL"]), now);
++                    return Vec::new();
++                }
++                if !self.state.place_open(Place::Storage) {
++                    self.say(l.pick(["请先在「解密」中打开 data", "請先在「解密」中開啟 data", "Open data in Decrypt first"]), now);
++                    return Vec::new();
++                }
++                if self.state.download_job.as_ref().is_some_and(|j| j.ended.is_none()) {
++                    self.say(l.pick(["正在下载，请稍候", "正在下載，請稍候", "A download is under way"]), now);
++                    return Vec::new();
++                }
++                let name = skyward_net::download::name_of(&url);
++                self.state.download_job = Some(UrlJob {
++                    url: url.clone(),
++                    name: name.clone(),
++                    progress: None,
++                    ended: None,
++                    paused: false,
++                    rate: 0,
++                    last_ms: now,
++                    last_done: 0,
++                });
+                 self.refresh();
++                return vec![Effect::DownloadUrl { url, name }];
++            }
++            Action::StopDownloadUrl => {
++                if self.state.download_job.as_ref().is_some_and(|j| j.ended.is_none()) {
++                    return vec![Effect::StopDownloadUrl];
++                }
++            }
++            Action::ReadDownloadLink => return vec![Effect::ReadDownloadLink],
++            Action::Unlock => {
++                let code = std::mem::take(&mut self.state.code);
++                let ok = match &self.state.lock {
++                    Some(lock) => lock.matches(&code),
++                    None => true,
++                };
++                if ok {
++                    if self.screen() == Screen::Lock {
++                        if self.wake_lock {
++                            self.wake_lock = false;
++                            self.leave(true);
++                            self.stack.pop();
++                            self.settle_page();
++                            self.refresh();
++                            return Vec::new();
++                        }
++                        self.stack = vec![(Screen::Decrypt, 0.0, Focus::Unset)];
++                        self.settle_page();
++                        self.refresh();
++                        return self.open_data();
++                    }
++                    self.back(now);
++                } else {
++                    self.say(l.pick(["密码错误", "密碼錯誤", "Wrong code"]), now);
++                }
++            }
++            Action::LockSave => {
++                let code = std::mem::take(&mut self.state.code);
++                if (4..=8).contains(&code.chars().count()) && code.chars().all(|c| c.is_ascii_digit()) {
++                    self.state.lock = Some(crate::settings::Lock::set(&code));
++                    self.back(now);
++                } else {
++                    self.say(l.pick(["密码需为 4 到 8 位数字", "密碼需為 4 到 8 位數字", "The code is 4 to 8 digits"]), now);
++                }
++            }
++            Action::LockOff => {
++                self.state.lock = None;
++                self.state.code.clear();
++                self.back(now);
++            }
++            Action::Skip => {
++                if self.screen() == Screen::Decrypt {
++                    self.go_home_from_decrypt();
++                } else {
++                    self.leave(true);
++                    if self.stack.len() > 1 {
++                        self.stack.pop();
++                    } else {
++                        *self.top_mut() = (Screen::Home, 0.0, Focus::Unset);
++                    }
++                    self.settle_page();
++                    self.refresh();
++                }
+             }
+             Action::Back | Action::CloseSearch => return self.back(now),
+             Action::Theme { dark } => {
+@@ -48,6 +164,14 @@ impl App {
+                 self.refresh();
+                 return vec![Effect::Wlan(on)];
+             }
++            Action::Toggle(Switch::RememberData) => {
++                self.state.remember_data = !self.state.remember_data;
++                if !self.state.remember_data {
++                    self.state.data_password.clear();
++                }
++                self.refresh();
++                return Vec::new();
++            }
+             Action::Toggle(switch) => {
+                 let on = match switch {
+                     Switch::Vibrate => &mut self.state.vibrate,
+@@ -56,7 +180,10 @@ impl App {
+                     Switch::Verify => &mut self.state.verify,
+                     Switch::Signature => &mut self.state.check_signature,
+                     Switch::KeepRecovery => &mut self.state.keep_recovery,
++                    Switch::WlanAuto => &mut self.state.wlan_auto,
++                    Switch::DoubleTap => &mut self.state.double_tap,
+                     Switch::ShowPassword => &mut self.state.show_password,
++                    Switch::RememberData => unreachable!("the remembering switch is turned above"),
+                     Switch::Wlan => unreachable!("the WLAN switch is turned above"),
+                 };
+                 *on = !*on;
+@@ -535,6 +662,26 @@ impl App {
+             }
+             // The build goes into the recovery partitions an install may
+             // write too, so one waits for the other.
++            Action::UpdateSkywardLocal => {
++                let path = "/sdcard/Download/recovery.img".to_string();
++                if !matches!(self.state.install, Install::Idle | Install::Finished { .. }) {
++                    self.say(l.pick(INSTALL_UNFINISHED), now);
++                    return Vec::new();
++                }
++                if !std::path::Path::new(&path).is_file() {
++                    self.say(l.pick([
++                        "把 recovery.img 放到 /sdcard/Download 再试",
++                        "把 recovery.img 放到 /sdcard/Download 再試",
++                        "Put recovery.img in /sdcard/Download first",
++                    ]), now);
++                    return Vec::new();
++                }
++                if !self.state.updating_skyward() {
++                    self.state.skyward_job = Some(SkywardJob { stage: None, rate: 0, outcome: None, stopping: false, local: true });
++                    self.refresh();
++                    return vec![Effect::UpdateSkywardLocal { path }];
++                }
++            }
+             Action::UpdateSkyward => {
+                 let build = self.state.skyward_newest().and_then(|n| n.build.clone()).expect("the update is offered for the newest release's build");
+                 if !self.state.online() {
+@@ -546,7 +693,7 @@ impl App {
+                     return Vec::new();
+                 }
+                 if !self.state.updating_skyward() {
+-                    self.state.skyward_job = Some(SkywardJob { stage: None, rate: 0, outcome: None, stopping: false });
++                    self.state.skyward_job = Some(SkywardJob { stage: None, rate: 0, outcome: None, stopping: false, local: false });
+                     self.refresh();
+                     return vec![Effect::UpdateSkyward(build)];
+                 }
+@@ -570,9 +717,10 @@ impl App {
+     fn typing(&mut self) -> &mut String {
+         match self.screen() {
+             Screen::Search => &mut self.state.search,
+-            Screen::Decrypt => &mut self.state.code,
++            Screen::Decrypt | Screen::Lock | Screen::LockSet => &mut self.state.code,
+             Screen::Rename => &mut self.state.new_name,
+             Screen::WlanPassword => &mut self.state.password,
++            Screen::Download => &mut self.state.download_url,
+             Screen::WlanAdd => {
+                 let a = self.state.adding.as_mut().expect("the page adds a network");
+                 match a.field {
+@@ -584,6 +732,111 @@ impl App {
+         }
+     }
+ 
++    /// The data partition is open, and the decrypt page counts three
++    /// seconds before going home by itself.
++    pub fn start_home_countdown(&mut self, now: u64) {
++        if matches!(self.state.data, Data::Open) && self.screen() == Screen::Decrypt {
++            self.home_due = Some(now + 3000);
++            self.state.home_left = 3;
++            self.refresh();
++        }
++    }
++
++    /// Leave the decrypt page for the home page, as the countdown ending
++    /// does.
++    pub(super) fn go_home_from_decrypt(&mut self) {
++        self.home_due = None;
++        self.state.home_left = 0;
++        self.leave(true);
++        if self.stack.len() > 1 {
++            self.stack.pop();
++        } else {
++            *self.top_mut() = (Screen::Home, 0.0, Focus::Unset);
++        }
++        self.settle_page();
++        self.refresh();
++    }
++
++    /// How the URL download has come, as the runtime read it.
++    pub fn download_url_progress(&mut self, progress: Progress, now: u64) {
++        if let Some(job) = &mut self.state.download_job {
++            let done = match progress {
++                Progress::Downloading { done, .. } => done,
++                Progress::Checking { done, .. } => done,
++            };
++            if now > job.last_ms {
++                job.rate = (done.saturating_sub(job.last_done)) * 1000 / (now - job.last_ms);
++            }
++            job.last_ms = now;
++            job.last_done = done;
++            job.progress = Some(progress);
++            self.refresh();
++        }
++    }
++
++    /// How the URL download ended, saved at the path or why not.
++    pub fn download_url_ended(&mut self, ended: Result<String, String>, now: u64) {
++        if let Some(job) = &mut self.state.download_job {
++            job.ended = Some(ended.clone());
++            job.paused = false;
++            job.rate = 0;
++            self.refresh();
++            match ended {
++                Ok(path) => self.say(&format!("已保存到 {path}"), now),
++                Err(why) => self.report(&why, now),
++            }
++        }
++    }
++
++    /// The download was paused or carried on, as the runtime did.
++    pub fn download_url_paused(&mut self, paused: bool) {
++        if let Some(job) = &mut self.state.download_job {
++            job.paused = paused;
++            if paused {
++                job.rate = 0;
++            }
++            self.refresh();
++        }
++    }
++
++    /// What /sdcard/Download/link.txt held, or why it could not be read.
++    pub fn download_link(&mut self, link: Result<String, String>, now: u64) {
++        match link {
++            Ok(text) => {
++                let url = text.trim().to_string();
++                if url.is_empty() {
++                    self.say(self.state.lang.pick(["link.txt 是空的", "link.txt 是空的", "link.txt is empty"]), now);
++                } else {
++                    self.state.download_url = url;
++                    self.say(self.state.lang.pick(["已读取链接", "已讀取連結", "Link read"]), now);
++                    self.refresh();
++                }
++            }
++            Err(why) => self.report(&why, now),
++        }
++    }
++
++    /// The URL the QR code sends another phone to, where the page is served.
++    pub fn download_server_url(&mut self, url: Option<String>) {
++        self.state.download_server = url;
++        self.refresh();
++    }
++
++    /// A URL another phone sent through the page the QR code opens.
++    pub fn download_url_from_phone(&mut self, url: String, now: u64) {
++        self.state.download_url = url;
++        self.say(self.state.lang.pick(["已收到链接", "已收到連結", "Link received"]), now);
++        self.refresh();
++    }
++
++    /// The web page read as text, or why it could not be read.
++    pub fn web_fetched(&mut self, page: Result<WebPage, String>) {
++        self.state.web_loading = false;
++        self.state.web_page = Some(page);
++        self.refresh();
++    }
++
++
+     /// A key of the on-screen keyboard. A capital lasts one letter; return
+     /// opens the first result of a search, and runs a terminal's command.
+     fn type_key(&mut self, cap: Cap, now: u64) -> Vec<Effect> {
+@@ -620,6 +873,14 @@ impl App {
+                     let code = std::mem::take(&mut self.state.code);
+                     return self.unlock(code);
+                 }
++                Screen::Lock => {
++                    if self.state.code.is_empty() {
++                        self.say(l.pick(["请输入锁屏密码", "請輸入螢幕鎖定密碼", "Enter the recovery lock"]), now);
++                    } else {
++                        return self.act(Action::Unlock, now);
++                    }
++                }
++                Screen::LockSet => return self.act(Action::LockSave, now),
+                 // A name the folder cannot take is turned down here, in
+                 // the user's words; an unchanged one leaves the page.
+                 Screen::Rename => {
+@@ -644,6 +905,7 @@ impl App {
+                         Some(why) => self.say(why, now),
+                         None => {
+                             let password = Secret(std::mem::take(&mut self.state.password));
++                            self.state.wlan_password = Some(password.0.clone());
+                             let mut fx = self.back(now);
+                             fx.push(Effect::JoinWlan { ssid: network.ssid, name: network.name, security: network.security, password });
+                             return fx;
+@@ -652,6 +914,7 @@ impl App {
+                 }
+                 // So is a name no network can have; the keyboard then types
+                 // into the field turned down.
++                Screen::Download => return self.act(Action::ConfirmDownloadUrl, now),
+                 Screen::WlanAdd => {
+                     let a = self.state.adding.as_mut().expect("the page adds a network");
+                     let (field, why) = match a.name.len() {
+@@ -677,6 +940,7 @@ impl App {
+                                 true => Secret(std::mem::take(&mut self.state.password)),
+                                 false => Secret::default(),
+                             };
++                            self.state.wlan_password = Some(password.0.clone());
+                             let mut fx = self.back(now);
+                             fx.push(Effect::JoinWlan { ssid: name.clone().into_bytes(), name, security, password });
+                             return fx;
+@@ -831,6 +1095,8 @@ impl App {
+                     self.refresh();
+                 }
+             }
++            Confirm::DisableAvb => fx.push(Effect::DisableAvb),
++            Confirm::UnlockScreen => fx.extend(self.act(Action::Unlock, now)),
+         }
+         fx
+     }
+diff --git a/crates/skyward-ui/src/app/decrypt.rs b/crates/skyward-ui/src/app/decrypt.rs
+index b472bbc..b12fb9b 100644
+--- a/crates/skyward-ui/src/app/decrypt.rs
++++ b/crates/skyward-ui/src/app/decrypt.rs
+@@ -43,6 +43,32 @@ pub enum Data {
+     Erased,
+ }
+ 
++/// The WLAN network the recovery last joined, and joins again as it starts
++/// when its switch says so. The SSID is kept as hex, as the supplicant is
++/// told it.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct SavedWlan {
++    pub ssid: String,
++    pub name: String,
++    pub security: Security,
++    pub password: String,
++}
++
++impl SavedWlan {
++    /// The SSID as the supplicant is told it.
++    pub fn ssid_bytes(&self) -> Vec<u8> {
++        let digits = self.ssid.as_bytes();
++        digits
++            .chunks_exact(2)
++            .filter_map(|pair| {
++                let text = std::str::from_utf8(pair).ok()?;
++                u8::from_str_radix(text, 16).ok()
++            })
++            .collect()
++    }
++}
++
++
+ impl Data {
+     /// Whether the owner's internal storage can be read: the partition is
+     /// open, and so are the owner's own files, which open first.
+@@ -61,6 +87,10 @@ impl App {
+     /// those of `waiting`, the user and the control their screen lock is
+     /// answered with, still closed.
+     pub fn data_waiting(&mut self, waiting: Option<(u32, Keys)>) {
++        if waiting.is_some() {
++            self.home_due = None;
++            self.state.home_left = 0;
++        }
+         self.state.data = match waiting {
+             Some((user, keys)) => Data::Locked { user, keys, checking: false },
+             None => Data::Open,
+@@ -72,6 +102,8 @@ impl App {
+     /// The data partition did not open, and why.
+     pub fn data_failed(&mut self, why: String) {
+         self.state.data = Data::Failed(why);
++        self.home_due = None;
++        self.state.home_left = 0;
+         self.refresh();
+     }
+ 
+@@ -81,6 +113,17 @@ impl App {
+         if let Data::Locked { checking, .. } = &mut self.state.data {
+             *checking = false;
+         }
++        self.pending_password = None;
++        if self.auto_unlocking {
++            // The saved one is no longer the phone's: ask for the new one.
++            self.auto_unlocking = false;
++            self.auto_tried = true;
++            self.state.remember_data = false;
++            self.state.data_password.clear();
++            self.refresh();
++            self.report(&format!("{why}；保存的密码已失效，请手动输入"), now);
++            return;
++        }
+         self.refresh();
+         self.report(&why, now);
+     }
+@@ -97,11 +140,42 @@ impl App {
+     /// checked, and nothing more is entered until it has been.
+     pub(super) fn unlock(&mut self, code: String) -> Vec<Effect> {
+         let Data::Locked { user, keys, .. } = self.state.data else { unreachable!("only a screen lock waiting takes what is entered") };
++        self.pending_password = if self.state.remember_data { Some(code.clone()) } else { None };
++        self.auto_unlocking = false;
+         self.state.data = Data::Locked { user, keys, checking: true };
+         self.refresh();
+         vec![Effect::Unlock { user, code }]
+     }
+ 
++    /// The phone's screen lock the settings kept, for the runtime to try as
++    /// the data partition opens; once a start.
++    pub fn auto_credential(&mut self) -> Option<(u32, String)> {
++        if self.auto_tried || !self.state.remember_data || self.state.data_password.is_empty() {
++            return None;
++        }
++        let Data::Locked { user, .. } = self.state.data else { return None };
++        if user != 0 {
++            return None;
++        }
++        self.auto_tried = true;
++        self.auto_unlocking = true;
++        self.refresh();
++        Some((0, self.state.data_password.clone()))
++    }
++
++    /// What the phone's screen lock was taken: the one typed is kept when
++    /// the page is set to remember it.
++    pub fn unlock_succeeded(&mut self) {
++        if let Some(code) = self.pending_password.take() {
++            if self.state.remember_data {
++                self.state.data_password = code;
++            }
++        }
++        self.auto_unlocking = false;
++        self.refresh();
++    }
++
++
+     /// Add the dot under the finger to the pattern being drawn.
+     pub(super) fn trace(&mut self, t: &Theme, x: f32, y: f32) {
+         let Some((cx, cy, span)) = self.frame.as_ref().and_then(|fr| fr.pattern) else { return };
+@@ -173,6 +247,26 @@ mod tests {
+         assert_eq!(first.arrive(), vec![Effect::OpenData], "a recovery that starts on the page opens it as well");
+     }
+ 
++    #[test]
++    fn the_recovery_lock_opens_the_partition_only_with_its_code() {
++        let (f, i) = (fonts(), info());
++        let mut app = App::new(Screen::Lock, W, H, PPD);
++        app.state.lock = Some(crate::settings::Lock::set("1234"));
++        assert!(app.frame(&f, &i).hits.iter().any(|h| matches!(h.action, Action::Type(_))), "the keypad shows");
++        for ch in "0000".chars() {
++            tap(&mut app, &f, &i, Action::Type(Cap::Char(ch)));
++        }
++        assert!(tap(&mut app, &f, &i, Action::Type(Cap::Enter)).is_empty());
++        assert_eq!(app.screen(), Screen::Lock, "a wrong code leaves the lock where it is");
++        assert_eq!(app.deadline(0), Some(TOAST_MS), "and says so");
++        for ch in "1234".chars() {
++            tap(&mut app, &f, &i, Action::Type(Cap::Char(ch)));
++        }
++        assert_eq!(tap(&mut app, &f, &i, Action::Type(Cap::Enter)), vec![Effect::OpenData], "the right code opens the partition");
++        assert_eq!(app.screen(), Screen::Decrypt);
++        assert_eq!(app.state.code, "", "the code is not kept after it is checked");
++    }
++
+     #[test]
+     fn leaving_the_decrypt_page_goes_back_to_where_it_was_opened_from() {
+         let (f, i) = (fonts(), info());
+diff --git a/crates/skyward-ui/src/app/draw.rs b/crates/skyward-ui/src/app/draw.rs
+index 731f8b7..66f2a03 100644
+--- a/crates/skyward-ui/src/app/draw.rs
++++ b/crates/skyward-ui/src/app/draw.rs
+@@ -39,7 +39,7 @@ impl App {
+             let screen = self.screen();
+             for rows in std::mem::take(&mut self.stale) {
+                 let band = Band { rows, cols: (0, self.cols) };
+-                let cx = Ctx { t: &t, f, info, state: &self.state, term: self.term.as_ref(), band: Some(band) };
++                let cx = Ctx { t: &t, f, info, state: &self.state, term: self.term.as_ref(), band: Some(band), backdrop: self.snapshot.as_ref() };
+                 let fresh = pages::render(screen, &cx);
+                 let mut canvas = self.frame.take().expect("checked above").canvas;
+                 assert_eq!(canvas.h, fresh.canvas.h, "a page drawn again in part is as tall as it was");
+@@ -52,7 +52,7 @@ impl App {
+             let screen = self.screen();
+             let first = self.top().1.max(0.0) as u32;
+             let band = Band { rows: (first, first + self.h), cols: (0, wide.min(self.w)) };
+-            let cx = Ctx { t: &t, f, info, state: &self.state, term: self.term.as_ref(), band: Some(band) };
++            let cx = Ctx { t: &t, f, info, state: &self.state, term: self.term.as_ref(), band: Some(band), backdrop: self.snapshot.as_ref() };
+             let mut frame = pages::render(screen, &cx);
+             // A page drawn in part across holds its rows whole, the columns
+             // of them drawn on as they are needed.
+@@ -113,7 +113,7 @@ impl App {
+         let held = frame.canvas.held();
+         let t = self.theme();
+         let band = Band { rows: (held.start, held.end), cols: (self.cols, wide) };
+-        let cx = Ctx { t: &t, f, info, state: &self.state, term: self.term.as_ref(), band: Some(band) };
++        let cx = Ctx { t: &t, f, info, state: &self.state, term: self.term.as_ref(), band: Some(band), backdrop: self.snapshot.as_ref() };
+         let part = pages::render(self.screen(), &cx).canvas;
+         self.frame.as_mut().expect("drawn above").canvas.replace(&part);
+         self.cols = wide;
+@@ -144,7 +144,7 @@ impl App {
+         let screen = self.screen();
+         for rows in bands {
+             let band = Band { rows, cols: (0, self.w) };
+-            let cx = Ctx { t: &t, f, info, state: &self.state, term: self.term.as_ref(), band: Some(band) };
++            let cx = Ctx { t: &t, f, info, state: &self.state, term: self.term.as_ref(), band: Some(band), backdrop: self.snapshot.as_ref() };
+             let part = pages::render(screen, &cx).canvas;
+             self.frame.as_mut().expect("drawn above").canvas.join(&part);
+         }
+@@ -172,9 +172,49 @@ impl App {
+         if charge > 0.0 {
+             self.compose_charging(out, f, info, charge, now);
+         }
++        // Keep what the panel is about to show, before the screen is dimmed
++        // for the night: the lock screen stretches it behind itself.
++        if self.display_on && self.screen() != Screen::Lock {
++            self.remember(out);
++        }
+         out.dim(self.curtain.level(now));
+     }
+ 
++    /// Keep a small copy of what the panel shows, a pixel of every
++    /// twenty-two: stretched back over the screen it turns into the soft,
++    /// blurred picture the lock screen shows behind its pages.
++    fn remember(&mut self, out: &Canvas) {
++        let level = self.state.lock_blur.clamp(0.0, 1.0);
++        if level <= 0.01 {
++            // The slider's left end: no page is kept, and the lock screen
++            // shows the theme's own colour.
++            self.snapshot = None;
++            return;
++        }
++        const STEP: u32 = 10;
++        let (w, h) = (out.w, out.h);
++        if !out.whole() || w < STEP || h < STEP {
++            return;
++        }
++        let (sw, sh) = (w.div_ceil(STEP), h.div_ceil(STEP));
++        let mut small = match self.snapshot.take() {
++            Some(s) if (s.w, s.h) == (sw, sh) => s,
++            _ => Canvas::new(sw, sh),
++        };
++        for y in 0..sh {
++            let row = (y * STEP).min(h - 1) as usize * w as usize;
++            for x in 0..sw {
++                let from = (row + (x * STEP).min(w - 1) as usize) * 4;
++                let to = ((y * sw + x) * 4) as usize;
++                small.data[to..to + 4].copy_from_slice(&out.data[from..from + 4]);
++            }
++        }
++        soften(&mut small, blur_reach(level));
++        self.snapshot = Some(small);
++    }
++
++
++
+     /// The charging screen, `level` of the way over the page drawn on `out`.
+     fn compose_charging(&mut self, out: &mut Canvas, f: &Fonts, info: &DeviceInfo, level: f32, now: u64) {
+         let battery = info.battery.as_ref().expect("a cable went in on a phone whose battery is read");
+@@ -221,9 +261,6 @@ impl App {
+             self.morph = None;
+         }
+         let t = self.theme();
+-        if let Some((which, track)) = self.knob.take() {
+-            self.paint_knob(&t, f, which, track);
+-        }
+         if self.toast.as_ref().is_some_and(|m| now >= m.1) {
+             self.toast = None;
+         }
+@@ -270,7 +307,7 @@ impl App {
+             let (x, y, w, h) = row_part(press.rect, page);
+             let pressed = t.pressed();
+             let band = Band { rows: (y, y + h), cols: (x, x + w) };
+-            let cx = Ctx { t: &pressed, f, info, state: &self.state, term: self.term.as_ref(), band: Some(band) };
++            let cx = Ctx { t: &pressed, f, info, state: &self.state, term: self.term.as_ref(), band: Some(band), backdrop: self.snapshot.as_ref() };
+             let down = pages::render(screen, &cx).canvas;
+             assert_eq!((down.w, down.h), (page.w, page.h), "a page held down is laid out as it was");
+             self.row_art = Some((page.crop(x, y, w, h), down.crop(x, y, w, h)));
+@@ -412,7 +449,7 @@ impl App {
+                             let (f, info) = fresh.expect("a page drawn again as it last showed has its rows in view drawn");
+                             let mut c = self.spare.pop().unwrap_or_else(|| Canvas::new(out.w, 0));
+                             c.resize((rows.edges[i + 1] - rows.edges[i]) as u32);
+-                            let cx = Ctx { t, f, info, state: &self.state, term: self.term.as_ref(), band: None };
++                            let cx = Ctx { t, f, info, state: &self.state, term: self.term.as_ref(), band: None, backdrop: self.snapshot.as_ref() };
+                             pages::row(screen, &cx, i, &mut c);
+                             self.drawn.push((i, c));
+                             self.drawn.len() - 1
+@@ -696,7 +733,7 @@ mod tests {
+         ];
+         for t in [Theme::light(W, H, PPD), Theme::dark(W, H, PPD).pressed()] {
+             for screen in screens {
+-                let cx = |band| Ctx { t: &t, f: &f, info: &i, state: &state, term: None, band };
++                let cx = |band| Ctx { t: &t, f: &f, info: &i, state: &state, term: None, band, backdrop: None };
+                 let whole = pages::render(screen, &cx(None)).canvas;
+                 let row = whole.w as usize * 4;
+                 let differs = |c: &Canvas| c.data.chunks(row).zip(whole.data.chunks(row)).position(|(a, b)| a != b);
+@@ -741,7 +778,7 @@ mod tests {
+             bands += 1;
+         }
+         let t = app.theme();
+-        let whole = pages::render(Screen::Settings, &Ctx { t: &t, f: &f, info: &i, state: &app.state, term: None, band: None }).canvas;
++        let whole = pages::render(Screen::Settings, &Ctx { t: &t, f: &f, info: &i, state: &app.state, term: None, band: None, backdrop: None }).canvas;
+         let page = &app.frame.as_ref().unwrap().canvas;
+         assert!(whole.h > H + H / 4, "a page well over a screen long, drawn in {bands} more bands");
+         assert!(page.whole() && page.data == whole.data, "the page drawn a band at a time is the page drawn whole");
+@@ -755,7 +792,7 @@ mod tests {
+         app.compose(&mut out, &f, &i, "12:00", 0);
+         let anew = |app: &App| {
+             let t = app.theme();
+-            pages::render(Screen::Search, &Ctx { t: &t, f: &f, info: &i, state: &app.state, term: None, band: None })
++            pages::render(Screen::Search, &Ctx { t: &t, f: &f, info: &i, state: &app.state, term: None, band: None, backdrop: None })
+         };
+         for cap in [Cap::Char('b'), Cap::Char('f'), Cap::Space, Cap::Backspace, Cap::Shift, Cap::Char('q')] {
+             let (x, y) = spot(&mut app, &f, &i, Action::Type(cap));
+@@ -893,3 +930,52 @@ mod tests {
+         assert_eq!(top(&screen), Some(home.ceil()));
+     }
+ }
++
++/// `c` with every pixel the mean of the `reach` pixels either side of it,
++/// three times over, which is close to a Gaussian of that spread. The
++/// small copy the lock screen keeps is softened this way before it is
++/// stretched, so that the blur is smooth rather than the coarse mosaic
++/// of a picture kept too small.
++fn soften(c: &mut Canvas, reach: usize) {
++    if reach == 0 || c.w == 0 || c.h == 0 {
++        return;
++    }
++    let (w, h) = (c.w as usize, c.h as usize);
++    let width = 2 * reach + 1;
++    let mean: Vec<u8> = (0..=255 * width).map(|s| ((s + width / 2) / width) as u8).collect();
++    let clamp = |i: isize, n: usize| i.clamp(0, n as isize - 1) as usize;
++    let mut a = c.data.clone();
++    let mut b = vec![0u8; a.len()];
++    for _ in 0..3 {
++        // Along each row: the running sum of the window either side of the
++        // pixel, past an edge counting the edge pixel again.
++        for y in 0..h {
++            let row = y * w * 4;
++            for ch in 0..4 {
++                let at = |i: usize| a[row + i * 4 + ch] as u32;
++                let mut sum: u32 = (0..width).map(|k| at(clamp(k as isize - reach as isize, w))).sum();
++                for x in 0..w {
++                    b[row + x * 4 + ch] = mean[sum as usize];
++                    sum = sum + at(clamp((x + 1 + reach) as isize, w)) - at(clamp(x as isize - reach as isize, w));
++                }
++            }
++        }
++        // Down each column, a running sum a row at a time.
++        let mut sums = vec![0u32; w * 4];
++        for k in 0..width {
++            let row = clamp(k as isize - reach as isize, h) * w * 4;
++            sums.iter_mut().zip(&b[row..row + w * 4]).for_each(|(s, &v)| *s += v as u32);
++        }
++        for y in 0..h {
++            for i in 0..w * 4 {
++                a[y * w * 4 + i] = mean[sums[i] as usize];
++            }
++            let added = clamp((y + 1 + reach) as isize, h) * w * 4;
++            let taken = clamp(y as isize - reach as isize, h) * w * 4;
++            for i in 0..w * 4 {
++                sums[i] = sums[i] + b[added + i] as u32 - b[taken + i] as u32;
++            }
++        }
++    }
++    c.data.copy_from_slice(&a);
++}
+diff --git a/crates/skyward-ui/src/app/input.rs b/crates/skyward-ui/src/app/input.rs
+index 9fe100d..bcd2124 100644
+--- a/crates/skyward-ui/src/app/input.rs
++++ b/crates/skyward-ui/src/app/input.rs
+@@ -5,11 +5,24 @@ use super::*;
+ 
+ impl App {
+     pub fn touch(&mut self, ev: Touch, f: &Fonts, now: u64) -> Vec<Effect> {
+-        // A finger on the dark panel lights nothing, as on the phone's own
+-        // system, where the power key lights it.
++        // A finger on the dark panel lights it on a double tap, as the
++        // phone's own system does; a single tap is forgotten.
+         if !self.display_on {
++            if self.state.double_tap {
++                if let Touch::Down(x, y) = ev {
++                    if let Some((at, lx, ly)) = self.last_tap.take() {
++                        if now.saturating_sub(at) <= DOUBLE_TAP_MS && (x - lx).abs() <= DOUBLE_TAP_SLOP && (y - ly).abs() <= DOUBLE_TAP_SLOP {
++                            self.wake(now);
++                            self.drag = Drag::Waking;
++                            return Vec::new();
++                        }
++                    }
++                    self.last_tap = Some((now, x, y));
++                }
++            }
+             return Vec::new();
+         }
++        self.last_tap = None;
+         // A finger on the charging screen sends it away for the page, and
+         // does nothing else until it lifts.
+         if self.charge_shown() {
+@@ -187,7 +200,7 @@ impl App {
+                 Drag::Confirm { which, track, grab } => {
+                     let travel = (track.w - track.h).max(1.0);
+                     self.state.confirm = ((x - grab - track.x) / travel).clamp(0.0, 1.0);
+-                    self.repaint_confirm(&t, f, which, track);
++                    self.repaint_confirm(track);
+                     self.drag = Drag::Confirm { which, track, grab };
+                 }
+                 Drag::Pattern => {
+@@ -253,7 +266,7 @@ impl App {
+                 Drag::Confirm { which, track, .. } => {
+                     let done = self.state.confirm > SLID;
+                     self.state.confirm = 0.0;
+-                    self.repaint_confirm(&t, f, which, track);
++                    self.repaint_confirm(track);
+                     if done {
+                         fx.extend(self.confirmed(which, now));
+                     }
+@@ -262,6 +275,9 @@ impl App {
+                 // Let go, the strength slider taps the motor as strongly as
+                 // it was left at.
+                 Drag::Slider(Slider::Vibration, _) if self.state.vibrate => fx.push(Effect::Haptic),
++                // The lock screen's blur is said in words under its slider,
++                // which the page draws again once the hand stops.
++                Drag::Slider(Slider::LockBlur, _) => self.refresh(),
+                 _ => {}
+             },
+         }
+@@ -453,7 +469,7 @@ impl App {
+             Press::Power { spot, .. } => fx.extend(self.work(spot, now)),
+             Press::Slide { which, track, .. } => {
+                 let done = self.state.confirm > SLID;
+-                self.let_knob_go(which, track);
++                self.let_knob_go(track);
+                 if done {
+                     fx.extend(self.confirmed(which, now));
+                 } else {
+@@ -469,18 +485,17 @@ impl App {
+     /// let go: a knob it slid goes back.
+     pub(super) fn drop_button(&mut self) {
+         let Some((key, press)) = self.button else { return };
+-        if let Press::Slide { which, track, .. } = press {
+-            self.let_knob_go(which, track);
++        if let Press::Slide { track, .. } = press {
++            self.let_knob_go(track);
+         }
+         self.button = Some((key, Press::Spent));
+     }
+ 
+     /// Let go of a swipe-to-confirm control's knob, which goes back to the
+     /// start of its track.
+-    fn let_knob_go(&mut self, which: Confirm, track: Rect) {
++    fn let_knob_go(&mut self, track: Rect) {
+         self.state.confirm = 0.0;
+-        self.knob = Some((which, track));
+-        self.dirty = true;
++        self.redraw_rows(track);
+     }
+ 
+     fn on_knob(&self, track: Rect, x: f32) -> bool {
+@@ -488,20 +503,8 @@ impl App {
+         x >= knob_x && x <= knob_x + track.h
+     }
+ 
+-    fn repaint_confirm(&mut self, t: &Theme, f: &Fonts, which: Confirm, track: Rect) {
+-        self.paint_knob(t, f, which, track);
+-        self.dirty = true;
+-    }
+-
+-    /// Draw the swipe-to-confirm control at `track` on the page again, its
+-    /// knob where it has come to.
+-    pub(super) fn paint_knob(&mut self, t: &Theme, f: &Fonts, which: Confirm, track: Rect) {
+-        let (label, danger) = pages::confirm_label(which, &self.state);
+-        if let Some(fr) = self.frame.as_mut() {
+-            fr.canvas.fill_rect(track.x, track.y, track.w, track.h, t.pal.bg);
+-            widgets::confirm(&mut fr.canvas, t, f, track.y, label, danger, self.state.confirm);
+-        }
+-        self.layer = None;
++    fn repaint_confirm(&mut self, track: Rect) {
++        self.redraw_rows(track);
+     }
+ }
+ 
+diff --git a/crates/skyward-ui/src/app/keys.rs b/crates/skyward-ui/src/app/keys.rs
+index d7e7b5b..dbaf973 100644
+--- a/crates/skyward-ui/src/app/keys.rs
++++ b/crates/skyward-ui/src/app/keys.rs
+@@ -20,6 +20,9 @@ impl App {
+                         Slider::Vibration => {
+                             ["按音量键调节振动强度，按电源键完成", "按音量鍵調整震動強度，按電源鍵完成", "Set the vibration with the volume keys, then press the power key"]
+                         }
++                        Slider::LockBlur => {
++                            ["按音量键调节锁屏背景模糊，按电源键完成", "按音量鍵調整鎖屏背景模糊，按電源鍵完成", "Set the lock screen blur with the volume keys, then press the power key"]
++                        }
+                     };
+                     self.say(l.pick(said), now);
+                 }
+diff --git a/crates/skyward-ui/src/app/mod.rs b/crates/skyward-ui/src/app/mod.rs
+index c05e99f..eb23efd 100644
+--- a/crates/skyward-ui/src/app/mod.rs
++++ b/crates/skyward-ui/src/app/mod.rs
+@@ -84,8 +84,15 @@ pub use wlan::*;
+ #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+ pub enum Screen {
+     Decrypt,
++    /// The recovery's own lock, asking for the code before the data
++    /// partition is opened.
++    Lock,
++    /// Setting, changing or taking away that lock.
++    LockSet,
+     Home,
+     Settings,
++    /// Turning off verified boot's checks, with a swipe.
++    Avb,
+     Reboot,
+     Wipe,
+     /// Mounting and unmounting the slot's partitions.
+@@ -186,6 +193,11 @@ pub enum Screen {
+     /// A network added by hand: its name, how it is protected and its
+     /// password, typed on the screen's keyboard.
+     WlanAdd,
++    /// A file downloaded from a URL, or from a link another phone sends by
++    /// the page the QR code opens.
++    Download,
++    /// A web page's text, opened from the download page.
++    Web,
+ }
+ 
+ #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+@@ -223,6 +235,10 @@ pub enum Confirm {
+     RemoveSystem,
+     /// Install the system the installer holds with the room chosen.
+     InstallSystem,
++    /// Turn off dm-verity and verification in the booted slot's vbmeta.
++    DisableAvb,
++    /// The recovery's lock screen, slid to open.
++    UnlockScreen,
+ }
+ 
+ /// What a control does when touched.
+@@ -235,6 +251,13 @@ pub enum Action {
+     Skip,
+     /// Try opening the data partition again, after it did not open.
+     OpenData,
++    /// Check the code typed on the recovery's lock, and open the data
++    /// partition behind it.
++    Unlock,
++    /// Keep the code typed as the recovery's lock.
++    LockSave,
++    /// Take the recovery's lock away.
++    LockOff,
+     Back,
+     Theme { dark: bool },
+     Toggle(Switch),
+@@ -361,6 +384,18 @@ pub enum Action {
+     AddNetwork,
+     /// Type into this field of the page that adds a network.
+     TypeInto(Field),
++    /// Confirm and tidy the URL typed on the download page, without
++    /// downloading it.
++    ConfirmDownloadUrl,
++    /// Download the URL typed on the download page.
++    StartDownload,
++    /// Pause or carry on the download under way.
++    PauseDownload,
++    ResumeDownload,
++    /// Stop the download under way.
++    StopDownloadUrl,
++    /// Read /sdcard/Download/link.txt into the download page's field.
++    ReadDownloadLink,
+     /// Open the protections a network added by hand can have.
+     ChooseSecurity,
+     /// Take this protection, and close the list.
+@@ -380,6 +415,9 @@ pub enum Action {
+     /// Download the newest release's build for the phone and write it into
+     /// the recovery partitions.
+     UpdateSkyward,
++    /// Write the recovery image downloaded to /sdcard/Download into the
++    /// recovery partitions.
++    UpdateSkywardLocal,
+     /// Stop downloading the build.
+     StopSkywardUpdate,
+     /// A control whose work is not wired up yet; touching it says so.
+@@ -472,6 +510,23 @@ pub enum Effect {
+     /// List the folder at this path from the top of a place, to choose a
+     /// file to install in, telling what it holds with [`App::set_place`].
+     ReadPlace(Place, String),
++    /// Download `url` into /sdcard/Download as `name`, telling how it goes
++    /// with [`App::download_url_progress`] and [`App::download_url_ended`].
++    DownloadUrl { url: String, name: String },
++    /// Pause or carry on the URL download under way.
++    PauseDownloadUrl,
++    ResumeDownloadUrl,
++    /// Stop the URL download under way.
++    StopDownloadUrl,
++    /// Read /sdcard/Download/link.txt and tell its text with
++    /// [`App::download_link`].
++    ReadDownloadLink,
++    /// Serve the page the download page's QR code opens, which sends a URL
++    /// back, telling it with [`App::download_server_url`].
++    StartDownloadServer,
++    /// Read the web page at `url` as text, telling it with
++    /// [`App::web_fetched`].
++    FetchWeb(String),
+     /// Open the data partition as far as it opens with nothing a user
+     /// knows, telling what waits with [`App::data_waiting`] or why it did
+     /// not open with [`App::data_failed`].
+@@ -585,10 +640,15 @@ pub enum Effect {
+     /// how it goes with [`App::skyward_progress`] and
+     /// [`App::skyward_ended`].
+     UpdateSkyward(Build),
++    /// Write the recovery image at `path` into the recovery partitions,
++    /// checking it as Skyward for the phone.
++    UpdateSkywardLocal { path: String },
+     StopSkywardUpdate,
+     /// Merge the update that waits in the slot the phone runs from,
+     /// telling how it goes with [`App::set_update`].
+     Merge,
++    /// Turn off dm-verity and verification in the booted slot's vbmeta.
++    DisableAvb,
+ }
+ 
+ enum Drag {
+@@ -651,6 +711,11 @@ const TOAST_MS: u64 = 2000;
+ /// How long a text field's cursor shows and then hides, as the stock
+ /// fields blink it.
+ const BLINK_MS: u64 = 500;
++/// How close together two taps on the dark screen have to be to light it.
++const DOUBLE_TAP_MS: u64 = 400;
++/// How far apart on the glass they may land and still count as one double
++/// tap.
++const DOUBLE_TAP_SLOP: f32 = 80.0;
+ /// The spring the home page's search bar moves to the search page's field
+ /// on, and back: critically damped, fitted to frames of the stock settings
+ /// on a Xiaomi 17 Ultra.
+@@ -743,6 +808,20 @@ const MIN_BRIGHTNESS: f32 = 0.02;
+ const SLIDER_STEP: f32 = 0.1;
+ /// Where both sliders start: one step of the keys from their left end.
+ pub const SLIDER_START: f32 = SLIDER_STEP;
++
++/// How strongly the lock screen blurs what it shows behind itself to begin
++/// with: a level a little over half.
++pub const LOCK_BLUR_START: f32 = 0.55;
++
++/// The blur the lock screen shows a page through at `level` of the slider:
++/// how many of the small picture's pixels each side of a point are averaged
++/// into it, from one at the lightest to six at the strongest.
++fn blur_reach(level: f32) -> usize {
++    match level.clamp(0.0, 1.0) {
++        l if l <= 0.01 => 0,
++        l => (1.0 + 5.0 * l).round() as usize,
++    }
++}
+ /// While the backlight eases, it steps once a frame of a 120 Hz panel.
+ const BACKLIGHT_STEP_MS: u64 = 8;
+ /// Just after the panel lights, a touch or key only keeps it awake: the
+@@ -1069,13 +1148,27 @@ pub struct App {
+     /// The first of the power key and volume down gone down, waiting for
+     /// the other to take a screenshot, and when it went down.
+     chord: Option<(Key, u64)>,
++    /// The last tap on the dark screen, and where it landed, for the second
++    /// of a double tap to light it.
++    last_tap: Option<(u64, f32, f32)>,
++    /// The lock screen a wake put over the page, so unlocking it goes back
++    /// to that page rather than to the decrypt page.
++    wake_lock: bool,
++    /// A small copy of the screen last shown, kept while a page is shown and
++    /// the panel lit: the lock screen stretches it over itself, blurred, the
++    /// way the phone's own lock screen shows the page behind it.
++    snapshot: Option<Canvas>,
++    /// The phone's screen lock typed on the decrypt page, kept until the
++    /// secure world takes it, and whether the saved one has been tried.
++    pending_password: Option<String>,
++    auto_tried: bool,
++    auto_unlocking: bool,
++    /// When the decrypt page, its data open, goes home by itself.
++    home_due: Option<u64>,
+     /// The page scrolling of its own accord, to show the control the keys
+     /// moved to or to fold its search bar whole or not at all: where it
+     /// comes to rest, and the spring taking it there.
+     seek: Option<(f32, Spring)>,
+-    /// A swipe-to-confirm control whose knob the power key moved, to draw
+-    /// again with the page.
+-    knob: Option<(Confirm, Rect)>,
+     /// The slider lit takes the volume keys, until the power key lets it
+     /// go.
+     adjusting: bool,
+@@ -1207,8 +1300,14 @@ impl App {
+             keys: start == Screen::Fastboot,
+             button: None,
+             chord: None,
++            last_tap: None,
++            wake_lock: false,
++            snapshot: None,
++            pending_password: None,
++            auto_tried: false,
++            auto_unlocking: false,
++            home_due: None,
+             seek: None,
+-            knob: None,
+             adjusting: false,
+             height: 0.0,
+             drawn: Vec::new(),
+@@ -1331,7 +1430,7 @@ impl App {
+         };
+         let blink = self.blink_at(now).filter(|_| self.display_on).map(|(_, next)| next);
+         let chord = self.chord.map(|(_, at)| at + CHORD_MS);
+-        [self.toast.as_ref().map(|t| t.1), easing, self.idle_due(), held, repeat, blink, darkens, chord].into_iter().flatten().min()
++        [self.toast.as_ref().map(|t| t.1), easing, self.idle_due(), held, repeat, blink, darkens, chord, self.home_due].into_iter().flatten().min()
+     }
+ 
+     /// Whether a text field's cursor shows at `now`, and when it next turns;
+@@ -1358,6 +1457,22 @@ impl App {
+     /// deadline goes away.
+     pub fn tick(&mut self, now: u64) -> Vec<Effect> {
+         let mut fx = Vec::new();
++        if let Some(due) = self.home_due {
++            if now >= due {
++                if self.display_on && self.screen() == Screen::Decrypt && matches!(self.state.data, Data::Open) {
++                    self.go_home_from_decrypt();
++                } else {
++                    self.home_due = None;
++                    self.state.home_left = 0;
++                }
++            } else {
++                let left = ((due.saturating_sub(now) + 999) / 1000) as u8;
++                if left != self.state.home_left {
++                    self.state.home_left = left;
++                    self.dirty = true;
++                }
++            }
++        }
+         // The key waiting for its partner in a screenshot, left alone long
+         // enough, does what it does alone.
+         if self.chord.is_some_and(|(_, at)| now >= at + CHORD_MS) {
+@@ -1472,12 +1587,11 @@ impl App {
+             }
+         }
+         // The power key held on a swipe-to-confirm control slides its knob.
+-        if let Some((_, Press::Slide { which, track, at })) = self.button {
++        if let Some((_, Press::Slide { track, at, .. })) = self.button {
+             let along = (now.saturating_sub(at) as f32 / SLIDE_MS as f32).min(1.0);
+             if along != self.state.confirm {
+                 self.state.confirm = along;
+-                self.knob = Some((which, track));
+-                self.dirty = true;
++                self.redraw_rows(track);
+             }
+         }
+         // A volume key held moves the light on and on, once the page it
+@@ -1551,6 +1665,23 @@ impl App {
+         }
+     }
+ 
++    /// The rows of the current page `track` lies in drawn again, the rest of
++    /// the page left as it is: what a control drawn over the page changes as
++    /// it moves, the page behind it and all, so that the lock screen's
++    /// blurred snapshot comes back with the knob rather than the page's own
++    /// colour.
++    fn redraw_rows(&mut self, track: Rect) {
++        if self.frame.is_none() {
++            return;
++        }
++        let first = track.y.max(0.0) as u32;
++        let end = (track.y + track.h).max(0.0).ceil() as u32;
++        self.stale.push((first, end));
++        self.spots = None;
++        self.layer = None;
++        self.dirty = true;
++    }
++
+     /// Something laid over the page changed (the clock): compose again.
+     pub fn redraw(&mut self) {
+         self.dirty = true;
+@@ -1581,7 +1712,6 @@ impl App {
+         self.frame = None;
+         self.stale.clear();
+         self.spots = None;
+-        self.knob = None;
+         self.row_art = None;
+         self.shown = None;
+         self.layer = None;
+diff --git a/crates/skyward-ui/src/app/nav.rs b/crates/skyward-ui/src/app/nav.rs
+index 94a7f80..f5cced5 100644
+--- a/crates/skyward-ui/src/app/nav.rs
++++ b/crates/skyward-ui/src/app/nav.rs
+@@ -80,7 +80,9 @@ impl App {
+     /// and in a place, until it reaches the place's top.
+     pub(super) fn back(&mut self, now: u64) -> Vec<Effect> {
+         let (l, mut fx) = (self.state.lang, Vec::new());
+-        if self.stack.len() <= 1 {
++        // The lock screen is not one to go back from; only its own swipe
++        // or code opens it.
++        if self.stack.len() <= 1 || self.screen() == Screen::Lock {
+             return fx;
+         }
+         let morph = self.screen() == Screen::Search && self.stack[self.stack.len() - 2].0 == Screen::Home;
+@@ -322,6 +324,7 @@ impl App {
+                 vec![Effect::CheckSkyward]
+             }
+             Screen::Wlan if self.state.wlan.as_ref().is_some_and(|w| w.power == Power::On) => vec![Effect::ScanWlan],
++            Screen::Download => vec![Effect::StartDownloadServer],
+             _ => Vec::new(),
+         }
+     }
+diff --git a/crates/skyward-ui/src/app/power.rs b/crates/skyward-ui/src/app/power.rs
+index 819b976..b42406c 100644
+--- a/crates/skyward-ui/src/app/power.rs
++++ b/crates/skyward-ui/src/app/power.rs
+@@ -34,6 +34,20 @@ impl App {
+             self.dirty = true;
+             self.darkening = None;
+             self.curtain.set(true, now);
++            // A screen the panel lights after it went out shows the lock
++            // screen first, sliding it away going back to what was shown,
++            // not to the decrypt page. Before the data partition is open
++            // there is nothing the lock guards, and it would only stand
++            // between the phone's owner and the decrypt page: the page the
++            // wake came over is shown again instead.
++            let decrypted = matches!(self.state.data, Data::Open | Data::Locked { .. });
++            if decrypted && self.screen() != Screen::Lock {
++                self.stack.push((Screen::Lock, 0.0, Focus::Unset));
++                self.wake_lock = true;
++                self.frame = None;
++                self.settle_page();
++                self.refresh();
++            }
+         }
+         self.woke_at = Some(now);
+         self.stir(now);
+@@ -94,6 +108,8 @@ impl App {
+     /// now, then the panel goes off. A finger on the glass lets go of what
+     /// it held, and the page stops where it is.
+     pub(super) fn sleep(&mut self, now: u64) {
++        self.home_due = None;
++        self.state.home_left = 0;
+         self.darkening = self.panel(now);
+         self.curtain.set(false, now);
+         self.display_on = false;
+diff --git a/crates/skyward-ui/src/app/prefs.rs b/crates/skyward-ui/src/app/prefs.rs
+index 3475fc3..f2b7367 100644
+--- a/crates/skyward-ui/src/app/prefs.rs
++++ b/crates/skyward-ui/src/app/prefs.rs
+@@ -9,6 +9,8 @@ pub enum Slider {
+     Brightness,
+     /// How strongly the motor taps.
+     Vibration,
++    /// How strongly the lock screen blurs the page it shows behind it.
++    LockBlur,
+ }
+ 
+ #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+@@ -27,8 +29,15 @@ pub enum Switch {
+     /// over.
+     KeepRecovery,
+     Wlan,
++    /// Join the network last joined as the recovery starts.
++    WlanAuto,
++    /// Light the screen again on a double tap while it is off.
++    DoubleTap,
+     /// Show the password typed rather than a dot for each character.
+     ShowPassword,
++    /// Remember the phone's screen lock so the owner's files open without
++    /// asking at the next start.
++    RememberData,
+ }
+ 
+ /// How long the screen stays on with nothing touched, in milliseconds, in
+@@ -60,6 +69,7 @@ impl App {
+         match which {
+             Slider::Brightness => self.state.brightness,
+             Slider::Vibration => self.state.vibration,
++            Slider::LockBlur => self.state.lock_blur,
+         }
+     }
+ 
+@@ -69,6 +79,7 @@ impl App {
+         let value = match which {
+             Slider::Brightness => &mut self.state.brightness,
+             Slider::Vibration => &mut self.state.vibration,
++            Slider::LockBlur => &mut self.state.lock_blur,
+         };
+         *value = level.clamp(if which == Slider::Brightness { MIN_BRIGHTNESS } else { 0.0 }, 1.0);
+         let value = *value;
+diff --git a/crates/skyward-ui/src/app/skyward.rs b/crates/skyward-ui/src/app/skyward.rs
+index b27f6b7..ddeef23 100644
+--- a/crates/skyward-ui/src/app/skyward.rs
++++ b/crates/skyward-ui/src/app/skyward.rs
+@@ -25,6 +25,9 @@ pub struct SkywardJob {
+     pub outcome: Option<SkywardEnd>,
+     /// Stopping the download was asked for and is under way.
+     pub stopping: bool,
++    /// The recovery.img in Download is being written, not the newest
++    /// release's build: what version it holds is not known here.
++    pub local: bool,
+ }
+ 
+ #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+diff --git a/crates/skyward-ui/src/app/state.rs b/crates/skyward-ui/src/app/state.rs
+index 24de4cc..f18a5c6 100644
+--- a/crates/skyward-ui/src/app/state.rs
++++ b/crates/skyward-ui/src/app/state.rs
+@@ -12,6 +12,10 @@ pub struct State {
+     /// start, where otherwise it is the one the system names.
+     pub language_chosen: bool,
+     pub dark: bool,
++    /// How strongly the lock screen blurs the page it shows behind it, from
++    /// 0 at the slider's left end, where it shows the theme's own colour
++    /// instead, to 1 at its right.
++    pub lock_blur: f32,
+     pub brightness: f32,
+     /// How long the screen stays on with nothing touched, by its place in
+     /// [`SCREEN_OFF`].
+@@ -98,9 +102,24 @@ pub struct State {
+     /// Why the second system's start stopped, as its first program told
+     /// it, which the systems page shows.
+     pub system_notice: Option<String>,
++    /// The screen lights again on a double tap while it is off.
++    pub double_tap: bool,
++    /// The recovery's own lock, its code kept as a salted hash.
++    pub lock: Option<crate::settings::Lock>,
++    /// Whether the phone's screen lock is remembered so the owner's files
++    /// open without asking at the next start, and the password itself.
++    pub remember_data: bool,
++    pub data_password: String,
++    /// The WLAN joins the network it last joined as the recovery starts.
++    pub wlan_auto: bool,
++    /// That network, and the password it was joined with.
++    pub saved_wlan: Option<SavedWlan>,
++    pub wlan_password: Option<String>,
+     /// Where the data partition stands, and what is typed at the screen
+     /// lock its users' own files wait on.
+     pub data: Data,
++    /// Seconds left before the decrypt page goes home by itself, or 0.
++    pub home_left: u8,
+     pub code: String,
+     /// What is typed in the search field.
+     pub search: String,
+@@ -168,6 +187,16 @@ pub struct State {
+     /// network, and whether it shows.
+     pub password: String,
+     pub show_password: bool,
++    /// What is typed on the download page, and the URL its QR code sends
++    /// another phone to.
++    pub download_url: String,
++    pub download_server: Option<String>,
++    /// The page the download page's URL opened, as it is read or why not.
++    pub web_url: String,
++    pub web_page: Option<Result<WebPage, String>>,
++    pub web_loading: bool,
++    /// The download under way, or how it last ended.
++    pub download_job: Option<UrlJob>,
+     /// The phone maker's update server is known, and the update page asks
+     /// it.
+     pub update_server: bool,
+@@ -189,6 +218,7 @@ impl Default for State {
+             lang: Lang::Hans,
+             language_chosen: false,
+             dark: false,
++            lock_blur: LOCK_BLUR_START,
+             brightness: SLIDER_START,
+             // Two minutes.
+             screen_off: 3,
+@@ -228,7 +258,15 @@ impl Default for State {
+             system_pick: None,
+             systems_work: None,
+             system_notice: None,
++            double_tap: true,
++            lock: None,
++            remember_data: false,
++            data_password: String::new(),
++            wlan_auto: true,
++            saved_wlan: None,
++            wlan_password: None,
+             data: Data::Closed,
++            home_left: 0,
+             code: String::new(),
+             search: String::new(),
+             layer: Layer::Letters,
+@@ -259,6 +297,12 @@ impl Default for State {
+             adding: None,
+             password: String::new(),
+             show_password: false,
++            download_url: String::new(),
++            download_server: None,
++            web_url: String::new(),
++            web_page: None,
++            web_loading: false,
++            download_job: None,
+             update_server: false,
+             check: Check::Idle,
+             have: Have::Nothing,
+diff --git a/crates/skyward-ui/src/app/systems.rs b/crates/skyward-ui/src/app/systems.rs
+index 5b434c4..496d78f 100644
+--- a/crates/skyward-ui/src/app/systems.rs
++++ b/crates/skyward-ui/src/app/systems.rs
+@@ -198,7 +198,7 @@ mod tests {
+             let mut app = App::new(Screen::Home, W, H, PPD);
+             (app.state.dual_boot, app.state.systems) = (true, Some(Ok(systems)));
+             let t = app.theme();
+-            let cx = Ctx { t: &t, f: &f, info: &i, state: &app.state, term: None, band: None };
++            let cx = Ctx { t: &t, f: &f, info: &i, state: &app.state, term: None, band: None, backdrop: None };
+             pages::render(Screen::Home, &cx).canvas.data.clone()
+         };
+         assert!(named(two_systems()) != named(Overview { other_starts: true, ..two_systems() }), "the home page names the one that starts");
+diff --git a/crates/skyward-ui/src/app/update.rs b/crates/skyward-ui/src/app/update.rs
+index 255bb4a..045b466 100644
+--- a/crates/skyward-ui/src/app/update.rs
++++ b/crates/skyward-ui/src/app/update.rs
+@@ -26,6 +26,29 @@ pub enum Have {
+     Whole(u64),
+ }
+ 
++/// A web page read as text: what the URL answered, its title and the text
++/// the tags leave.
++#[derive(Clone, Debug, PartialEq)]
++pub struct WebPage {
++    pub url: String,
++    pub title: String,
++    pub text: String,
++}
++
++/// A file downloading from a URL, as the download page shows it.
++#[derive(Clone, Debug, PartialEq)]
++pub struct UrlJob {
++    pub url: String,
++    pub name: String,
++    pub progress: Option<Progress>,
++    pub ended: Option<Result<String, String>>,
++    pub paused: bool,
++    /// Bytes a second, from the last two readings, and those readings.
++    pub rate: u64,
++    pub last_ms: u64,
++    pub last_done: u64,
++}
++
+ /// Downloading the newest system's full package, as the update page shows
+ /// it: how far it has come, how fast, and how it ended.
+ #[derive(Clone, Debug, PartialEq, Eq)]
+diff --git a/crates/skyward-ui/src/app/wlan.rs b/crates/skyward-ui/src/app/wlan.rs
+index 35b21ac..23f40a1 100644
+--- a/crates/skyward-ui/src/app/wlan.rs
++++ b/crates/skyward-ui/src/app/wlan.rs
+@@ -3,6 +3,11 @@
+ 
+ use super::*;
+ 
++/// The SSID as the settings file keeps it.
++fn hex(bytes: &[u8]) -> String {
++    bytes.iter().map(|b| format!("{b:02x}")).collect()
++}
++
+ /// A password typed, which what is printed of it leaves out: the recovery
+ /// prints each effect the pages ask for.
+ #[derive(Clone, Default, PartialEq, Eq)]
+@@ -56,6 +61,22 @@ impl App {
+         if self.state.wlan.as_ref() == Some(&w) {
+             return;
+         }
++        // A network that came up is kept, with the password it was joined
++        // with, for the next start to join again.
++        if let Some(joined) = &w.joined {
++            if matches!(joined.stage, Joining::Connected(_)) {
++                let ssid = hex(&joined.ssid);
++                // A network joined by the start-up switch has no password
++                // typed this time; the one kept with it is used again.
++                let password = self
++                    .state
++                    .wlan_password
++                    .clone()
++                    .or_else(|| self.state.saved_wlan.as_ref().filter(|s| s.ssid == ssid && s.name == joined.name).map(|s| s.password.clone()))
++                    .unwrap_or_default();
++                self.state.saved_wlan = Some(SavedWlan { ssid, name: joined.name.clone(), security: joined.security, password });
++            }
++        }
+         self.state.wlan = Some(w);
+         if matches!(self.screen(), Screen::Home | Screen::Wlan | Screen::WlanNetwork | Screen::Update | Screen::SkywardUpdate) {
+             self.refresh();
+diff --git a/crates/skyward-ui/src/canvas.rs b/crates/skyward-ui/src/canvas.rs
+index 0ac0a6c..5a28ea1 100644
+--- a/crates/skyward-ui/src/canvas.rs
++++ b/crates/skyward-ui/src/canvas.rs
+@@ -243,6 +243,18 @@ impl Canvas {
+         }
+     }
+ 
++    /// Lay `color` over a pixel-aligned rectangle, its own alpha mixed with
++    /// what is under it, where [`Canvas::fill_rect`] writes over it.
++    pub fn fill_rect_over(&mut self, x: f32, y: f32, w: f32, h: f32, color: Rgba) {
++        let (x0, x1) = self.columns(x.floor().max(0.0) as i32, (x + w).ceil().max(0.0) as i32);
++        let (y0, y1) = self.rows(y.floor().max(0.0) as i32, (y + h).ceil().max(0.0) as i32);
++        for row in y0..y1 {
++            for col in x0..x1 {
++                self.blend(col, row, color, 1.0);
++            }
++        }
++    }
++
+     /// Paint rows `y0..y1` with a colour computed per pixel centre.
+     pub fn shade_rows(&mut self, y0: u32, y1: u32, paint: impl Fn(f32, f32) -> Rgba) {
+         let (y0, y1) = self.rows(y0 as i32, y1 as i32);
+@@ -317,6 +329,48 @@ impl Canvas {
+         }
+     }
+ 
++    /// `src` stretched over this canvas to `w` × `h`, its top-left corner
++    /// at this canvas's: each pixel of the part held the bilinear sample
++    /// of the four around where it falls, so a small copy of a page fills
++    /// the screen as the soft, blurred picture the lock screen shows
++    /// behind it.
++    pub fn blit_scaled(&mut self, src: &Canvas, w: f32, h: f32) {
++        if src.w == 0 || src.h == 0 || w <= 0.0 || h <= 0.0 {
++            return;
++        }
++        let (sx, sy) = (src.w as f32 / w, src.h as f32 / h);
++        let (x0, x1) = (self.left as i32, (self.left + self.span) as i32);
++        let (y0, y1) = (self.top as i32, self.bottom as i32);
++        // Where a sample falls between the pixels of `src`, and which four
++        // those are; the edges repeat the last row and column.
++        let at = |v: f32, n: u32| {
++            let v = v.clamp(0.0, (n - 1) as f32);
++            let (i, f) = (v.floor() as u32, v.fract());
++            (i, (i + 1).min(n - 1), f)
++        };
++        let src_px = |x: u32, y: u32| -> [u8; 4] {
++            let i = ((y * src.w + x) * 4) as usize;
++            [src.data[i], src.data[i + 1], src.data[i + 2], src.data[i + 3]]
++        };
++        for y in y0..y1 {
++            let (sy0, sy1, fy) = at((y as f32 + 0.5) * sy - 0.5, src.h);
++            for x in x0..x1 {
++                let (sx0, sx1, fx) = at((x as f32 + 0.5) * sx - 0.5, src.w);
++                let (a, b, c, d) = (src_px(sx0, sy0), src_px(sx1, sy0), src_px(sx0, sy1), src_px(sx1, sy1));
++                let mix = |k: usize| {
++                    let top = a[k] as f32 + (b[k] as f32 - a[k] as f32) * fx;
++                    let bottom = c[k] as f32 + (d[k] as f32 - c[k] as f32) * fx;
++                    (top + (bottom - top) * fy).round().clamp(0.0, 255.0) as u8
++                };
++                let i = self.at(x, y);
++                self.data[i] = mix(0);
++                self.data[i + 1] = mix(1);
++                self.data[i + 2] = mix(2);
++                self.data[i + 3] = 255;
++            }
++        }
++    }
++
+     /// Where `layer` was laid with its top-left corner at (`x`, `y`), show
+     /// `now` instead, `level` of the way: as if `now` had been laid there
+     /// over what `layer` covered. `now` is as big as `layer` and covers
+diff --git a/crates/skyward-ui/src/pages.rs b/crates/skyward-ui/src/pages.rs
+index 1951193..a8ab91d 100644
+--- a/crates/skyward-ui/src/pages.rs
++++ b/crates/skyward-ui/src/pages.rs
+@@ -18,7 +18,7 @@ use crate::term::{self, Term};
+ use crate::theme::Theme;
+ use crate::tr;
+ use crate::icons::{self, Icon};
+-use crate::widgets::{self, Caption, Detail, Fact, Outline, Row, Spec, SystemCard, SystemMark, Tone, Trail};
++use crate::widgets::{self, Caption, Detail, Fact, Outline, Reading, Row, Spec, SystemCard, SystemMark, Tone, Trail};
+ use skyward_info::{DeviceInfo, VERSION};
+ use skyward_install::{Outcome, Reflash, Refusal, Stage};
+ use skyward_net::download::Progress;
+@@ -47,6 +47,10 @@ pub struct Ctx<'a> {
+     pub state: &'a State,
+     /// The shell the terminal page shows, once one has started.
+     pub term: Option<&'a Term>,
++    /// The screen last shown before the lock screen came over it, small:
++    /// the lock screen stretches it behind itself, blurred. None while
++    /// there is nothing to show behind it.
++    pub backdrop: Option<&'a Canvas>,
+     /// The part of the page to draw; all of it if none is given. The page
+     /// is laid out whole either way.
+     pub band: Option<Band>,
+@@ -63,8 +67,11 @@ pub struct Band {
+ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
+     match screen {
+         Screen::Decrypt => decrypt(cx),
++        Screen::Lock => lock(cx),
++        Screen::LockSet => lock_set(cx),
+         Screen::Home => home(cx),
+         Screen::Settings => settings(cx),
++        Screen::Avb => avb(cx),
+         Screen::Reboot => reboot(cx),
+         Screen::Wipe => wipe(cx),
+         Screen::Mount => mount(cx),
+@@ -109,9 +116,140 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
+         Screen::WlanPassword => wlan_password(cx),
+         Screen::WlanNetwork => wlan_network(cx),
+         Screen::WlanAdd => wlan_add(cx),
++        Screen::Download => download(cx),
++        Screen::Web => web(cx),
+     }
+ }
+ 
++/// What the lock screen shows behind itself: the page it came over,
++/// stretched soft over the whole screen, and a veil over that so the clock
++/// and the words stand out. The veil lightens the picture in the light
++/// theme and darkens it in the dark one; with no page kept, the theme's own
++/// colour stands in for it.
++fn lock_sheet(cx: &Ctx) -> Canvas {
++    let t = cx.t;
++    let (w, h) = (t.m.w as f32, t.m.h as f32);
++    let mut c = sheet(cx, t.m.h, Rgba { r: 0, g: 0, b: 0, a: 0 });
++    match cx.backdrop.filter(|page| page.w > 0 && page.h > 0) {
++        Some(page) => c.blit_scaled(page, w, h),
++        None => c.fill_rect(0.0, 0.0, w, h, t.pal.bg),
++    }
++    // Only a veil, not a coat: the page behind is to be seen, blurred and
++    // dimmed just enough for the clock and the words to read over it.
++    let veil = match t.dark {
++        true => Rgba::rgb(0, 0, 0).with_alpha(88),
++        false => Rgba::rgb(250, 250, 252).with_alpha(56),
++    };
++    c.fill_rect_over(0.0, 0.0, w, h, veil);
++    c
++}
++
++/// The recovery's own lock: with a code set, the keypad that types it; with
++/// none, the swipe the phone's own lock screen shows.
++pub fn lock(cx: &Ctx) -> Frame {
++    if cx.state.lock.is_none() {
++        return lock_swipe(cx);
++    }
++    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
++    let m = &t.m;
++    let mut c = lock_sheet(cx);
++    let x = m.w as f32 / 2.0;
++    let now = jiff::Timestamp::now().as_second();
++    c.text_center(&f.title, &fmt::clock(now, s.time_zone), x, m.dp(206.0), m.dp(86.0), t.pal.text);
++    c.text_center(&f.body, &fmt::date(l, now, s.time_zone), x, m.dp(266.0), m.sub_px, t.pal.subtitle);
++    c.text_center(&f.heading, l.pick(["Skyward 恢复模式", "Skyward 復原模式", "Skyward recovery"]), x, m.dp(330.0), m.dp(20.0), t.pal.accent);
++    let note = l.pick(["输入 recovery 锁屏密码", "輸入復原模式鎖屏密碼", "Enter the recovery lock"]);
++    c.text_center(&f.body, note, x, m.dp(376.0), m.sub_px, t.pal.subtitle);
++    let top = m.h as f32 - widgets::keypad_height(t);
++    widgets::code_dots(&mut c, t, x, top - m.dp(92.0), s.code.chars().count());
++    let mut out = Vec::new();
++    let caps = widgets::keypad(&mut c, t, f, l, top, s.key_held(), l.pick(["解锁", "解鎖", "Unlock"]));
++    out.extend(caps.into_iter().map(|(rect, cap)| Hit { rect, action: Action::Type(cap) }));
++    Frame { header: false, back: false, ..Frame::new(t, c, out, "", 0.0) }
++}
++
++/// The lock screen without a recovery code: the date, the clock, the
++/// battery, and a frosted pill slid to open the decrypt page.
++fn lock_swipe(cx: &Ctx) -> Frame {
++    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
++    let m = &t.m;
++    let (w, h) = (m.w as f32, m.h as f32);
++    let mut c = lock_sheet(cx);
++    let x = w / 2.0;
++    let now = jiff::Timestamp::now().as_second();
++    c.text_center(&f.body, &fmt::date(l, now, s.time_zone), x, m.dp(172.0), m.sub_px * 1.15, t.pal.text);
++    c.text_center(&f.title, &fmt::clock(now, s.time_zone), x, m.dp(232.0), m.dp(84.0), t.pal.text);
++    if let Some(battery) = &cx.info.battery {
++        c.text_center(&f.body, &format!("{}%", battery.level), x, m.dp(320.0), m.sub_px, t.pal.subtitle);
++    }
++    let (label, _) = confirm_label(Confirm::UnlockScreen, s);
++    let track = widgets::lock_confirm(&mut c, t, f, h - m.dp(112.0), label, s.confirm);
++    let out = vec![Hit { rect: track, action: Action::Confirm(Confirm::UnlockScreen) }];
++    Frame { header: false, back: false, ..Frame::new(t, c, out, "", 0.0) }
++}
++
++/// Setting, changing or taking away the recovery's lock. The code typed is
++/// kept as a salted hash, never as it was typed.
++pub fn lock_set(cx: &Ctx) -> Frame {
++    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
++    let m = &t.m;
++    let mut c = page(cx);
++    let mut out = Vec::new();
++    let mut y = widgets::paragraph(
++        &mut c,
++        t,
++        f,
++        m.content_top,
++        l.pick([
++            "设置后，data 分区解开、屏幕熄灭再点亮时，需先输入密码才能继续使用恢复模式。data 解密前不会锁屏。密码为 4 到 8 位数字，只保存加密后的结果。",
++            "設定後，data 分割區解開、螢幕關閉再點亮時，需先輸入密碼才能繼續使用復原模式。data 解密前不會鎖屏。密碼為 4 到 8 位數字，只儲存加密後的結果。",
++            "With a recovery lock, lighting the screen again once the data partition is open asks for the code. The lock is never asked before data is decrypted. The code is 4 to 8 digits, and only a salted hash of it is kept.",
++        ]),
++    );
++    if s.lock.is_some() {
++        let off = widgets::list(&mut c, t, f, y + t.m.card_gap, &[Row::new(l.pick(["关闭锁屏", "關閉鎖屏", "Turn the lock off"])).icon(RED, Icon::Lock)]);
++        out.extend(hits(&off.rows, &[Action::LockOff]));
++        y = off.bottom;
++    }
++    c.text_center(
++        &f.body,
++        l.pick(["输入新密码", "輸入新密碼", "Enter a new code"]),
++        m.w as f32 / 2.0,
++        y + t.m.dp(40.0),
++        m.sub_px,
++        t.pal.subtitle,
++    );
++    let top = m.h as f32 - widgets::keypad_height(t);
++    widgets::code_dots(&mut c, t, m.w as f32 / 2.0, top - m.dp(92.0), s.code.chars().count());
++    let caps = widgets::keypad(&mut c, t, f, l, top, s.key_held(), l.pick(["保存", "儲存", "Save"]));
++    out.extend(caps.into_iter().map(|(rect, cap)| Hit { rect, action: Action::Type(cap) }));
++    Frame::new(t, c, out, l.pick(["锁屏密码", "鎖屏密碼", "Lock code"]), m.content_top)
++}
++
++/// Turning off the booted slot's dm-verity and verification, with a swipe:
++/// what it does and what it risks.
++pub fn avb(cx: &Ctx) -> Frame {
++    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
++    let mut c = page(cx);
++    let top = t.m.content_top;
++    let what = l.pick([
++        "关闭当前槽位 vbmeta 中的 dm-verity 与启动校验。关闭后，系统启动时不再校验分区；已解锁的 bootloader 才会采用这一设置。",
++        "關閉目前槽位 vbmeta 中的 dm-verity 與啟動驗證。關閉後，系統啟動時不再驗證分割區；已解鎖的 bootloader 才會採用這項設定。",
++        "Turns off dm-verity and verification in the booted slot's vbmeta. The system then starts without checking its partitions; only an unlocked bootloader honours it.",
++    ]);
++    let mut y = widgets::paragraph(&mut c, t, f, top, what);
++    let warning = l.pick([
++        "此操作会改写 vbmeta。若系统或 bootloader 依赖这些标志，手机可能无法启动；请确认已有可回滚的镜像。",
++        "此操作會改寫 vbmeta。若系統或 bootloader 依賴這些旗標，手機可能無法啟動；請確認已有可回滾的映像檔。",
++        "This rewrites vbmeta. If the system or bootloader relies on these flags, the phone may not start; make sure a working image can be flashed back.",
++    ]);
++    y = widgets::footnote(&mut c, t, f, y + t.m.card_gap, warning);
++    let (label, danger) = confirm_label(Confirm::DisableAvb, s);
++    let track = widgets::confirm(&mut c, t, f, y + t.m.dp(24.0), label, danger, s.confirm);
++    let out = vec![Hit { rect: track, action: Action::Confirm(Confirm::DisableAvb) }];
++    Frame::new(t, c, out, l.pick(["禁用 AVB 2.0", "停用 AVB 2.0", "Disable AVB 2.0"]), top)
++}
++
+ /// Label and colour of each swipe-to-confirm control: the filesystem
+ /// page's as `s` says what it is to do.
+ pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
+@@ -137,6 +275,8 @@ pub fn confirm_label(which: Confirm, s: &State) -> (&'static str, bool) {
+         Confirm::SwitchSystem => (["滑动以切换并重启", "滑動以切換並重新啟動", "Slide to switch and reboot"], false),
+         Confirm::RemoveSystem => (["滑动以删除", "滑動以刪除", "Slide to remove"], true),
+         Confirm::InstallSystem => (INSTALL, false),
++        Confirm::DisableAvb => (["滑动以禁用", "滑動以停用", "Slide to disable"], true),
++        Confirm::UnlockScreen => (["滑动解锁", "滑動解鎖", "Slide to unlock"], false),
+     };
+     (s.lang.pick(label), danger)
+ }
+@@ -210,7 +350,7 @@ fn hits(rects: &[Rect], actions: &[Action]) -> Vec<Hit> {
+ }
+ 
+ /// Recovery home, laid out like the Settings root: title, search, a device
+-/// card, then grouped entries. The status bar carries the readings: the
++/// card, then grouped entries. The status bar carries the readings too: the
+ /// slot, the data partition's lock and the battery's temperature.
+ pub fn home(cx: &Ctx) -> Frame {
+     let (t, f, i, l) = (cx.t, cx.f, cx.info, cx.state.lang);
+@@ -258,7 +398,25 @@ pub fn home(cx: &Ctx) -> Frame {
+         rows.push(Row::new(l.pick(SECOND_FAILED)).icon(RED, Icon::Systems).subtitle(why).trail(Trail::Arrow));
+         opens.push(Some(Action::Open(Screen::Systems)));
+     }
+-    let card = widgets::device_card(&mut c, t, f, y, &i.model, &sub, &rows);
++    // Under the phone's name, the readings the stock 「我的设备」 keeps in
++    // reach: the slot the system runs from, the data partition's lock, the
++    // room left on it and the battery. A reading the phone does not have is
++    // left out, and the strip closes up without it.
++    let free = i.storage.free.map(fmt::gb);
++    let level = i.battery.as_ref().map(|b| format!("{}%", b.level));
++    let charge = i.battery.as_ref().map(|b| fmt::charge(l, b.charge));
++    let mut readings = Vec::new();
++    if let Some(slot) = i.slot {
++        readings.push(Reading { value: slot.letter(), caption: l.pick(CURRENT_SLOT) });
++    }
++    readings.push(Reading { value: fmt::data(l, &cx.state.data), caption: l.pick(DATA_STATE) });
++    if let Some(free) = &free {
++        readings.push(Reading { value: free, caption: l.pick(FREE_SPACE) });
++    }
++    if let (Some(level), Some(charge)) = (&level, &charge) {
++        readings.push(Reading { value: level, caption: charge });
++    }
++    let card = widgets::device_card(&mut c, t, f, y, &i.model, &sub, &readings, &rows);
+     out.push(Hit { rect: card.rows[0], action: Action::Open(Screen::About) });
+     out.extend(card.rows[1..].iter().zip(&opens).filter_map(|(&rect, open)| open.map(|action| Hit { rect, action })));
+     y = card.bottom + t.m.card_gap;
+@@ -290,6 +448,7 @@ pub fn home(cx: &Ctx) -> Frame {
+         Row::new(l.pick(["备份", "備份", "Backup"])).icon(BLUE, Icon::Backup),
+         Row::new(l.pick(["恢复", "還原", "Restore"])).icon(PURPLE, Icon::Restore),
+         Row::new(l.pick(["挂载", "掛載", "Mount"])).icon(SLATE, Icon::Mount),
++        Row::new(l.pick(["下载", "下載", "Download"])).icon(BLUE, Icon::Globe),
+         Row::new(l.pick(DECRYPT)).icon(BLUE, Icon::Lock).trail(Trail::Value(fmt::data(l, &cx.state.data))),
+     ]);
+     out.extend(hits(&tools.rows, &[
+@@ -297,6 +456,7 @@ pub fn home(cx: &Ctx) -> Frame {
+         Action::Open(Screen::Backup),
+         Action::Open(Screen::Restore),
+         Action::Open(Screen::Mount),
++        Action::Open(Screen::Download),
+         Action::Open(Screen::Decrypt),
+     ]));
+     y = tools.bottom + t.m.card_gap;
+@@ -363,7 +523,23 @@ pub fn settings(cx: &Ctx) -> Frame {
+     if let Some(r) = slider.below {
+         out.push(Hit { rect: r, action: Action::Open(Screen::ScreenOff) });
+     }
+-    y = widgets::section(&mut c, t, f, slider.bottom, l.pick(["振动", "震動", "Vibration"]));
++    y = slider.bottom + t.m.card_gap;
++    let blur_level = if s.lock_blur <= 0.01 {
++        l.pick(["关闭", "關閉", "Off"])
++    } else if s.lock_blur < 0.4 {
++        l.pick(["轻", "輕", "Light"])
++    } else if s.lock_blur < 0.75 {
++        l.pick(["中", "中", "Medium"])
++    } else {
++        l.pick(["强", "強", "Strong"])
++    };
++    let below = Row::new(l.pick(["锁屏背景模糊程度", "鎖屏背景模糊程度", "Lock screen blur"])).trail(Trail::Text(blur_level));
++    let blur = widgets::slider_card(&mut c, t, f, y, Caption::Blur, l.pick(["锁屏背景模糊", "鎖屏背景模糊", "Lock screen blur"]), s.lock_blur, Some(below));
++    out.push(Hit { rect: blur.track, action: Action::Slider(Slider::LockBlur) });
++    y = blur.bottom + t.m.card_gap;
++    let gesture = widgets::list(&mut c, t, f, y, &[Row::new(l.pick(["双击亮屏", "雙擊亮屏", "Double tap to wake"])).icon(BLUE, Icon::Phone).trail(Trail::Switch(s.double_tap))]);
++    out.extend(hits(&gesture.rows, &[Action::Toggle(Switch::DoubleTap)]));
++    y = widgets::section(&mut c, t, f, gesture.bottom, l.pick(["振动", "震動", "Vibration"]));
+     let below = Row::new(l.pick(["触摸振动", "觸控震動", "Touch vibration"])).trail(Trail::Switch(s.vibrate));
+     let vibration = widgets::slider_card(&mut c, t, f, y, Caption::Vibrate, l.pick(["振动强度", "震動強度", "Vibration intensity"]), s.vibration, Some(below));
+     out.push(Hit { rect: vibration.track, action: Action::Slider(Slider::Vibration) });
+@@ -376,7 +552,13 @@ pub fn settings(cx: &Ctx) -> Frame {
+         Row::new(l.pick(TIME_ZONE)).icon(ORANGE, Icon::Clock).trail(Trail::Value(l.pick(TIME_ZONES[s.time_zone].0))),
+     ]);
+     out.extend(hits(&general.rows, &[Action::Open(Screen::Language), Action::Open(Screen::TimeZone)]));
+-    y = widgets::section(&mut c, t, f, general.bottom, "USB");
++    y = widgets::section(&mut c, t, f, general.bottom, l.pick(["安全", "安全性", "Security"]));
++    let lock_value = l.pick(if s.lock.is_some() { ["已开启", "已開啟", "On"] } else { ["未设置", "未設定", "Off"] });
++    let security = widgets::list(&mut c, t, f, y, &[
++        Row::new(l.pick(["恢复模式锁屏", "復原模式鎖屏", "Recovery lock"])).icon(BLUE, Icon::Lock).trail(Trail::Value(lock_value)),
++    ]);
++    out.extend(hits(&security.rows, &[Action::Open(Screen::LockSet)]));
++    y = widgets::section(&mut c, t, f, security.bottom + t.m.card_gap, "USB");
+     let usb = widgets::list(&mut c, t, f, y, &[Row::new(l.pick(["文件传输", "檔案傳輸", "File transfer"])).icon(BLUE, Icon::Usb).trail(Trail::Switch(s.file_transfer))]);
+     out.extend(hits(&usb.rows, &[Action::Toggle(Switch::FileTransfer)]));
+     let note = l.pick([
+@@ -389,16 +571,8 @@ pub fn settings(cx: &Ctx) -> Frame {
+     let debug = widgets::list(&mut c, t, f, y, &[Row::new(l.pick(TERMINAL)).icon(SLATE, Icon::Terminal)]);
+     out.extend(hits(&debug.rows, &[Action::Open(Screen::Terminal)]));
+     y = widgets::section(&mut c, t, f, debug.bottom, l.pick(["关于", "關於", "About"]));
+-    let mut rows = vec![Row::new(l.pick(ABOUT)).trail(Trail::Value(VERSION))];
+-    let mut opens = vec![Action::Open(Screen::About)];
+-    if s.offers(Screen::SkywardUpdate) {
+-        let row = Row::new(l.pick(SKYWARD_UPDATE));
+-        rows.push(match skyward_value(cx) {
+-            Some(value) => row.trail(Trail::Value(value)),
+-            None => row,
+-        });
+-        opens.push(Action::Open(Screen::SkywardUpdate));
+-    }
++    let rows = vec![Row::new(l.pick(ABOUT)).trail(Trail::Value(VERSION))];
++    let opens = vec![Action::Open(Screen::About)];
+     let about = widgets::list(&mut c, t, f, y, &rows);
+     out.extend(hits(&about.rows, &opens));
+     Frame::new(t, fit(c, t, about.bottom), out, l.pick(SETTINGS), top)
+@@ -513,7 +687,7 @@ pub fn mount(cx: &Ctx) -> Frame {
+ }
+ 
+ /// Who made the recovery, as the About page names them under its version.
+-const AUTHOR: &str = "© 2026 Kirk Lin";
++const AUTHOR: &str = "© 2026 Kirk Lin & Remoparrot";
+ 
+ /// About this device, modelled on the stock「我的设备」: the wordmark, the
+ /// version and its author over a moving colour field, and the summary,
+@@ -547,6 +721,8 @@ const OS_VERSION: Text = ["OS 版本", "OS 版本", "OS version"];
+ const ANDROID_VERSION: Text = ["Android 版本", "Android 版本", "Android version"];
+ const CURRENT_SLOT: Text = ["当前槽位", "目前槽位", "Current slot"];
+ const DATA_PART: Text = ["data 分区", "data 分割區", "data partition"];
++const DATA_STATE: Text = ["数据分区", "資料分割區", "Data partition"];
++const FREE_SPACE: Text = ["可用空间", "可用空間", "Free space"];
+ 
+ /// The phone's processor by its marketing name in `l`, from the phone's
+ /// settings, or else by its cores.
+@@ -735,8 +911,14 @@ fn data_status(cx: &Ctx, mut c: Canvas, icon: Icon, title: &str, note: Option<&s
+         out.push(Hit { rect: again, action: Action::OpenData });
+     }
+     let leave_cy = m.h as f32 - m.dp(64.0);
+-    let leave = l.pick(if matches!(cx.state.data, Data::Open | Data::Erased) { ["完成", "完成", "Done"] } else { NOT_NOW });
+-    c.text_center(&f.heading, leave, x, leave_cy, m.row_title_px, t.pal.accent);
++    let leave = match (&cx.state.data, cx.state.home_left) {
++        (Data::Open, left) if left > 0 => {
++            tr!(l, "完成 · {left} 秒后进入主界面", "完成 · {left} 秒後進入主介面", "Done · home in {left}s")
++        }
++        (Data::Open | Data::Erased, _) => l.pick(["完成", "完成", "Done"]).to_string(),
++        _ => l.pick(NOT_NOW).to_string(),
++    };
++    c.text_center(&f.heading, &leave, x, leave_cy, m.row_title_px, t.pal.accent);
+     out.push(Hit { rect: Rect::new(x - m.dp(80.0), leave_cy - m.dp(24.0), m.dp(160.0), m.dp(48.0)), action: Action::Skip });
+     Frame { header: false, ..Frame::new(t, c, out, l.pick(DECRYPT), 0.0) }
+ }
+@@ -764,6 +946,14 @@ fn code(cx: &Ctx, mut c: Canvas, user: u32, keys: Keys, checking: bool) -> Frame
+     let note = l.pick(if checking { ["正在验证", "正在驗證", "Checking"] } else { ["解密后可查看本机文件", "解密後可查看本機檔案", "Decrypt to see the phone's files"] });
+     c.text_center(&f.heading, &title, x, m.dp(130.0), m.dp(24.0), t.pal.text);
+     c.text_center(&f.body, note, x, m.dp(166.0), m.sub_px, t.pal.subtitle);
++    let remember = l.pick([
++        "记住密码，下次自动解密",
++        "記住密碼，下次自動解密",
++        "Remember it and decrypt next time",
++    ]);
++    let keep = l.pick(["保存在 /metadata（0600）", "儲存在 /metadata（0600）", "Kept in /metadata (0600)"]);
++    let row = widgets::list(&mut c, t, f, m.dp(202.0), &[Row::new(remember).subtitle(keep).trail(Trail::Switch(s.remember_data))]);
++    out.extend(hits(&row.rows, &[Action::Toggle(Switch::RememberData)]));
+     let mut pattern = None;
+     let bottom = match keys {
+         Keys::Letters => {
+@@ -786,7 +976,7 @@ fn code(cx: &Ctx, mut c: Canvas, user: u32, keys: Keys, checking: bool) -> Frame
+         }
+         Keys::Digits => {
+             let top = m.h as f32 - widgets::keypad_height(t);
+-            let caps = widgets::keypad(&mut c, t, f, l, top, s.key_held());
++            let caps = widgets::keypad(&mut c, t, f, l, top, s.key_held(), l.pick(DECRYPT));
+             if !checking {
+                 out.extend(caps.into_iter().map(|(rect, cap)| Hit { rect, action: Action::Type(cap) }));
+             }
+@@ -2198,25 +2388,41 @@ const STOP: Text = ["停止", "停止", "Stop"];
+ 
+ /// Tools for the experienced.
+ pub fn advanced(cx: &Ctx) -> Frame {
+-    let (t, f, l) = (cx.t, cx.f, cx.state.lang);
++    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+     let mut c = page(cx);
+     let top = t.m.content_top;
+-    let tools = widgets::list(&mut c, t, f, top, &[
++    let mut rows = vec![
+         Row::new(l.pick(FILES)).icon(BLUE, Icon::Folder),
+         Row::new(l.pick(TERMINAL)).icon(SLATE, Icon::Terminal),
+         Row::new(l.pick(RELABEL)).icon(PURPLE, Icon::Shield),
+         Row::new(l.pick(FILESYSTEMS)).icon(RED, Icon::Mount),
+         Row::new(l.pick(LOGS)).icon(ORANGE, Icon::Log),
+         Row::new(l.pick(UPDATE)).icon(GREEN, Icon::Layers).trail(Trail::Value(update_value(cx))),
+-    ]);
+-    let out = hits(&tools.rows, &[
++    ];
++    let mut actions = vec![
+         Action::Open(Screen::Files),
+         Action::Open(Screen::Terminal),
+         Action::Open(Screen::Relabel),
+         Action::Open(Screen::Filesystems),
+         Action::Open(Screen::Logs),
+         Action::Open(Screen::Update),
+-    ]);
++    ];
++    if s.offers(Screen::SkywardUpdate) {
++        let row = Row::new(l.pick(SKYWARD_UPDATE)).icon(BLUE, Icon::Globe);
++        rows.push(match skyward_value(cx) {
++            Some(value) => row.trail(Trail::Value(value)),
++            None => row,
++        });
++        actions.push(Action::Open(Screen::SkywardUpdate));
++    }
++    rows.push(
++        Row::new(l.pick(["禁用 AVB 2.0", "停用 AVB 2.0", "Disable AVB 2.0"]))
++            .icon(RED, Icon::Shield)
++            .subtitle(l.pick(["关闭 dm-verity 与启动校验", "關閉 dm-verity 與啟動驗證", "Turn off dm-verity and verification"])),
++    );
++    actions.push(Action::Open(Screen::Avb));
++    let tools = widgets::list(&mut c, t, f, top, &rows);
++    let out = hits(&tools.rows, &actions);
+     Frame::new(t, c, out, l.pick(ADVANCED), top)
+ }
+ 
+@@ -2736,9 +2942,27 @@ pub fn skyward_update(cx: &Ctx) -> Frame {
+     let y = widgets::info_card(&mut c, t, f, y, &[(l.pick(["当前版本", "目前版本", "Current version"]), VERSION.to_string())]);
+     let y = widgets::section(&mut c, t, f, y, l.pick(["在线更新", "線上更新", "Online update"]));
+     let y = skyward_online(&mut c, cx, y, &mut out);
++    // The work the page started, whichever row started it: a build coming
++    // from GitHub and the recovery.img in Download go the same way in.
++    let y = skyward_job(&mut c, cx, y, &mut out);
++    let y = if cx.state.skyward_job.as_ref().is_some_and(|job| job.outcome.is_none()) {
++        y
++    } else {
++        let local = widgets::list(&mut c, t, f, y + t.m.card_gap, &[
++            Row::new(l.pick(["从本地 recovery.img 刷入", "從本機 recovery.img 刷入", "Flash a local recovery.img"]))
++                .icon(BLUE, Icon::Install)
++                .subtitle(l.pick([
++                    "把下载好的 recovery.img 放到 /sdcard/Download",
++                    "把下載好的 recovery.img 放到 /sdcard/Download",
++                    "Put the downloaded recovery.img in /sdcard/Download",
++                ])),
++        ]);
++        out.extend(hits(&local.rows, &[Action::UpdateSkywardLocal]));
++        local.bottom
++    };
+     let points = [
+         l.pick([
+-            "新版本从 GitHub 下载，校验 SHA-256 后写入 recovery 分区，不会改动系统和用户数据。",
++            "新版本可从 GitHub 直接下载 recovery.img，或把移动云盘/其他来源下载的 recovery.img 放到 /sdcard/Download 后从本地刷入；校验后写入 recovery 分区，不会改动系统和用户数据。",
+             "新版本從 GitHub 下載，驗證 SHA-256 後寫入 recovery 分割區，不會改動系統和使用者資料。",
+             "The new version is downloaded from GitHub and goes into the recovery partitions once its SHA-256 checks out. The system and user data are left as they are.",
+         ]),
+@@ -2794,85 +3018,265 @@ fn skyward_online(c: &mut Canvas, cx: &Ctx, y: f32, out: &mut Vec<Hit>) -> f32 {
+     if !newest.newer || newest.build.is_none() {
+         return y;
+     }
+-    match &s.skyward_job {
+-        Some(job) if job.outcome.is_none() => {
+-            let (heading, detail, share) = match job.stage {
+-                None => (l.pick(GETTING_READY), String::new(), None),
+-                Some(SkywardStage::Download(p)) => downloaded(l, p, job.rate),
+-                Some(SkywardStage::Write { done, total }) => {
+-                    let part = share(done, total);
+-                    let p = percent(part);
+-                    (l.pick(["正在写入 recovery 分区", "正在寫入 recovery 分割區", "Writing the recovery partitions"]), tr!(l, "已完成 {p}%", "已完成 {p}%", "{p}% done"), Some(part))
+-                }
+-            };
+-            let y = widgets::progress_card(c, t, f, y + gap, heading, &detail, share);
+-            if matches!(job.stage, Some(SkywardStage::Write { .. })) {
+-                return widgets::footnote(c, t, f, y, l.pick(["写入完成前，请不要关机。", "寫入完成前，請不要關機。", "Don't power off until it's written."]));
+-            }
+-            let stop = widgets::list(c, t, f, y + gap, &[Row::new(l.pick(if job.stopping { STOPPING } else { STOP })).trail(Trail::None)]);
+-            if !job.stopping {
+-                out.extend(hits(&stop.rows, &[Action::StopSkywardUpdate]));
++    // While a download or a write is under way, the work itself shows
++    // below; an update that went in needs no row that starts it again.
++    if let Some(job) = &s.skyward_job {
++        if job.outcome.is_none() || matches!(job.outcome, Some(SkywardEnd::Updated(_))) {
++            return y;
++        }
++    }
++    let mut row = Row::new(l.pick(["从 GitHub 下载 recovery.img 并更新", "從 GitHub 下載 recovery.img 並更新", "Download recovery.img from GitHub and update"]));
++    if !s.online() {
++        row = row.subtitle(l.pick(WLAN_FIRST));
++    }
++    let update = widgets::list(c, t, f, y + gap, &[row]);
++    out.extend(hits(&update.rows, &[Action::UpdateSkyward]));
++    update.bottom
++}
++
++/// How the work the page asked for has come — the build downloaded from
++/// GitHub into the recovery partitions, or the recovery.img in Download
++/// written — and how it ended, wherever it was started from.
++fn skyward_job(c: &mut Canvas, cx: &Ctx, y: f32, out: &mut Vec<Hit>) -> f32 {
++    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
++    let gap = t.m.card_gap;
++    let Some(job) = &s.skyward_job else { return y };
++    let Some(end) = &job.outcome else {
++        let (heading, detail, share) = match job.stage {
++            None => (l.pick(GETTING_READY), String::new(), None),
++            Some(SkywardStage::Download(p)) => downloaded(l, p, job.rate),
++            Some(SkywardStage::Write { done, total }) => {
++                let part = share(done, total);
++                let p = percent(part);
++                (
++                    l.pick(["正在写入 recovery 分区", "正在寫入 recovery 分割區", "Writing the recovery partitions"]),
++                    tr!(l, "已完成 {p}%", "已完成 {p}%", "{p}% done"),
++                    Some(part),
++                )
+             }
+-            stop.bottom
++        };
++        let y = widgets::progress_card(c, t, f, y + gap, heading, &detail, share);
++        if matches!(job.stage, Some(SkywardStage::Write { .. })) {
++            return widgets::footnote(c, t, f, y, l.pick(["写入完成前，请不要关机。", "寫入完成前，請不要關機。", "Don't power off until it's written."]));
+         }
+-        Some(SkywardJob { outcome: Some(SkywardEnd::Updated(slots)), .. }) => {
++        let stop = widgets::list(c, t, f, y + gap, &[Row::new(l.pick(if job.stopping { STOPPING } else { STOP })).trail(Trail::None)]);
++        if !job.stopping {
++            out.extend(hits(&stop.rows, &[Action::StopSkywardUpdate]));
++        }
++        return stop.bottom;
++    };
++    match end {
++        SkywardEnd::Updated(slots) => {
+             let names = fmt::slots(l, slots);
+-            let detail = match (l, slots.len()) {
+-                (Lang::En, 1) => format!("Skyward {version} is in {names}'s recovery partition."),
+-                _ => tr!(
++            let version = s.skyward_newest().map(|newest| newest.version.as_str()).unwrap_or_default();
++            let detail = match (job.local, l, slots.len()) {
++                (false, Lang::En, 1) => format!("Skyward {version} is in {names}'s recovery partition."),
++                (false, _, _) => tr!(
+                     l,
+                     "已将 Skyward {version} 刷入{names} 的 recovery 分区。",
+                     "已將 Skyward {version} 刷入{names} 的 recovery 分割區。",
+                     "Skyward {version} is in the recovery partitions of {names}."
+                 ),
++                (true, Lang::En, _) => format!("Skyward is in the recovery partitions of {names}."),
++                (true, _, _) => tr!(
++                    l,
++                    "已将 Skyward 刷入{names} 的 recovery 分区。",
++                    "已將 Skyward 刷入{names} 的 recovery 分割區。",
++                    "Skyward is in the recovery partitions of {names}."
++                ),
+             };
+             let y = widgets::list(c, t, f, y + gap, &[standing(l.pick(["更新成功", "更新成功", "Updated"]), GREEN, Icon::Install, &detail)]).bottom;
+             let restart = widgets::list(c, t, f, y + gap, &[Row::new(l.pick(["重启到恢复模式", "重新啟動到復原模式", "Reboot to recovery"])).icon(ORANGE, Icon::Power)]);
+             out.extend(hits(&restart.rows, &[Action::RebootTo(Target::Recovery)]));
+             restart.bottom
+         }
+-        job => {
+-            let mut y = y;
+-            match job.as_ref().and_then(|j| j.outcome.as_ref()) {
+-                Some(SkywardEnd::Stopped) => y = widgets::footnote(c, t, f, y, l.pick(["已停止下载。", "已停止下載。", "Download stopped."])),
+-                Some(SkywardEnd::Download(why)) => y = widgets::footnote(c, t, f, y, &fmt::skyward_download_failure(l, why)),
+-                Some(SkywardEnd::NotWritten(why)) => {
+-                    y = widgets::footnote(c, t, f, y, l.pick(["更新失败，未写入任何内容。", "更新失敗，未寫入任何內容。", "Couldn't update. Nothing was written."]));
+-                    y = widgets::footnote(c, t, f, y, why);
+-                }
+-                Some(SkywardEnd::WriteFailed(slots, why)) => {
+-                    let names = fmt::slots(l, slots);
+-                    let warning = match (l, slots.len()) {
+-                        (Lang::En, 1) => format!(
+-                            "{}'s recovery partition was only partly written, so rebooting to recovery may not start Skyward. Update again, and reboot once it's done.",
+-                            capitalized(l, &names)
+-                        ),
+-                        _ => tr!(
+-                            l,
+-                            "{names} 的 recovery 分区仅写入了部分内容，重启到恢复模式可能无法进入 Skyward。请重新更新，完成后再重启。",
+-                            "{names} 的 recovery 分割區僅寫入了部分內容，重新啟動到復原模式可能無法進入 Skyward。請重新更新，完成後再重新啟動。",
+-                            "The recovery partitions of {names} were only partly written, so rebooting to recovery may not start Skyward. Update again, and reboot once it's done."
+-                        ),
+-                    };
+-                    y = widgets::footnote(c, t, f, y, &warning);
+-                    y = widgets::footnote(c, t, f, y, why);
+-                }
+-                Some(SkywardEnd::Updated(_)) => unreachable!("an update that went in shows how it did"),
+-                None => {}
+-            }
+-            let mut row = Row::new(l.pick(["下载并更新", "下載並更新", "Download and update"]));
+-            if !s.online() {
+-                row = row.subtitle(l.pick(WLAN_FIRST));
+-            }
+-            let update = widgets::list(c, t, f, y + gap, &[row]);
+-            out.extend(hits(&update.rows, &[Action::UpdateSkyward]));
+-            update.bottom
++        SkywardEnd::Stopped => widgets::footnote(c, t, f, y + gap, l.pick(["已停止下载。", "已停止下載。", "Download stopped."])),
++        SkywardEnd::Download(why) => widgets::footnote(c, t, f, y + gap, &fmt::skyward_download_failure(l, why)),
++        SkywardEnd::NotWritten(why) => {
++            let y = widgets::footnote(c, t, f, y + gap, l.pick(["更新失败，未写入任何内容。", "更新失敗，未寫入任何內容。", "Couldn't update. Nothing was written."]));
++            widgets::footnote(c, t, f, y, why)
++        }
++        SkywardEnd::WriteFailed(slots, why) => {
++            let names = fmt::slots(l, slots);
++            let warning = match (l, slots.len()) {
++                (Lang::En, 1) => format!(
++                    "{}'s recovery partition was only partly written, so rebooting to recovery may not start Skyward. Update again, and reboot once it's done.",
++                    capitalized(l, &names)
++                ),
++                _ => tr!(
++                    l,
++                    "{names} 的 recovery 分区仅写入了部分内容，重启到恢复模式可能无法进入 Skyward。请重新更新，完成后再重启。",
++                    "{names} 的 recovery 分割區僅寫入了部分內容，重新啟動到復原模式可能無法進入 Skyward。請重新更新，完成後再重新啟動。",
++                    "The recovery partitions of {names} were only partly written, so rebooting to recovery may not start Skyward. Update again, and reboot once it's done."
++                ),
++            };
++            let y = widgets::footnote(c, t, f, y + gap, &warning);
++            widgets::footnote(c, t, f, y, why)
+         }
+     }
+ }
+ 
+ /// The WLAN switch; then the network chosen and how joining it goes, and
+ /// the networks in range, strongest first.
++/// A web page read as text: the URL, its title, and what the tags leave.
++/// There is no JavaScript or CSS engine here, and no pictures: this is a
++/// reader for pages whose words are in the HTML.
++pub fn web(cx: &Ctx) -> Frame {
++    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
++    let m = &t.m;
++    let mut c = long_page(cx);
++    let out = Vec::new();
++    let top = m.content_top;
++    let mut y = widgets::section_first(&mut c, t, f, top, l.pick(["网页", "網頁", "Web"]));
++    y = widgets::footnote(&mut c, t, f, y, &s.web_url);
++    let mut title = l.pick(["正在读取网页", "正在讀取網頁", "Reading the page"]).to_string();
++    let mut text = String::new();
++    match &s.web_page {
++        Some(Ok(page)) => {
++            title = if page.title.trim().is_empty() { s.web_url.clone() } else { page.title.clone() };
++            text = page.text.clone();
++        }
++        Some(Err(why)) => {
++            title = l.pick(["未能打开网页", "無法開啟網頁", "Couldn't open the page"]).to_string();
++            text = why.clone();
++        }
++        None => {}
++    }
++    y = widgets::section(&mut c, t, f, y, &title);
++    if !text.trim().is_empty() {
++        y = widgets::paragraph(&mut c, t, f, y, &text);
++    } else if s.web_page.is_some() {
++        y = widgets::footnote(&mut c, t, f, y, l.pick([
++            "页面没有可显示的文本；它可能要靠 JavaScript 才能显示。",
++            "頁面沒有可顯示的文字；它可能要靠 JavaScript 才能顯示。",
++            "The page leaves no text to read; it may need JavaScript to show.",
++        ]));
++    }
++    let note = l.pick([
++        "文本模式：不运行 JavaScript 和 CSS，不显示图片。",
++        "文字模式：不執行 JavaScript 和 CSS，不顯示圖片。",
++        "Text mode: no JavaScript, CSS or pictures.",
++    ]);
++    y = widgets::footnote(&mut c, t, f, y, note);
++    Frame::new(t, fit(c, t, y), out, l.pick(["网页", "網頁", "Web"]), top)
++}
++
++/// Downloading a file from a URL typed here, or from a link another phone
++/// sends through the page the QR code opens; `/sdcard/Download/link.txt`
++/// fills the field too.
++pub fn download(cx: &Ctx) -> Frame {
++    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
++    let m = &t.m;
++    let (w, x) = (m.w as f32, m.w as f32 / 2.0);
++    let mut c = page(cx);
++    let mut out = Vec::new();
++    let top = m.content_top;
++    let field_top = top + m.dp(6.0);
++    let (below, caret) = widgets::text_field(&mut c, t, f, field_top, &s.download_url);
++    if s.download_url.is_empty() {
++        c.text(&f.body, l.pick(["粘贴或输入完整网址", "貼上或輸入完整網址", "Paste or type a full URL"]), m.margin + m.dp(18.0), field_top + m.dp(34.0), m.sub_px, t.pal.subtitle, None);
++    }
++    let button = widgets::button(&mut c, t, f, below + m.card_gap, l.pick(["开始下载", "開始下載", "Start download"]));
++    out.push(Hit { rect: button, action: Action::StartDownload });
++    let link_y = button.y + button.h + m.dp(26.0);
++    let link_label = l.pick(["从 /sdcard/Download/link.txt 读链接", "從 /sdcard/Download/link.txt 讀取連結", "Read /sdcard/Download/link.txt"]);
++    c.text_center(&f.body, link_label, x, link_y, m.sub_px, t.pal.accent);
++    out.push(Hit { rect: Rect::new(m.margin, link_y - m.dp(18.0), w - m.margin * 2.0, m.dp(36.0)), action: Action::ReadDownloadLink });
++    let kb_top = m.h as f32 - widgets::keyboard_height(t);
++    if let Some(job) = &s.download_job {
++        let (title, detail, done) = match (&job.ended, &job.progress) {
++            (Some(Ok(path)), _) => (l.pick(["下载完成", "下載完成", "Downloaded"]).to_string(), path.clone(), Some(1.0)),
++            (Some(Err(why)), _) => (l.pick(["下载失败", "下載失敗", "Download failed"]).to_string(), why.clone(), None),
++            (None, Some(Progress::Downloading { done, total })) => {
++                let base = if *total == 0 {
++                    fmt::bytes(*done)
++                } else {
++                    format!("{} / {} · {}/s", fmt::bytes(*done), fmt::bytes(*total), fmt::bytes(job.rate))
++                };
++                let share = if *total == 0 { None } else { Some(*done as f32 / *total as f32) };
++                let title = if job.paused {
++                    l.pick(["已暂停", "已暫停", "Paused"]).to_string()
++                } else {
++                    l.pick(["正在下载", "正在下載", "Downloading"]).to_string()
++                };
++                (title, base, share)
++            }
++            (None, Some(Progress::Checking { done, total })) => {
++                (l.pick(["正在检查", "正在檢查", "Checking"]).to_string(), format!("{done} / {total} B"), None)
++            }
++            (None, None) => (l.pick(["准备下载", "準備下載", "Starting"]).to_string(), job.url.clone(), None),
++        };
++        let title = format!("{} · {}", title, job.name);
++        let card_top = link_y + m.dp(18.0);
++        let bottom = widgets::progress_card(&mut c, t, f, card_top, &title, &detail, done);
++        if job.ended.is_none() {
++            let r = m.dp(25.0);
++            let cx = m.w as f32 - m.margin - m.dp(31.0);
++            let cy = card_top + m.dp(40.0);
++            c.fill_circle(cx, cy, r, t.pal.accent);
++            if job.paused {
++                let k = r * 0.5;
++                c.line(cx - k * 0.45, cy - k, cx + k * 0.7, cy, m.stroke, Rgba::rgb(255, 255, 255));
++                c.line(cx + k * 0.7, cy, cx - k * 0.45, cy + k, m.stroke, Rgba::rgb(255, 255, 255));
++                c.line(cx - k * 0.45, cy + k, cx - k * 0.45, cy - k, m.stroke, Rgba::rgb(255, 255, 255));
++            } else {
++                let k = r * 0.45;
++                c.line(cx - k * 0.35, cy - k, cx - k * 0.35, cy + k, m.stroke, Rgba::rgb(255, 255, 255));
++                c.line(cx + k * 0.55, cy - k, cx + k * 0.55, cy + k, m.stroke, Rgba::rgb(255, 255, 255));
++            }
++            let action = if job.paused { Action::ResumeDownload } else { Action::PauseDownload };
++            out.push(Hit { rect: Rect::new(cx - r, cy - r, r * 2.0, r * 2.0), action });
++            let stop = widgets::button(&mut c, t, f, bottom + m.card_gap, l.pick(["停止下载", "停止下載", "Stop"]));
++            out.push(Hit { rect: stop, action: Action::StopDownloadUrl });
++        } else {
++            let again = widgets::button(&mut c, t, f, bottom + m.card_gap, l.pick(["再次下载", "再次下載", "Download again"]));
++            out.push(Hit { rect: again, action: Action::StartDownload });
++        }
++    } else {
++        let qr_top = link_y + m.dp(34.0);
++        let room = (kb_top - qr_top - m.dp(138.0)).max(m.dp(120.0));
++        let size = room.min(m.dp(286.0));
++        let qr_x = x - size / 2.0;
++        let shown = s.download_server.as_ref().is_some_and(|url| qr(&mut c, t, url, qr_x, qr_top, size));
++        if !shown {
++            let side = size;
++            c.fill_round_rect(qr_x, qr_top, side, side, m.dp(20.0), t.pal.card);
++            let note = l.pick(["连上 WLAN 后这里显示二维码", "連上 Wi-Fi 後這裡顯示 QR 碼", "The QR code shows once WLAN is joined"]);
++            c.text_center(&f.body, note, x, qr_top + side / 2.0, m.sub_px, t.pal.subtitle);
++        }
++        let note_y = qr_top + size + m.dp(18.0);
++        let how = l.pick([
++            "用另一台手机扫这个码，在网页里输入网址，发回来就填进上面的框。",
++            "用另一台手機掃這個碼，在網頁裡輸入網址，傳回來就填進上面的框。",
++            "Scan this with another phone, enter the URL on its page, and send it back.",
++        ]);
++        let saved = l.pick(["文件保存到 /sdcard/Download，名字取网址里最后一段。", "檔案儲存到 /sdcard/Download，名字取網址最後一段。", "Files go to /sdcard/Download, named after the URL's last part."]);
++        let note_bottom = widgets::paragraph(&mut c, t, f, note_y, how);
++        widgets::paragraph(&mut c, t, f, note_bottom, saved);
++    }
++    keyboard_hits(&mut c, t, f, s, l.pick(["确定", "確定", "OK"]), &mut out);
++    Frame { caret: Some(caret), ..Frame::new(t, c, out, l.pick(["下载", "下載", "Download"]), top) }
++}
++
++/// The QR code of `url`, black on a white card, its top left at `x, y`; whether
++/// it could be drawn.
++fn qr(c: &mut Canvas, t: &Theme, url: &str, x: f32, y: f32, size: f32) -> bool {
++    let Ok(code) = qrcodegen::QrCode::encode_text(url, qrcodegen::QrCodeEcc::Medium) else { return false };
++    let m = &t.m;
++    let pad = (size * 0.06).max(m.dp(10.0));
++    c.fill_round_rect(x - pad, y - pad, size + pad * 2.0, size + pad * 2.0, m.dp(18.0), Rgba::rgb(255, 255, 255));
++    let n = code.size() as f32;
++    let cell = size / n;
++    for row in 0..code.size() {
++        for col in 0..code.size() {
++            if code.get_module(col, row) {
++                c.fill_rect(x + col as f32 * cell, y + row as f32 * cell, cell.ceil(), cell.ceil(), Rgba::rgb(0, 0, 0));
++            }
++        }
++    }
++    true
++}
++
+ pub fn wlan(cx: &Ctx) -> Frame {
+     let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
+     let w = s.wlan.as_ref().expect("the WLAN page shows on a phone whose WLAN is brought up");
+@@ -2882,7 +3286,13 @@ pub fn wlan(cx: &Ctx) -> Frame {
+     let on = !matches!(w.power, Power::Off | Power::Failed(_));
+     let switch = widgets::list(&mut c, t, f, top, &[Row::new(l.pick(WLAN)).trail(Trail::Switch(on))]);
+     out.extend(hits(&switch.rows, &[Action::Toggle(Switch::Wlan)]));
+-    let mut y = switch.bottom;
++    let auto = widgets::list(&mut c, t, f, switch.bottom, &[
++        Row::new(l.pick(["自动连接", "自動連線", "Join automatically"]))
++            .subtitle(l.pick(["下次进入 recovery 时连接这个网络", "下次進入復原模式時連線這個網路", "Join this network again at the next start"]))
++            .trail(Trail::Switch(s.wlan_auto)),
++    ]);
++    out.extend(hits(&auto.rows, &[Action::Toggle(Switch::WlanAuto)]));
++    let mut y = auto.bottom;
+     match &w.power {
+         Power::Off => {
+             let note = l.pick([
+diff --git a/crates/skyward-ui/src/settings.rs b/crates/skyward-ui/src/settings.rs
+index 294515b..2559169 100644
+--- a/crates/skyward-ui/src/settings.rs
++++ b/crates/skyward-ui/src/settings.rs
+@@ -5,10 +5,12 @@
+ //! a time zone, a part or a place by its name, so a later version that lists
+ //! them otherwise reads them the same.
+ 
+-use crate::app::{Place, State, SCREEN_OFF, TIME_ZONES};
++use crate::app::{Place, SavedWlan, State, SCREEN_OFF, TIME_ZONES};
+ use crate::Lang;
+ use anyhow::{Context, Result};
+ use serde::{Deserialize, Serialize};
++use sha2::{Digest, Sha256};
++use skyward_net::supplicant::Security;
+ 
+ /// How long settings stand unchanged before they are written, so a slider
+ /// dragged across the page is written once, after the hand stops.
+@@ -37,6 +39,9 @@ pub struct Settings {
+     /// names none, as fastboot's does.
+     pub spoken: Option<String>,
+     pub dark: bool,
++    /// How strongly the lock screen blurs the page behind it, from 0 where
++    /// it shows none to 1.
++    pub lock_blur: f32,
+     /// The brightness slider's place, from 0 at its left end to 1.
+     pub brightness: f32,
+     /// How long the screen stays on with nothing touched, in seconds; 0
+@@ -49,11 +54,101 @@ pub struct Settings {
+     pub vibration: f32,
+     /// A computer connected over USB is offered internal storage.
+     pub file_transfer: bool,
++    /// The screen lights again on a double tap while it is off.
++    pub double_tap: bool,
++    /// The recovery's own lock, its code kept as a salted hash.
++    pub lock: Option<Lock>,
++    /// Whether the phone's screen lock is remembered so the owner's files
++    /// open without asking at the next start, and the password itself.
++    pub remember_data: bool,
++    pub data_password: String,
++    /// The WLAN network joined, for the next start to join again.
++    pub wlan: Wlan,
+     pub install: Install,
+     pub backup: Backup,
+     pub logs: Logs,
+ }
+ 
++/// The recovery's lock: the code is never kept, only a salt and the
++/// SHA-256 of the salt and the code.
++#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
++#[serde(default)]
++pub struct Lock {
++    pub salt: String,
++    pub hash: String,
++}
++
++impl Default for Lock {
++    fn default() -> Self {
++        Lock { salt: String::new(), hash: String::new() }
++    }
++}
++
++impl Lock {
++    /// A lock for `code`, with a salt made from the clock. A recovery has no
++    /// random source worth the name, and the salt only keeps one recovery's
++    /// hash from telling another's.
++    pub fn set(code: &str) -> Lock {
++        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
++        let salt = format!("{:x}{:x}", nanos, std::process::id());
++        Lock { hash: Lock::hashed(&salt, code), salt }
++    }
++
++    fn hashed(salt: &str, code: &str) -> String {
++        let mut h = Sha256::new();
++        h.update(salt.as_bytes());
++        h.update(code.as_bytes());
++        h.finalize().iter().map(|b| format!("{b:02x}")).collect()
++    }
++
++    pub fn matches(&self, code: &str) -> bool {
++        !self.hash.is_empty() && Lock::hashed(&self.salt, code) == self.hash
++    }
++}
++
++/// The WLAN network the recovery last joined, and whether it joins it again
++/// as it starts. The SSID is kept as hex, as the supplicant is told it.
++#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
++#[serde(default)]
++pub struct Wlan {
++    pub auto: bool,
++    pub ssid: String,
++    pub name: String,
++    pub security: String,
++    pub password: String,
++}
++
++impl Default for Wlan {
++    fn default() -> Self {
++        Wlan { auto: true, ssid: String::new(), name: String::new(), security: String::new(), password: String::new() }
++    }
++}
++
++impl Wlan {
++    pub fn security(&self) -> Security {
++        match self.security.as_str() {
++            "open" => Security::Open,
++            "owe" => Security::Owe,
++            "psk" => Security::Psk,
++            "sae" => Security::Sae,
++            "psk_sae" => Security::PskSae,
++            _ => Security::PskSae,
++        }
++    }
++
++    pub fn security_name(security: Security) -> &'static str {
++        match security {
++            Security::Open => "open",
++            Security::Owe => "owe",
++            Security::Wep => "wep",
++            Security::Psk => "psk",
++            Security::Sae => "sae",
++            Security::PskSae => "psk_sae",
++            Security::Enterprise => "enterprise",
++        }
++    }
++}
++
+ /// The install page's options.
+ #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+ #[serde(default)]
+@@ -120,12 +215,24 @@ impl Settings {
+             language: state.language_chosen.then(|| state.lang.tag().to_string()),
+             spoken: Some(state.lang.tag().to_string()),
+             dark: state.dark,
++            lock_blur: state.lock_blur,
+             brightness: state.brightness,
+             screen_off: SCREEN_OFF[state.screen_off].map_or(0, |ms| ms / 1000),
+             time_zone: TIME_ZONES[state.time_zone].2.to_string(),
+             vibrate: state.vibrate,
+             vibration: state.vibration,
+             file_transfer: state.file_transfer,
++            double_tap: state.double_tap,
++            lock: state.lock.clone(),
++            remember_data: state.remember_data && !state.data_password.is_empty(),
++            data_password: if state.remember_data { state.data_password.clone() } else { String::new() },
++            wlan: Wlan {
++                auto: state.wlan_auto,
++                ssid: state.saved_wlan.as_ref().map_or_else(String::new, |w| w.ssid.clone()),
++                name: state.saved_wlan.as_ref().map_or_else(String::new, |w| w.name.clone()),
++                security: state.saved_wlan.as_ref().map_or_else(String::new, |w| Wlan::security_name(w.security).to_string()),
++                password: state.saved_wlan.as_ref().map_or_else(String::new, |w| w.password.clone()),
++            },
+             install: Install { check_signature: state.check_signature, keep_recovery: state.keep_recovery },
+             backup: Backup {
+                 parts: names(&state.backup, &PARTS),
+@@ -170,6 +277,9 @@ impl Settings {
+             state.language_chosen = true;
+         }
+         state.dark = self.dark;
++        if (0.0..=1.0).contains(&self.lock_blur) {
++            state.lock_blur = self.lock_blur;
++        }
+         if (0.0..=1.0).contains(&self.brightness) {
+             state.brightness = self.brightness;
+         }
+@@ -184,6 +294,21 @@ impl Settings {
+             state.vibration = self.vibration;
+         }
+         state.file_transfer = self.file_transfer;
++        state.double_tap = self.double_tap;
++        if self.lock.as_ref().is_some_and(|l| !l.hash.is_empty() && !l.salt.is_empty()) {
++            state.lock = self.lock.clone();
++        }
++        state.remember_data = self.remember_data && !self.data_password.is_empty();
++        state.data_password = if state.remember_data { self.data_password.clone() } else { String::new() };
++        state.wlan_auto = self.wlan.auto;
++        if !self.wlan.ssid.is_empty() {
++            state.saved_wlan = Some(SavedWlan {
++                ssid: self.wlan.ssid.clone(),
++                name: self.wlan.name.clone(),
++                security: self.wlan.security(),
++                password: self.wlan.password.clone(),
++            });
++        }
+         state.check_signature = self.install.check_signature;
+         state.keep_recovery = self.install.keep_recovery;
+         state.backup = picked(&self.backup.parts, &PARTS);
+diff --git a/crates/skyward-ui/src/widgets.rs b/crates/skyward-ui/src/widgets.rs
+index 2315bad..a2ded82 100644
+--- a/crates/skyward-ui/src/widgets.rs
++++ b/crates/skyward-ui/src/widgets.rs
+@@ -1661,10 +1661,52 @@ pub fn list_toned(c: &mut Canvas, t: &Theme, f: &Fonts, top: f32, rows: &[Row],
+ 
+ /// Account-style card: avatar, name and detail, then optional rows. The
+ /// first rect returned covers the name row.
+-pub fn device_card(c: &mut Canvas, t: &Theme, f: &Fonts, top: f32, title: &str, sub: &str, rows: &[Row]) -> Block {
++/// One of the readings under the device card's name: a value in the
++/// heading's type over its caption in the body's.
++pub struct Reading<'a> {
++    pub value: &'a str,
++    pub caption: &'a str,
++}
++
++/// The readings under the device card's name, as the stock settings' 「我的
++/// 设备」 lays them out: the value in the name's type, its caption under it
++/// in the subtitle's, the columns spread across the card at equal pitch.
++/// `top` is where the strip starts; the bottom it comes to is returned.
++pub fn readings_of(c: &mut Canvas, t: &Theme, f: &Fonts, top: f32, items: &[Reading]) -> f32 {
++    let m = &t.m;
++    let (value_px, caption_px) = (m.account_title_px, m.sub_px);
++    let (value_top, value_bottom) = f.heading.ink(value_px);
++    let (caption_top, caption_bottom) = f.body.ink(caption_px);
++    let value_y = top + m.dp(14.0);
++    let caption_y = value_y + (value_bottom - value_top) + m.dp(6.0);
++    let bottom = caption_y + (caption_bottom - caption_top) + m.dp(22.0);
++    let (card_x, right) = (m.margin, m.w as f32 - m.margin);
++    let left = card_x + m.inner;
++    let pitch = (right - card_x) / items.len().max(1) as f32;
++    for (k, r) in items.iter().enumerate() {
++        let x = left + pitch * k as f32;
++        let room = Some(right - m.inner - x);
++        c.text_top(&f.heading, r.value, x, value_y, value_px, t.pal.text, room);
++        c.text_top(&f.body, r.caption, x, caption_y, caption_px, t.pal.subtitle, room);
++    }
++    bottom
++}
++
++/// How tall [`readings_of`] comes, which the card must know before it fills
++/// itself.
++fn readings_height(t: &Theme, f: &Fonts) -> f32 {
++    let m = &t.m;
++    let (value_top, value_bottom) = f.heading.ink(m.account_title_px);
++    let (caption_top, caption_bottom) = f.body.ink(m.sub_px);
++    m.dp(14.0) + (value_bottom - value_top) + m.dp(6.0) + (caption_bottom - caption_top) + m.dp(22.0)
++}
++
++#[allow(clippy::too_many_arguments)]
++pub fn device_card(c: &mut Canvas, t: &Theme, f: &Fonts, top: f32, title: &str, sub: &str, readings: &[Reading], rows: &[Row]) -> Block {
+     let m = &t.m;
+     let lays: Vec<Layout> = rows.iter().map(|r| layout(c, t, f, r)).collect();
+-    let h = m.account_row_h + lays.iter().map(|l| l.h).sum::<f32>();
++    let strip = if readings.is_empty() { 0.0 } else { readings_height(t, f) };
++    let h = m.account_row_h + strip + lays.iter().map(|l| l.h).sum::<f32>();
+     let (card_x, right) = (m.margin, m.w as f32 - m.margin);
+     c.fill_round_rect(card_x, top, right - card_x, h, m.card_radius, t.pal.card);
+ 
+@@ -1686,6 +1728,9 @@ pub fn device_card(c: &mut Canvas, t: &Theme, f: &Fonts, top: f32, title: &str,
+     let tone = Tone::page(t);
+     let mut rects = vec![Rect::new(card_x, top, right - card_x, m.account_row_h)];
+     let mut y = top + m.account_row_h;
++    if !readings.is_empty() {
++        y = readings_of(c, t, f, y, readings);
++    }
+     for (r, l) in rows.iter().zip(&lays) {
+         draw_row(c, t, f, r, l, y, &tone);
+         rects.push(Rect::new(card_x, y, right - card_x, l.h));
+@@ -1727,6 +1772,9 @@ pub enum Caption {
+     Sun,
+     /// A phone between the lines of its shaking.
+     Vibrate,
++    /// A soft disc between two softer ones: an edge with the blur spread
++    /// out of it.
++    Blur,
+ }
+ 
+ /// Card with a monochrome icon caption, a slider, and an optional row below.
+@@ -1755,6 +1803,13 @@ pub fn slider_card(c: &mut Canvas, t: &Theme, f: &Fonts, top: f32, caption: Capt
+                 c.line(scx + ux * m.dp(8.3), lcy + uy * m.dp(8.3), scx + ux * m.dp(8.9), lcy + uy * m.dp(8.9), m.dp(2.0), t.pal.mono_icon);
+             }
+         }
++        Caption::Blur => {
++            let ink = t.pal.mono_icon;
++            c.fill_circle(scx - m.dp(6.0), lcy, m.dp(5.4), ink.with_alpha(60));
++            c.fill_circle(scx + m.dp(6.0), lcy, m.dp(5.4), ink.with_alpha(60));
++            c.fill_circle(scx, lcy, m.dp(6.2), ink.with_alpha(150));
++            c.fill_circle(scx, lcy, m.dp(2.2), ink.with_alpha(60));
++        }
+         Caption::Vibrate => {
+             c.stroke_round_rect(scx - m.dp(4.3), lcy - m.dp(7.7), m.dp(8.6), m.dp(15.4), m.dp(2.2), m.dp(2.0), t.pal.mono_icon);
+             for side in [-1.0f32, 1.0] {
+@@ -1803,6 +1858,53 @@ pub fn confirm(c: &mut Canvas, t: &Theme, f: &Fonts, top: f32, label: &str, dang
+     Rect::new(x, top, w, h)
+ }
+ 
++/// The lock screen's own swipe control: a frosted track, see-through over
++/// the page stretched behind it, so it reads white on a light page and a
++/// soft light grey on a dark one. `progress` is how far the knob has come.
++/// The word goes in the part of the track the knob has not taken; where
++/// that is too narrow for it, it is left out rather than covered.
++pub fn lock_confirm(c: &mut Canvas, t: &Theme, f: &Fonts, top: f32, label: &str, progress: f32) -> Rect {
++    let m = &t.m;
++    let accent = t.pal.accent;
++    let (x, w, h) = (m.margin, m.w as f32 - m.margin * 2.0, m.dp(56.0));
++    let r = h / 2.0;
++    let glass = if t.dark { Rgba::rgb(255, 255, 255).with_alpha(150) } else { Rgba::rgb(255, 255, 255).with_alpha(198) };
++    // Its light bleeds out around it, as a frosted pane's does, and a thin
++    // bright edge says where the pane is.
++    // On the light theme the pane casts a soft shadow, the way a bright
++    // frosted pill does over a light page; on the dark one its own light
++    // bleeds out, which is what makes it read as frosted glass.
++    let glow = if t.dark { Rgba::rgb(255, 255, 255).with_alpha(30) } else { Rgba::rgb(0, 0, 0).with_alpha(30) };
++    c.shadow_round_rect(x, top, w, h, r, m.dp(9.0), glow);
++    c.fill_round_rect(x, top, w, h, r, glass);
++    let edge = if t.dark { Rgba::rgb(255, 255, 255).with_alpha(52) } else { Rgba::rgb(255, 255, 255).with_alpha(230) };
++    c.stroke_round_rect(x, top, w, h, r, m.dp(1.0), edge);
++    let k = h - m.dp(8.0);
++    let kcx = x + h / 2.0 + (w - h) * progress.clamp(0.0, 1.0);
++    let kcy = top + h / 2.0;
++    if progress > 0.0 {
++        c.fill_round_rect(x, top, kcx + h / 2.0 - x, h, r, accent.with_alpha(if t.dark { 96 } else { 66 }));
++    }
++    // The knob sits in the track's hollow, its shadow under it.
++    c.shadow_round_rect(kcx - k / 2.0, kcy - k / 2.0, k, k, k / 2.0, m.dp(4.0), Rgba::rgb(0, 0, 0).with_alpha(70));
++    c.fill_circle(kcx, kcy, k / 2.0, accent);
++    let s = k * 0.3;
++    c.line(kcx - s * 0.5, kcy, kcx + s * 0.5, kcy, m.stroke, Rgba::rgb(255, 255, 255));
++    c.line(kcx + s * 0.5, kcy, kcx + s * 0.05, kcy - s * 0.45, m.stroke, Rgba::rgb(255, 255, 255));
++    c.line(kcx + s * 0.5, kcy, kcx + s * 0.05, kcy + s * 0.45, m.stroke, Rgba::rgb(255, 255, 255));
++    let ink = accent;
++    let from = kcx + k / 2.0;
++    let free = x + w - from;
++    let room = free - c.text_width(&f.heading, label, m.row_title_px);
++    if room > 0.0 {
++        // It fades out as the knob comes up to it, rather than being cut
++        // off or covered.
++        let level = (room / m.dp(40.0)).clamp(0.0, 1.0);
++        c.text_center(&f.heading, label, from + free / 2.0, kcy, m.row_title_px, ink.with_alpha((ink.a as f32 * level) as u8));
++    }
++    Rect::new(x, top, w, h)
++}
++
+ pub fn progress_bar(c: &mut Canvas, t: &Theme, x: f32, y: f32, w: f32, value: f32) {
+     let m = &t.m;
+     let h = m.dp(6.0);
+@@ -1895,7 +1997,7 @@ pub fn keypad_height(t: &Theme) -> f32 {
+ /// The keypad a screen lock's code is typed on, its top at `top`: four rows
+ /// of three round keys, `pressed` drawn held down, and the last row erasing
+ /// and confirming, in `l`. Returns where each key answers a touch.
+-pub fn keypad(c: &mut Canvas, t: &Theme, f: &Fonts, l: Lang, top: f32, pressed: Option<Cap>) -> Vec<(Rect, Cap)> {
++pub fn keypad(c: &mut Canvas, t: &Theme, f: &Fonts, l: Lang, top: f32, pressed: Option<Cap>, enter: &str) -> Vec<(Rect, Cap)> {
+     let m = &t.m;
+     let (size, gx, gy) = (m.dp(PAD_KEY_DP), m.dp(PAD_GAP_X_DP), m.dp(PAD_GAP_Y_DP));
+     let left = (m.w as f32 - (3.0 * size + 2.0 * gx)) / 2.0;
+@@ -1922,7 +2024,7 @@ pub fn keypad(c: &mut Canvas, t: &Theme, f: &Fonts, l: Lang, top: f32, pressed:
+         match cap {
+             Cap::Char(ch) => c.text_center(&f.heading, &ch.to_string(), cx, cy, m.dp(34.0), t.pal.text),
+             Cap::Backspace => c.text_center(&f.body, l.pick(["删除", "刪除", "Delete"]), cx, cy, m.row_title_px, t.pal.accent),
+-            _ => c.text_center(&f.heading, l.pick(["解密", "解密", "Decrypt"]), cx, cy, m.row_title_px, Rgba::rgb(255, 255, 255)),
++            _ => c.text_center(&f.heading, enter, cx, cy, m.row_title_px, Rgba::rgb(255, 255, 255)),
+         }
+     }
+     keys
+diff --git a/crates/skyward/src/ui.rs b/crates/skyward/src/ui.rs
+index 8ed3ceb..f8fbb66 100644
+--- a/crates/skyward/src/ui.rs
++++ b/crates/skyward/src/ui.rs
+@@ -37,7 +37,7 @@ use skyward_systems::Who;
+ use skyward_ui::app::{
+     App, Asked, BackupAt, BackupEnd, BackupEntry, BackupRefusal, ClashChoice, Data, DownloadEnd, Effect, EraseStop, FileKind, FileOp,
+     FileRow, FileTask, FsAction, FsRow, Have, Held, ItemEnd, ItemState, JobEnd, Keys, MountFailure, Part, PartKind, PartStop, Place,
+-    RenameRefused, Screen, Shot, SkywardEnd, SkywardStage, Target, UsbDrive, UsbLink, Wipe, DATA_OPENING, DATA_PARTITION, DOWNLOADS,
++    RenameRefused, Screen, Shot, SkywardEnd, SkywardStage, Target, UsbDrive, UsbLink, WebPage, Wipe, DATA_OPENING, DATA_PARTITION, DOWNLOADS,
+     INSTALL_UNFINISHED, USB_DRIVE,
+ };
+ use skyward_ui::settings::Keeper;
+@@ -46,9 +46,12 @@ use skyward_ui::{Canvas, Fonts, Lang, Surface};
+ use skyward_vab::{Merge, Standing};
+ use std::collections::{BTreeSet, VecDeque};
+ use std::fs;
+-use std::io::Write;
++use std::io::{Read, Write};
++use std::net::{TcpListener, UdpSocket};
+ use std::os::unix::fs::MetadataExt;
+ use std::path::{Path, PathBuf};
++use std::sync::atomic::{AtomicBool, Ordering};
++use std::sync::mpsc;
+ use std::sync::{Arc, Mutex};
+ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+ 
+@@ -67,7 +70,6 @@ const TOUCH_WAIT: Duration = Duration::from_secs(5);
+ /// How long a panel gone dark rests, ready to light again at once, before
+ /// the display turns off; the phone's own system keeps its panel dozing
+ /// about as long after the screen goes off.
+-const REST: Duration = Duration::from_secs(5);
+ 
+ /// Where logs saved to the temporary folder go, in the recovery service's
+ /// own folder, and where in internal storage the others do.
+@@ -874,7 +876,7 @@ fn show_closed(app: &mut App, closed: &[Closed]) -> Result<()> {
+             skyward_sys::kmsg(&format!("the files of user {} stay closed: {why}", c.user))?;
+         }
+     }
+-    let waiting = closed.iter().find(|c| !c.made_up).map(|c| {
++    let waiting = closed.iter().find(|c| !c.made_up && c.user == 0).map(|c| {
+         let keys = match c.lock {
+             Lock::PATTERN => Keys::Pattern,
+             Lock::PIN => Keys::Digits,
+@@ -1143,8 +1145,6 @@ struct Pages<'a> {
+     /// Whether the panel's frame memory has been blacked out for an off
+     /// panel; cleared once a real frame is shown again.
+     blanked: bool,
+-    /// When the panel gone dark began to rest.
+-    rested_at: Option<Instant>,
+     /// Started for fastboot, the port goes to the phone's own fastbootd. The
+     /// page says whether it came up and how far a computer has the port;
+     /// why it did not come up goes to the kernel log and on screen.
+@@ -1214,6 +1214,10 @@ struct Pages<'a> {
+     /// Asking GitHub for Skyward's newest release, and updating to it.
+     skyward_checker: Option<updates::Worker>,
+     skyward_updater: Option<updates::Worker>,
++    /// A file downloading from a URL, and the page its QR code opens.
++    url_downloader: Option<UrlDownloader>,
++    url_form: Option<UrlForm>,
++    web_fetcher: Option<WebFetcher>,
+     /// The terminal page's shell, from when the page first asks for one.
+     shell: Option<pty::Shell>,
+     /// The USB drive plugged in, looked for each second.
+@@ -1388,7 +1392,6 @@ impl<'a> Pages<'a> {
+             read_at,
+             asked: None,
+             blanked: false,
+-            rested_at: None,
+             fastboot,
+             port_at,
+             transfer,
+@@ -1421,6 +1424,9 @@ impl<'a> Pages<'a> {
+             downloader: None,
+             skyward_checker: None,
+             skyward_updater: None,
++            url_downloader: None,
++            url_form: None,
++            web_fetcher: None,
+             shell: None,
+             plugged: None,
+             seen: None,
+@@ -1544,6 +1550,27 @@ impl<'a> Pages<'a> {
+             });
+             self.wlan = Some(wlan::Worker::start(w.clone(), modules, libraries, self.servers.clone())?);
+         }
++        // The WLAN comes up as the pages do, so that an update can be looked
++        // for without a trip through the settings; the page turns it off
++        // again.
++        if let Some(w) = &self.wlan {
++            w.send(wlan::Command::On);
++            // The network joined last time is joined again as the driver comes
++            // up, before the page that lists networks is ever opened.
++            if self.app.state.wlan_auto {
++                if let Some(saved) = &self.app.state.saved_wlan {
++                    let ssid = saved.ssid_bytes();
++                    if !ssid.is_empty() {
++                        w.send(wlan::Command::Join {
++                            ssid,
++                            name: saved.name.clone(),
++                            security: saved.security,
++                            password: saved.password.clone(),
++                        });
++                    }
++                }
++            }
++        }
+         self.scanned_at = Instant::now();
+         self.app.state.update_server = cfg.update.is_some();
+         self.drive_at = Instant::now();
+@@ -1606,6 +1633,7 @@ impl<'a> Pages<'a> {
+         self.updates_told(now)?;
+         self.skyward_told(now)?;
+         self.decrypt_told(now)?;
++        self.url_told(now);
+         self.shell_told()?;
+         self.take_in(drive_told, now)?;
+         self.offer_storage(now)
+@@ -1722,18 +1750,11 @@ impl<'a> Pages<'a> {
+             // Lit, a panel that came on again switches to its fastest
+             // refresh.
+             self.surface.speed_up()?;
+-            self.rested_at = None;
+-        } else if self.surface.is_on() {
+-            // With the backlight off, the panel rests, and the touch
+-            // controller following it stops drawing power.
+-            self.surface.rest()?;
+-            self.rested_at = Some(Instant::now());
+-        } else if self.rested_at.is_some_and(|at| at.elapsed() >= REST) {
+-            // Rested long enough, the display goes off: the panel and the
+-            // display processor feeding it stop drawing power.
+-            self.surface.turn_off()?;
+-            self.rested_at = None;
+         }
++        // The backlight goes to 0 with the screen off, but the panel is not
++        // rested and the display not turned off: this panel comes back from
++        // either as a black screen on onyx, with the backlight and DPMS
++        // saying it is on. The next frame shown lights it with the light.
+         Ok((panel.is_some(), shown))
+     }
+ 
+@@ -1749,9 +1770,10 @@ impl<'a> Pages<'a> {
+         // gets at least a millisecond.
+         let floor = if shown { 0 } else { 1 };
+         let until_due = self.app.deadline(now).map(|d| d.saturating_sub(now) as i32);
+-        // A resting panel turns off once its rest is over.
+-        let rest_left = self.rested_at.map(|at| REST.saturating_sub(at.elapsed()).as_millis() as i32);
+-        let timeout = if ahead { 0 } else { until_due.into_iter().chain(rest_left).min().map_or(1000, |t| t.clamp(floor, 1000)) };
++        let timeout = if ahead { 0 } else { until_due.into_iter().min().map_or(1000, |t| t.clamp(floor, 1000)) };
++        // A URL download and a web page being read tell how they go over
++        // channels, not a file descriptor: the loop looks again soon.
++        let timeout = if self.url_downloader.is_some() || self.web_fetcher.is_some() { timeout.min(100) } else { timeout };
+         sleeper.allow(self.may_sleep()?);
+         let mut fds = vec![self.inputs.fd(), uevents.fd(), sleeper.fd()];
+         if let Some(i) = &self.installer {
+@@ -2334,6 +2356,14 @@ impl Pages<'_> {
+                 }
+                 self.closed = opening.closed;
+                 show_closed(&mut self.app, &self.closed)?;
++                // The room left on the data partition is read only once it is
++                // mounted: the card under the phone's name shows it.
++                self.info = skyward_info::collect(self.cfg)?;
++                self.app.start_home_countdown(now);
++                if let Some((user, code)) = self.app.auto_credential() {
++                    let job = decrypt::Job::Unlock { closed: self.closed.clone(), user, credential: code.into_bytes() };
++                    self.decryptor = Some(Decryptor::start(job)?);
++                }
+             }
+             decrypt::Ended::Opened(Err(why)) => {
+                 skyward_sys::kmsg(&format!("the data partition stays closed: {why}"))?;
+@@ -2349,6 +2379,9 @@ impl Pages<'_> {
+             decrypt::Ended::Unlocked(Ok(still)) => {
+                 self.closed = still;
+                 show_closed(&mut self.app, &self.closed)?;
++                self.app.unlock_succeeded();
++                self.info = skyward_info::collect(self.cfg)?;
++                self.app.start_home_countdown(now);
+             }
+             decrypt::Ended::Unlocked(Err(why)) => {
+                 skyward_sys::kmsg(&format!("what was entered did not open the user's files: {why}"))?;
+@@ -2379,6 +2412,37 @@ impl Pages<'_> {
+         Ok(())
+     }
+ 
++    /// What the page the QR code opens sent, and how the URL download and
++    /// the web page went.
++    fn url_told(&mut self, now: u64) {
++        if let Some(form) = &self.url_form {
++            while let Ok(url) = form.requests.try_recv() {
++                self.app.download_url_from_phone(url, now);
++            }
++        }
++        let mut url_ended = false;
++        if let Some(d) = &self.url_downloader {
++            while let Ok(event) = d.events.try_recv() {
++                match event {
++                    UrlEvent::Progress(progress) => self.app.download_url_progress(progress, now),
++                    UrlEvent::Ended(ended) => {
++                        self.app.download_url_ended(ended, now);
++                        url_ended = true;
++                    }
++                }
++            }
++        }
++        if url_ended {
++            self.url_downloader = None;
++        }
++        if let Some(w) = &self.web_fetcher {
++            if let Ok(page) = w.events.try_recv() {
++                self.app.web_fetched(page);
++                self.web_fetcher = None;
++            }
++        }
++    }
++
+     /// What the terminal's shell wrote, and its end.
+     fn shell_told(&mut self) -> Result<()> {
+         let Some(sh) = &mut self.shell else { return Ok(()) };
+@@ -2550,6 +2614,56 @@ impl Pages<'_> {
+                 }
+             }
+             Effect::InstallSystem { size } => self.installer.as_ref().context("no installer holds a system")?.install_system(size),
++            Effect::FetchWeb(url) => {
++                ensure!(self.web_fetcher.is_none(), "a web page is being read already");
++                match WebFetcher::start(url, self.servers.clone()) {
++                    Ok(w) => self.web_fetcher = Some(w),
++                    Err(e) => self.app.web_fetched(Err(format!("{e:#}"))),
++                }
++            }
++            Effect::DownloadUrl { url, name } => {
++                ensure!(self.url_downloader.is_none(), "a URL download is under way");
++                match UrlDownloader::start(url, name, self.servers.clone()) {
++                    Ok(d) => self.url_downloader = Some(d),
++                    Err(e) => self.app.download_url_ended(Err(format!("{e:#}")), now),
++                }
++            }
++            Effect::PauseDownloadUrl => {
++                if let Some(d) = &self.url_downloader {
++                    d.pause();
++                    self.app.download_url_paused(true);
++                }
++            }
++            Effect::ResumeDownloadUrl => {
++                if let Some(d) = &self.url_downloader {
++                    d.resume();
++                    self.app.download_url_paused(false);
++                }
++            }
++            Effect::StopDownloadUrl => {
++                if let Some(d) = &self.url_downloader {
++                    d.stop();
++                }
++            }
++            Effect::ReadDownloadLink => {
++                let path = Path::new(skyward_crypto::data::SDCARD).join("Download/link.txt");
++                let link = fs::read_to_string(&path).map_err(|e| format!("读取 {} 失败：{e}", path.display()));
++                self.app.download_link(link, now);
++            }
++            Effect::StartDownloadServer => {
++                if self.url_form.is_none() {
++                    match UrlForm::start() {
++                        Ok(form) => {
++                            self.app.download_server_url(Some(form.addr.clone()));
++                            self.url_form = Some(form);
++                        }
++                        Err(e) => {
++                            self.app.download_server_url(None);
++                            self.app.report(&format!("无法启动扫码页面：{e:#}"), now);
++                        }
++                    }
++                }
++            }
+             // The decrypt page shows meanwhile that the work is
+             // under way, and takes nothing more until it is done.
+             Effect::OpenData => {
+@@ -2608,13 +2722,42 @@ impl Pages<'_> {
+                 wlan_worker(&self.wlan)?.send(wlan::Command::Join { ssid, name, security, password: password.0 })
+             }
+             Effect::LeaveWlan => wlan_worker(&self.wlan)?.send(wlan::Command::Leave),
++            Effect::DisableAvb => {
++                // The recovery binary is avbctl by another name: the symlink
++                // install scripts run it through.
++                let mut outcome = String::new();
++                for command in ["disable-verification", "disable-verity"] {
++                    match std::process::Command::new("/system/bin/avbctl").arg(command).output() {
++                        Ok(out) => {
++                            let said = String::from_utf8_lossy(&out.stdout).trim().to_string();
++                            let why = String::from_utf8_lossy(&out.stderr).trim().to_string();
++                            skyward_sys::kmsg(&format!("avbctl {command}: {} {said} {why}", out.status))?;
++                            if !out.status.success() {
++                                outcome = if why.is_empty() { format!("{command}: {}", out.status) } else { format!("{command}: {why}") };
++                                break;
++                            }
++                        }
++                        Err(e) => {
++                            outcome = format!("{command}: {e}");
++                            break;
++                        }
++                    }
++                }
++                let said = if outcome.is_empty() {
++                    self.app.state.lang.pick(["已禁用 AVB 2.0", "已停用 AVB 2.0", "AVB 2.0 is disabled"]).to_string()
++                } else {
++                    format!("AVB: {outcome}")
++                };
++                self.app.report(&said, now);
++            }
+             Effect::CheckUpdate => self.check_update()?,
+             Effect::Download(release) => self.download(release, now)?,
+             Effect::StopDownload => self.downloader.as_ref().context("there is no download to stop")?.stop(),
+             Effect::CheckSkyward => {
+                 ensure!(self.skyward_checker.is_none(), "GitHub is being asked already");
+                 let probe = cfg.wlan.as_ref().context("the phone's WLAN is not brought up")?.probe.clone();
+-                let task = updates::Task::CheckSkyward { probe, codename: cfg.device.codename.clone() };
++                let repo = cfg.update.as_ref().and_then(|u| u.skyward.clone()).unwrap_or_else(|| "kirklin/skyward".into());
++                let task = updates::Task::CheckSkyward { probe, codename: cfg.device.codename.clone(), repo };
+                 self.skyward_checker = Some(updates::Worker::start(task, self.servers.clone())?);
+             }
+             // The zip goes into the recovery's own folder, which is
+@@ -2623,11 +2766,18 @@ impl Pages<'_> {
+             Effect::UpdateSkyward(build) => {
+                 ensure!(self.skyward_updater.is_none(), "Skyward is being updated already");
+                 ensure!(self.installer.is_none(), "an installer is running already");
+-                skyward_sys::kmsg(&format!("updating Skyward to {}", build.name))?;
++                skyward_sys::kmsg(&format!("updating Skyward from {}", build.name))?;
+                 let path = Path::new(skyward_sys::RUN).join(&build.name);
+                 let task = updates::Task::UpdateSkyward { build, codename: cfg.device.codename.clone(), path };
+                 self.skyward_updater = Some(updates::Worker::start(task, self.servers.clone())?);
+             }
++            Effect::UpdateSkywardLocal { path } => {
++                ensure!(self.skyward_updater.is_none(), "Skyward is being updated already");
++                ensure!(self.installer.is_none(), "an installer is running already");
++                skyward_sys::kmsg(&format!("updating Skyward from {path}"))?;
++                let task = updates::Task::UpdateSkywardFile { path: PathBuf::from(path), codename: cfg.device.codename.clone() };
++                self.skyward_updater = Some(updates::Worker::start(task, self.servers.clone())?);
++            }
+             Effect::StopSkywardUpdate => self.skyward_updater.as_ref().context("Skyward is not being updated")?.stop(),
+             // Logs that cannot be saved are the page's to report;
+             // the recovery carries on.
+@@ -3017,3 +3167,295 @@ impl Pages<'_> {
+         Ok(())
+     }
+ }
++
++/// A file downloading from a URL: the messages the thread sends, the switch
++/// that stops it, and the thread.
++enum UrlEvent {
++    Progress(download::Progress),
++    Ended(Result<String, String>),
++}
++
++struct UrlDownloader {
++    events: mpsc::Receiver<UrlEvent>,
++    stop: Arc<AtomicBool>,
++    paused: Arc<AtomicBool>,
++    thread: Option<std::thread::JoinHandle<()>>,
++}
++
++impl UrlDownloader {
++    fn start(url: String, name: String, servers: Servers) -> Result<UrlDownloader> {
++        let (tx, events) = mpsc::channel();
++        let stop = Arc::new(AtomicBool::new(false));
++        let paused = Arc::new(AtomicBool::new(false));
++        let (stopping, holding) = (stop.clone(), paused.clone());
++        let thread = std::thread::Builder::new().name("url-download".into()).spawn(move || {
++            let agent = skyward_net::http::agent(servers);
++            let path = Path::new(skyward_crypto::data::SDCARD).join("Download").join(&name);
++            let mut tell = |progress| {
++                let _ = tx.send(UrlEvent::Progress(progress));
++            };
++            let ended = download::save(&agent, &url, &path, &stopping, &holding, &mut tell)
++                .map(|()| path.display().to_string())
++                .map_err(|e| format!("{e:#}"));
++            let _ = tx.send(UrlEvent::Ended(ended));
++        })?;
++        Ok(UrlDownloader { events, stop, paused, thread: Some(thread) })
++    }
++
++    fn stop(&self) {
++        self.stop.store(true, Ordering::Relaxed);
++    }
++
++    fn pause(&self) {
++        self.paused.store(true, Ordering::Relaxed);
++    }
++
++    fn resume(&self) {
++        self.paused.store(false, Ordering::Relaxed);
++    }
++}
++
++impl Drop for UrlDownloader {
++    fn drop(&mut self) {
++        self.stop.store(true, Ordering::Relaxed);
++        if let Some(thread) = self.thread.take() {
++            let _ = thread.join();
++        }
++    }
++}
++
++/// The page the download page's QR code opens: another phone enters a URL,
++/// and the page sends it back to the recovery.
++struct UrlForm {
++    addr: String,
++    requests: mpsc::Receiver<String>,
++}
++
++impl UrlForm {
++    fn start() -> Result<UrlForm> {
++        let mut bound = None;
++        for port in 8080..8090 {
++            if let Ok(listener) = TcpListener::bind(("0.0.0.0", port)) {
++                bound = Some((listener, port));
++                break;
++            }
++        }
++        let (listener, port) = bound.context("no port from 8080 to 8089 could be bound")?;
++        listener.set_nonblocking(true).context("make the QR page's listener non-blocking")?;
++        let ip = local_ip().unwrap_or_else(|| "127.0.0.1".into());
++        let addr = format!("http://{ip}:{port}/");
++        let (tx, requests) = mpsc::channel();
++        std::thread::Builder::new().name("url-form".into()).spawn(move || serve_url_form(listener, tx))?;
++        Ok(UrlForm { addr, requests })
++    }
++}
++
++/// The address another phone can reach this recovery at, as the route to
++/// the outside world names it.
++fn local_ip() -> Option<String> {
++    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
++    socket.connect("8.8.8.8:80").ok()?;
++    Some(socket.local_addr().ok()?.ip().to_string())
++}
++
++fn serve_url_form(listener: TcpListener, requests: mpsc::Sender<String>) {
++    loop {
++        match listener.accept() {
++            Ok((mut stream, _)) => {
++                let _ = answer_url_form(&mut stream, &requests);
++            }
++            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => std::thread::sleep(Duration::from_millis(100)),
++            Err(_) => std::thread::sleep(Duration::from_millis(200)),
++        }
++    }
++}
++
++fn answer_url_form(stream: &mut std::net::TcpStream, requests: &mpsc::Sender<String>) -> Result<()> {
++    stream.set_read_timeout(Some(Duration::from_secs(2)))?;
++    stream.set_write_timeout(Some(Duration::from_secs(2)))?;
++    let mut buf = vec![0u8; 8192];
++    let n = stream.read(&mut buf)?;
++    let request = String::from_utf8_lossy(&buf[..n]);
++    let path = request.lines().next().and_then(|line| line.split_whitespace().nth(1)).unwrap_or("/");
++    if let Some(query) = path.strip_prefix("/send?") {
++        let url = query.split('&').find_map(|pair| pair.strip_prefix("url=")).map(url_query_decode).unwrap_or_default();
++        if !url.is_empty() {
++            let _ = requests.send(url);
++        }
++        let body = "<!doctype html><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Skyward</title><body style=\"background:#111;color:#eee;font:18px system-ui;padding:2em\"><h2>已发回手机</h2><p>回到 recovery 的下载页查看。</p>";
++        write_http(stream, "200 OK", body)?;
++        return Ok(());
++    }
++    if path == "/" || path.starts_with("/?") {
++        let body = "<!doctype html><html><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Skyward Download</title></head><body style=\"background:#111;color:#eee;font:18px system-ui;padding:2em;max-width:680px;margin:auto\"><h1>发一个下载链接</h1><p>在下面输入完整网址，发回 recovery 的下载页。</p><form action=\"/send\" method=\"get\"><input name=\"url\" type=\"url\" required placeholder=\"https://example.com/rom.zip\" style=\"width:100%;box-sizing:border-box;font:18px system-ui;padding:.8em;border:1px solid #555;border-radius:12px;background:#222;color:#eee\"><button style=\"margin-top:1em;width:100%;font:18px system-ui;padding:.9em;border:0;border-radius:12px;background:#4d8dff;color:#fff\">发回手机</button></form><p style=\"color:#aaa\">服务只在 recovery 运行时可用。</p></body></html>";
++        write_http(stream, "200 OK", body)?;
++        return Ok(());
++    }
++    write_http(stream, "404 Not Found", "not found")?;
++    Ok(())
++}
++
++fn write_http(stream: &mut std::net::TcpStream, status: &str, body: &str) -> Result<()> {
++    write!(
++        stream,
++        "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
++        body.len()
++    )?;
++    stream.flush()?;
++    Ok(())
++}
++
++fn url_query_decode(text: &str) -> String {
++    let bytes = text.as_bytes();
++    let mut out = Vec::with_capacity(bytes.len());
++    let mut i = 0;
++    while i < bytes.len() {
++        match bytes[i] {
++            b'+' => out.push(b' '),
++            b'%' if i + 2 < bytes.len() => {
++                if let Ok(v) = u8::from_str_radix(&text[i + 1..i + 3], 16) {
++                    out.push(v);
++                    i += 3;
++                    continue;
++                }
++                out.push(b'%');
++            }
++            b => out.push(b),
++        }
++        i += 1;
++    }
++    String::from_utf8_lossy(&out).into_owned()
++}
++/// A web page being read as text: the thread's answer, once.
++struct WebFetcher {
++    events: mpsc::Receiver<Result<WebPage, String>>,
++    thread: Option<std::thread::JoinHandle<()>>,
++}
++
++impl WebFetcher {
++    fn start(url: String, servers: Servers) -> Result<WebFetcher> {
++        let (tx, events) = mpsc::channel();
++        let thread = std::thread::Builder::new().name("web".into()).spawn(move || {
++            let agent = skyward_net::http::agent(servers);
++            let page = fetch_web(&agent, &url);
++            let _ = tx.send(page);
++        })?;
++        Ok(WebFetcher { events, thread: Some(thread) })
++    }
++}
++
++impl Drop for WebFetcher {
++    fn drop(&mut self) {
++        if let Some(thread) = self.thread.take() {
++            let _ = thread.join();
++        }
++    }
++}
++
++fn fetch_web(agent: &ureq::Agent, url: &str) -> Result<WebPage, String> {
++    let mut response = agent.get(url).call().map_err(|e| format!("{e:#}"))?;
++    let status = response.status().as_u16();
++    if !(200..400).contains(&status) {
++        return Err(format!("the server answered {status}"));
++    }
++    let mut bytes = Vec::new();
++    response
++        .body_mut()
++        .with_config()
++        .limit(4 << 20)
++        .reader()
++        .take(4 << 20)
++        .read_to_end(&mut bytes)
++        .map_err(|e| format!("read the page: {e}"))?;
++    let html = String::from_utf8_lossy(&bytes).into_owned();
++    let title = html_title(&html);
++    let text = html_text(&html);
++    Ok(WebPage { url: url.to_string(), title, text })
++}
++
++fn html_title(html: &str) -> String {
++    let lower = html.to_ascii_lowercase();
++    let Some(at) = lower.find("<title") else { return String::new() };
++    let Some(open) = lower[at..].find('>') else { return String::new() };
++    let start = at + open + 1;
++    let Some(end) = lower[start..].find("</title>") else { return String::new() };
++    decode_entities(html[start..start + end].trim())
++}
++
++fn html_text(html: &str) -> String {
++    let mut out = String::new();
++    let bytes = html.as_bytes();
++    let mut i = 0;
++    while i < bytes.len() {
++        if bytes[i] == b'<' {
++            let Some(close) = html[i..].find('>') else { break };
++            let tag = html[i + 1..i + close].trim();
++            let name = tag.split_whitespace().next().unwrap_or("").trim_start_matches('/').to_ascii_lowercase();
++            i += close + 1;
++            if matches!(name.as_str(), "script" | "style" | "noscript") && !tag.starts_with('/') {
++                let end = format!("</{name}>");
++                if let Some(at) = html[i..].to_ascii_lowercase().find(&end) {
++                    i += at + end.len();
++                }
++                continue;
++            }
++            if matches!(
++                name.as_str(),
++                "br" | "p" | "div" | "li" | "tr" | "td" | "th" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "section" | "article" | "header" | "footer" | "blockquote" | "pre" | "hr" | "table" | "ul" | "ol"
++            ) {
++                out.push('\n');
++            }
++            continue;
++        }
++        let ch = html[i..].chars().next().unwrap_or(' ');
++        out.push(ch);
++        i += ch.len_utf8();
++    }
++    let decoded = decode_entities(&out);
++    let mut lines: Vec<String> = Vec::new();
++    for line in decoded.lines() {
++        let clean = line.split_whitespace().collect::<Vec<_>>().join(" ");
++        if clean.is_empty() {
++            if lines.last().is_some_and(|l| !l.is_empty()) {
++                lines.push(String::new());
++            }
++        } else {
++            lines.push(clean);
++        }
++    }
++    let mut text = lines.join("\n");
++    text.truncate(40000);
++    text
++}
++
++fn decode_entities(text: &str) -> String {
++    let mut out = String::with_capacity(text.len());
++    let mut rest = text;
++    while let Some(at) = rest.find('&') {
++        out.push_str(&rest[..at]);
++        rest = &rest[at..];
++        let Some(end) = rest.find(';') else {
++            out.push_str(rest);
++            return out;
++        };
++        let entity = &rest[1..end];
++        let decoded = match entity {
++            "amp" => Some('&'),
++            "lt" => Some('<'),
++            "gt" => Some('>'),
++            "quot" => Some('"'),
++            "apos" => Some('\''),
++            "nbsp" => Some(' '),
++            _ if entity.starts_with("#x") || entity.starts_with("#X") => u32::from_str_radix(&entity[2..], 16).ok().and_then(char::from_u32),
++            _ if entity.starts_with('#') => entity[1..].parse().ok().and_then(char::from_u32),
++            _ => None,
++        };
++        match decoded {
++            Some(ch) => out.push(ch),
++            None => out.push_str(&rest[..=end]),
++        }
++        rest = &rest[end + 1..];
++    }
++    out.push_str(rest);
++    out
++}

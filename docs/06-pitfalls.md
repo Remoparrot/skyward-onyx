@@ -343,3 +343,47 @@ export PATH="$HOME/.cargo/bin:$PATH"
 **解法**：把这一层整套删掉（`graded` / `original` / `stock` / `ink`、`color::p3`、`color::desaturated`、`icons::tile()` 里的 `t.ink()`），采样值原样绘制；`patches/0008` 里对应三段一起删，干净上游 apply 0001–0008 后 `diff -r` 仍与 vendor 树一致。
 
 **如何避免**：显示效果以用户实际观感为准，别拿「更接近系统」当理由整体改调色板；真要试色域就做成可选、默认关，并先给用户看两张对比图。
+
+## 28. 0.3.1 自动发现的 keymint 一启动就退出，data 打不开、也没有锁屏输入
+
+**现象**：刷入 v0.3.1-onyx.1 后开机停在解密页；`dmesg` 里 keymint 每秒重启一次：
+
+```
+skyward: /vendor/bin/hw/android.hardware.security.keymint-service-qti: pid 562 ended: exit status: 1
+skyward: the data partition stays closed: ...IKeyMintDevice/default is not running
+```
+
+于是 `/data` 不挂载、user 0 的锁屏密码页也不出现（用户看到的「data 没解开，没有锁屏」）。
+
+**根因**：0.3.1 的 `skyward-programs` 给 `/vendor` 程序只给 `/system/lib64:/vendor/lib64`；Android 17 的 recovery 里没有 `libvndksupport.so`。手动执行可复现：
+
+```
+CANNOT LINK EXECUTABLE "/vendor/bin/hw/android.hardware.security.keymint-service-qti":
+library "libvndksupport.so" not found: needed by /vendor/lib64/libhardware.so
+```
+
+而我们 0.3.0 写死的服务表里一直带着 `/mnt/system/system/lib64` 与 `/mnt/system/system/lib64/bootstrap`，所以以前没暴露。
+
+**解法**：`patches/0003` 把 `/vendor` 程序的库目录补成 `/system/lib64:/vendor/lib64:/vendor/lib64/hw:/mnt/system/system/lib64:/mnt/system/system/lib64/bootstrap`（`crates/skyward-programs/src/secure.rs` 的 `VENDOR_LIBRARIES`）。刷入后 keymint 正常注册，`/data` 挂载，user 0 自动解开，锁屏也回来了。
+
+**如何避免**：把「服务启动命令 + 库路径」当成会随底包 / 上游变化的东西；每次换上游或底包，先在 recovery 里手动跑一遍 HAL 二进制（带 `LD_LIBRARY_PATH`）确认能驻留，再依赖自动发现。HAL 退出时 Skyward 只记 `exit status: 1`，看不到程序自己打的链接错误；必要时临时把子进程 stderr 写到文件。
+
+## 29. Windows 上编不过 0.3.1 的 `skyward-pack`
+
+**现象**：`scripts/build-pack.sh` 在 Windows 上报 `skyward-block` 的 `std::os::unix`、`libc::statvfs` 等错误。
+
+**根因**：0.3.1 的打包器新增 `described` 子命令，依赖 `skyward-programs` → `skyward-omapi` → 一串只面向 Android/Linux 的 crate；宿主 Windows 编不了。
+
+**解法**：把 `described` 做成 Cargo feature（默认开），`scripts/build-pack.sh` 用 `--no-default-features` 编宿主打包器。`recovery` / `stock` / `list` / `cat` / `repack` / `boot` 都不受影响；只有「从官方全量包抽某机型分区描述」这个 CI 用的子命令被关掉。
+
+**如何避免**：宿主工具与手机运行时共用 workspace 时，把「只在手机侧用」的子命令做成 feature；下次上游再加这类子命令时，先看 `cargo check -p skyward-pack --no-default-features`。
+
+## 30. 0.3.0 → 0.3.1 的 `settings.json` 兼容
+
+**现象**：升级后以为要重新输锁屏密码 / 重新连 WLAN。
+
+**根因**：0.3.1 把设置拆成 `Settings` 的多个结构体，但字段名（`remember_data`、`data_password`、`wlan.*`、`lock_blur`）没换；`settings.rs` 的 `read` 对未知字段与缺字段都容忍。
+
+**验证**：旧版本保存过密码的机器，刷 0.3.1 后第一次启动不走解密键盘，`dmesg` 从 `[0, 999]` 直接变成 `[999]`，WLAN 自动连上 `CMCC-A9s7-5G`。
+
+**如何避免**：改设置字段名时同时写迁移（或明确 `/metadata/skyward` 要清）；升级前先备份该文件。

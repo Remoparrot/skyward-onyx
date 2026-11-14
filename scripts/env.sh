@@ -50,7 +50,7 @@ fi
 # Windows 上用 gnu 宿主工具链；上游 rust-toolchain.toml 只钉 stable，
 # 不钉宿主三元组，所以这里显式选择，避免落到 msvc 后缺 link.exe。
 if [[ "$HOST_TAG" == windows-* ]]; then
-  export RUSTUP_TOOLCHAIN="${RUSTUP_TOOLCHAIN:-stable-x86_64-pc-windows-gnu}"
+  export RUSTUP_TOOLCHAIN="${RUSTUP_TOOLCHAIN:-1.100.0-x86_64-pc-windows-gnu}"
   export PATH="$HOME/.cargo/bin:$PATH"
 
   if [[ -z "${MINGW_BIN:-}" ]]; then

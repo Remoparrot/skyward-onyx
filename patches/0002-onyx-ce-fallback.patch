@@ -1,25 +1,25 @@
 diff --git a/crates/skyward-crypto/src/data.rs b/crates/skyward-crypto/src/data.rs
-index 3bb2ef7..5d9f317 100644
+index 53903a5..4ccf788 100644
 --- a/crates/skyward-crypto/src/data.rs
 +++ b/crates/skyward-crypto/src/data.rs
-@@ -334,15 +334,7 @@ const PROTECTORS: &str = "/data/system_de";
+@@ -297,15 +297,7 @@ const PROTECTORS: &str = "/data/system_de";
  /// so this reads it rather than guess.
  fn protector(user: u32) -> Result<crate::user::Protector> {
      let dir = blobs(user);
 -    let mut ids = Vec::new();
 -    for entry in std::fs::read_dir(&dir).with_context(|| format!("read {}", dir.display()))? {
 -        let path = entry.with_context(|| format!("read {}", dir.display()))?.path();
--        if path.extension().is_some_and(|e| e == "spblob") {
--            if let Some(id) = path.file_stem().and_then(|s| s.to_str()) {
--                ids.push(id.to_string());
--            }
+-        if path.extension().is_some_and(|e| e == "spblob")
+-            && let Some(id) = path.file_stem().and_then(|s| s.to_str())
+-        {
+-            ids.push(id.to_string());
 -        }
 -    }
 +    let ids = protector_ids(user)?;
      let id = match crate::locksettings::current_protector(Path::new(crate::locksettings::DATABASE), user)? {
          Some(recorded) => {
              anyhow::ensure!(
-@@ -364,6 +356,28 @@ fn protector(user: u32) -> Result<crate::user::Protector> {
+@@ -327,6 +319,28 @@ fn protector(user: u32) -> Result<crate::user::Protector> {
              ),
          },
      };
@@ -48,7 +48,7 @@ index 3bb2ef7..5d9f317 100644
      // A user who has set a screen lock has what the phone recorded about
      // it beside the blob; a user who has set none has nothing there.
      let recorded = dir.join(format!("{id}.pwd"));
-@@ -385,7 +399,7 @@ fn protector(user: u32) -> Result<crate::user::Protector> {
+@@ -348,7 +362,7 @@ fn protector(user: u32) -> Result<crate::user::Protector> {
      Ok(crate::user::Protector {
          blob: std::fs::read(dir.join(format!("{id}.spblob"))).with_context(|| format!("read the blob in {}", dir.display()))?,
          bound,
@@ -57,7 +57,7 @@ index 3bb2ef7..5d9f317 100644
          lock,
      })
  }
-@@ -468,6 +482,59 @@ const TAG_BYTES: usize = 16;
+@@ -431,6 +445,59 @@ const TAG_BYTES: usize = 16;
  /// shows at /sdcard.
  fn open_user_files(service: &KeyMint, user: u32, credential: Option<&[u8]>, owner: Option<&Token>) -> Result<Note> {
      let protector = protector(user)?;
@@ -117,7 +117,7 @@ index 3bb2ef7..5d9f317 100644
      let stretched = match &protector.lock {
          Some(lock) => {
              let typed = match made_up_credential(service, user, &protector.id, owner)? {
-@@ -486,8 +553,9 @@ fn open_user_files(service: &KeyMint, user: u32, credential: Option<&[u8]>, owne
+@@ -449,8 +516,9 @@ fn open_user_files(service: &KeyMint, user: u32, credential: Option<&[u8]>, owne
          // the secret is then guarded by nothing else.
          (Bound::Weaver(slot), _) => {
              let binder = Binder::open()?;

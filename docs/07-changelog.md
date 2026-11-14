@@ -6,6 +6,52 @@
 
 ---
 
+## v0.3.1-onyx.1 · 2026-11-14
+
+**主题：同步上游 v0.3.1（新 UI 状态机、密钥服务自动发现、自带 OMAPI）+ 保留 onyx 全部设备能力**
+
+| 项 | 值 |
+| --- | --- |
+| 镜像 | `recovery.img` · 104,857,600 字节 |
+| SHA-256 | `27fbfc1c442b969fa3134fa9577f83031a34ed0979c0e697cbfa5f805f73cf5f` |
+| 内含 skyward | 8,955,824 字节 · `81e6e4d92b8afa0da5c74c7d626ce1ee87cc6cd8f7990385ac1c10c17b4c66f1` |
+| ramdisk | 50,668,045 字节 · 1062 条 |
+| 底包 | OS4.0.2.0.XOLCNXM（Android 17） |
+| zip | 未打（在线更新取裸 `recovery.img`） |
+| 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · `ce538507…cd3357`（未改动） |
+| 上游 | `kirklin/skyward` @ `bd34c05`（v0.3.1）+ 0001–0006 |
+
+### 上游带来了什么
+
+- **UI 状态机拆分**：`crates/skyward-ui/src/app.rs` 拆成 `app/*.rs`（按页面分模块），`skyward/src/ui.rs` 的 `run()` 收缩成 `Pages` 结构 + 每类事件一个方法；
+- **密钥服务自动发现**：新增 `skyward-programs`，从安装系统的 `system_ext` / `vendor` / `odm` 分区读 init 脚本与 VINTF 描述，按手机自己的顺序拉起 qseecomd / keymint / gatekeeper / secure_element / weaver / boot-control，`devices/*.toml` 不再写这些服务；
+- **自带 OMAPI 与 binder 服务端**：`skyward-omapi` crate 提供 `android.se.omapi.ISecureElementService`，`skyward-binder/src/serve.rs` 提供 binder 服务端。我们旧的 `0002-omapi-se-bridge` 因此退休；
+- **其他**：Rust 1.100 / edition 2024、DNS 多服务器、长 kmsg 分条、boot 分区写前回填、MTP 在 Linux 宿主上可编、`skyward-pack described` 子命令等。
+
+### 改了什么（onyx 侧）
+
+- **补丁重排**：`0001` Windows 宿主编译（新增 `skyward-pack` 的 `described` feature 门控）、`0002` CE 的 gatekeeper 回退、`0003` 配置 / WLAN / 振动 / 密钥服务库路径、`0004` 并行下载 / 自更新 / 本地刷入、`0005` UI（锁屏模糊与滑块、首页读数、解密页、下载页、设置页、双击亮屏、AVB 页）、`0006` 版本与 `Cargo.lock`；
+- **`devices/onyx.toml`**：删掉 6 个写死的密钥服务（含 `description` 字段），只留触摸 + WLAN / 振动 / 更新 / 底包配置；
+- **UI 移植**：把 onyx.1–onyx.5 的改动从旧 `app.rs` 迁到新的 `app/*.rs`；锁屏、首页读数、解密页倒计时、下载页、二维码、纯文本网页、设置项、双击亮屏都保留；
+- **面板不 rest**：沿用 onyx 的「息屏只关背光、面板保持 On」修复，上游的 rest/turn_off 逻辑没有启用。
+
+### 踩到的坑（本次新增）
+
+1. **keymint 一启动就退出**：`skyward-programs` 给 `/vendor` 程序只给 `/system/lib64:/vendor/lib64`，Android 17 recovery 没有 `libvndksupport.so`，keymint 报 `CANNOT LINK EXECUTABLE ... library "libvndksupport.so" not found` 后 exit 1，`/data` 因此打不开、也就没有锁屏。修法：`VENDOR_LIBRARIES` 加上 `/vendor/lib64/hw`、`/mnt/system/system/lib64`、`/mnt/system/system/lib64/bootstrap`（与我们 0.3.0 写死的服务表一致）。详见 [`06-pitfalls.md`](06-pitfalls.md)。
+2. **Windows 宿主编 `skyward-pack`**：上游新加的 `described` 子命令依赖 `skyward-programs`，后者要 Unix 的 libc 接口。用 `--no-default-features` 把 `described` 关掉即可（`scripts/build-pack.sh` 已改）。
+3. **旧 settings 兼容**：0.3.0 的 `settings.json` 里的 `remember_data` / `data_password` / WLAN 字段被新结构直接读到，升级后自动解密与自动连 WLAN 都还在。
+
+### 真机验证
+
+- `fastboot flash recovery` 后 `dmesg`：`onyx 0.3.1-onyx.1 recovery up`；
+- `skyward keys`：自动发现 8 个程序（qseecomd / ssgtzd / hlosminkdaemon / keymint / gatekeeper / secure_element eSE1 / OMAPI / weaver / boot-control）；
+- `/data`：`/dev/block/dm-9 holds f2fs at /data`；user 0 CE 自动解开（旧版记住的锁屏密码），`/sdcard/DCIM/Camera` 的 JPEG 可读；user 999 仍锁，日志说明原因；
+- WLAN：`CMCC-A9s7-5G`、`freq: 5260`、`wlan0 has 192.168.1.227`、`reaches the internet`；
+- 首页读数、锁屏（模糊快照 + 滑动解锁）、设置页（锁屏模糊滑杆、双击亮屏）、关于本机（`0.3.1-onyx.1`、`© 2026 Kirk Lin & Remoparrot`）均有截图；
+- 未验证：触摸服务未重新注入复测（0.3.0 已验证）、振动未听感复测、下载/网页/AVB 页未点、数字键盘锁屏未点。
+
+---
+
 ## v0.3.0-onyx.5 · 2026-11-14
 
 **主题：下载页回归（删掉图形浏览器）+ 锁屏模糊与滑块 + 5 GHz WLAN + 解密前不锁屏 + 颜色按面板色域校正**

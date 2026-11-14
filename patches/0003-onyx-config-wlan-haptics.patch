@@ -1,0 +1,372 @@
+diff --git a/crates/skyward-config/src/lib.rs b/crates/skyward-config/src/lib.rs
+index 873967f..d00a0e9 100644
+--- a/crates/skyward-config/src/lib.rs
++++ b/crates/skyward-config/src/lib.rs
+@@ -122,6 +122,10 @@ pub struct Wlan {
+     /// the libraries of the vendor interface the phone was built against.
+     #[serde(default)]
+     pub libraries: Vec<String>,
++    /// A library preloaded into the supplicant, for a vendor build whose
++    /// AIDL service the recovery's service directory does not describe.
++    #[serde(default)]
++    pub preload: Option<String>,
+     /// The service it registers with the service directory as it starts,
+     /// which the directory takes only from a program the running system
+     /// describes.
+@@ -169,6 +173,10 @@ pub struct Firmware {
+ pub struct Update {
+     /// Where the questions are sent.
+     pub server: String,
++    /// The GitHub repository whose releases update Skyward itself, as
++    /// `owner/name`; the upstream one where none is named.
++    #[serde(default)]
++    pub skyward: Option<String>,
+ }
+ 
+ /// What a backup takes in and leaves out beyond what every Android phone
+@@ -213,7 +221,19 @@ pub struct Haptics {
+     pub click: Option<i16>,
+     /// The file the driver says the motor's resonant frequency in, in
+     /// tenths of a hertz whatever its label.
++    #[serde(default)]
+     pub resonance: String,
++    /// The driver's own switch, for a motor whose force-feedback interface
++    /// takes a waveform format of its own, and the files that set what it
++    /// plays.
++    #[serde(default)]
++    pub activate: Option<String>,
++    #[serde(default)]
++    pub duration: Option<String>,
++    #[serde(default)]
++    pub effect: Option<String>,
++    #[serde(default)]
++    pub gain: Option<String>,
+     pub strength: Strength,
+ }
+ 
+@@ -540,7 +560,7 @@ impl DeviceConfig {
+         }
+         if let Some(haptics) = &cfg.haptics {
+             let file = &haptics.resonance;
+-            ensure!(Path::new(file).is_absolute(), "[haptics] resonance: {file} is not an absolute path");
++            ensure!(Path::new(file).has_root(), "[haptics] resonance: {file} is not an absolute path");
+             let Strength { lightest, strongest } = haptics.strength;
+             ensure!(
+                 0.0 < lightest && lightest < strongest && strongest <= 1.0,
+@@ -563,7 +583,7 @@ impl DeviceConfig {
+             for file in &owners.paths {
+                 let path = Path::new(file);
+                 let plain = path.components().all(|c| matches!(c, std::path::Component::RootDir | std::path::Component::Normal(_)));
+-                ensure!(path.is_absolute() && plain && path.file_name().is_some(), "[[owners]] paths: {file} is not an absolute path to a file");
++                ensure!(path.has_root() && plain && path.file_name().is_some(), "[[owners]] paths: {file} is not an absolute path to a file");
+             }
+         }
+         if let Some(stock) = &cfg.stock {
+@@ -596,7 +616,7 @@ impl DeviceConfig {
+                         );
+                         ensure!(plain && !file.path.is_empty(), "[wlan] firmware: {} is not a path from the top of {partition}", file.path);
+                     }
+-                    None => ensure!(path.is_absolute(), "[wlan] firmware: {} is not an absolute path", file.path),
++                    None => ensure!(path.has_root(), "[wlan] firmware: {} is not an absolute path", file.path),
+                 }
+             }
+         }
+diff --git a/crates/skyward-programs/src/secure.rs b/crates/skyward-programs/src/secure.rs
+index fa23108..8eaca1f 100644
+--- a/crates/skyward-programs/src/secure.rs
++++ b/crates/skyward-programs/src/secure.rs
+@@ -77,7 +77,7 @@ const HARDWARE_DIRECTORY_READY: &str = "hwservicemanager.ready";
+ /// the odm partition asks for that neither has. The directory for hardware
+ /// services is the installed system's own program and runs on its
+ /// libraries alone.
+-const VENDOR_LIBRARIES: [&str; 2] = ["/system/lib64", "/vendor/lib64"];
++const VENDOR_LIBRARIES: [&str; 5] = ["/system/lib64", "/vendor/lib64", "/vendor/lib64/hw", "/mnt/system/system/lib64", "/mnt/system/system/lib64/bootstrap"];
+ const ODM_LIBRARIES: [&str; 5] = ["/system/lib64", "/vendor/lib64", "/odm/lib64", "/mnt/system/system/lib64", "/mnt/system/system/lib64/bootstrap"];
+ const SYSTEM_LIBRARIES: [&str; 3] = ["/mnt/system/system/lib64/bootstrap", "/mnt/system/system/lib64", "/mnt/system_ext/lib64"];
+ 
+diff --git a/crates/skyward/src/haptics.rs b/crates/skyward/src/haptics.rs
+index c9419bf..8e49d5f 100644
+--- a/crates/skyward/src/haptics.rs
++++ b/crates/skyward/src/haptics.rs
+@@ -30,16 +30,37 @@ const TICKS_REST: Duration = Duration::from_millis(40);
+ /// the click is taken away. So each click is loaded as it is played, at the
+ /// strength the slider gives, and taken away once it has played out.
+ pub struct Haptics {
++    backend: Backend,
++    strength: Strength,
++}
++
++enum Backend {
++    /// The kernel's force-feedback events, for a driver that plays the
++    /// samples it is handed.
++    Ff(Ff),
++    /// The driver's own switch, for a motor whose force-feedback interface
++    /// takes a waveform format of its own, as the Awinic AW8697 does.
++    Sysfs(Sysfs),
++}
++
++struct Ff {
+     dev: File,
+     click: Click,
+     ticks: Click,
+-    strength: Strength,
+     /// The click playing, by its slot and its count, until it is taken
+     /// away; a click taken away early by the next is not taken away again.
+     playing: Arc<Mutex<Option<(i16, u64)>>>,
+     clicks: u64,
+ }
+ 
++/// The driver's own switch, and the files that set what it plays.
++struct Sysfs {
++    activate: PathBuf,
++    duration: PathBuf,
++    effect: PathBuf,
++    gain: PathBuf,
++}
++
+ /// What a click is.
+ enum Click {
+     /// A waveform the driver keeps, by its number. The driver says how long
+@@ -51,10 +72,16 @@ enum Click {
+ }
+ 
+ impl Haptics {
+-    /// The force-feedback device and the configured click. Loading a click
+-    /// fills the driver's queue with what it plays, so the click is loaded
+-    /// only as it is played.
++    /// The motor and the configured click. Loading a click fills the
++    /// driver's queue with what it plays, so the click is loaded only as it
++    /// is played. A motor the driver plays through its own switch is set up
++    /// from the files the configuration names instead.
+     pub fn open(cfg: &skyward_config::Haptics) -> Result<Haptics> {
++        if let Some(activate) = &cfg.activate {
++            let sysfs = Sysfs::open(activate, cfg)?;
++            eprintln!("haptics {}: the driver's own switch", activate);
++            return Ok(Haptics { backend: Backend::Sysfs(sysfs), strength: cfg.strength });
++        }
+         let (path, dev) = motor()?;
+         let hz = resonance(&cfg.resonance)?;
+         let click = match cfg.click {
+@@ -68,21 +95,33 @@ impl Haptics {
+             }
+         };
+         let ticks = Click::Samples { data: ticks(hz), rate: TICKS_RATE };
+-        Ok(Haptics { dev, click, ticks, strength: cfg.strength, playing: Arc::new(Mutex::new(None)), clicks: 0 })
++        let strength = cfg.strength;
++        Ok(Haptics {
++            backend: Backend::Ff(Ff { dev, click, ticks, playing: Arc::new(Mutex::new(None)), clicks: 0 }),
++            strength,
++        })
+     }
+ 
+     /// One short click at the strength the slider's `position` gives, after
+     /// taking away one still playing. Gives how long it plays.
+     pub fn click(&mut self, position: f32) -> Result<Duration> {
+-        self.start(false, share(&self.strength, position))
++        match &mut self.backend {
++            Backend::Ff(ff) => ff.start(false, share(&self.strength, position)),
++            Backend::Sysfs(sysfs) => sysfs.play(share(&self.strength, position), false),
++        }
+     }
+ 
+     /// The ticks of the screen going off, as strong as the phone's own
+     /// system plays them whatever the slider says. Gives how long they play.
+     pub fn ticks(&mut self) -> Result<Duration> {
+-        self.start(true, TICKS_STRENGTH)
++        match &mut self.backend {
++            Backend::Ff(ff) => ff.start(true, TICKS_STRENGTH),
++            Backend::Sysfs(sysfs) => sysfs.play(1.0, true),
++        }
+     }
++}
+ 
++impl Ff {
+     /// Play the ticks, or else the click, at `share` of its full strength,
+     /// after taking away what still plays.
+     fn start(&mut self, ticks: bool, share: f32) -> Result<Duration> {
+@@ -116,6 +155,35 @@ impl Haptics {
+     }
+ }
+ 
++impl Sysfs {
++    fn open(activate: &str, cfg: &skyward_config::Haptics) -> Result<Sysfs> {
++        let path = |which: &Option<String>, name: &str| -> Result<PathBuf> {
++            which.as_deref().map(PathBuf::from).with_context(|| format!("[haptics] {name} is needed with activate"))
++        };
++        Ok(Sysfs {
++            activate: PathBuf::from(activate),
++            duration: path(&cfg.duration, "duration")?,
++            effect: path(&cfg.effect, "effect")?,
++            gain: path(&cfg.gain, "gain")?,
++        })
++    }
++
++    /// Play the driver's kept waveform through its own switch, then switch
++    /// it off again: the AW8697 plays for as long as the switch is on.
++    fn play(&self, share: f32, ticks: bool) -> Result<Duration> {
++        let millis = if ticks { 10 } else { 16 };
++        let level = (share.clamp(0.0, 1.0) * 128.0).round() as u32;
++        fs::write(&self.effect, "0").with_context(|| format!("write {}", self.effect.display()))?;
++        fs::write(&self.duration, millis.to_string()).with_context(|| format!("write {}", self.duration.display()))?;
++        fs::write(&self.gain, format!("0x{level:02x}")).with_context(|| format!("write {}", self.gain.display()))?;
++        fs::write(&self.activate, "1").with_context(|| format!("write {}", self.activate.display()))?;
++        let length = Duration::from_millis(millis);
++        std::thread::sleep(length);
++        let _ = fs::write(&self.activate, "0");
++        Ok(length)
++    }
++}
++
+ /// Play the configured click once at the slider's `position`, or else the
+ /// ticks of the screen going off, saying how strongly and for how long, for
+ /// trying out a motor.
+diff --git a/crates/skyward/src/main.rs b/crates/skyward/src/main.rs
+index 98d71eb..5a5202f 100644
+--- a/crates/skyward/src/main.rs
++++ b/crates/skyward/src/main.rs
+@@ -811,7 +811,14 @@ fn recovery() -> Result<()> {
+                 programs.extend(prepare(&cfg, booted_slot()?)?);
+             }
+             let root = Path::new("/");
+-            ui::run(&cfg, &programs, &root.join(ramdisk::FONT), &root.join(ramdisk::MONO), request, Screen::Home, None)
++            // A recovery started for its own pages opens the data partition
++            // first: what the phone holds is behind the screen lock, and
++            // the page that asks for it is the first thing to show.
++            let start = match request.work {
++                bcb::Work::Menu => Screen::Decrypt,
++                _ => Screen::Home,
++            };
++            ui::run(&cfg, &programs, &root.join(ramdisk::FONT), &root.join(ramdisk::MONO), request, start, None)
+         }
+         #[cfg(not(target_os = "android"))]
+         {
+diff --git a/crates/skyward/src/settings.rs b/crates/skyward/src/settings.rs
+index ad36bfb..8163438 100644
+--- a/crates/skyward/src/settings.rs
++++ b/crates/skyward/src/settings.rs
+@@ -57,7 +57,17 @@ pub fn write(settings: &Settings) -> Result<()> {
+ 
+ fn write_file(settings: &Settings) -> Result<()> {
+     fs::create_dir_all(FOLDER).with_context(|| format!("make {FOLDER}"))?;
++    #[cfg(unix)]
++    {
++        use std::os::unix::fs::PermissionsExt;
++        fs::set_permissions(FOLDER, fs::Permissions::from_mode(0o700)).with_context(|| format!("keep {FOLDER} to root"))?;
++    }
+     let mut file = File::create(WRITING).with_context(|| format!("make {WRITING}"))?;
++    #[cfg(unix)]
++    {
++        use std::os::unix::fs::PermissionsExt;
++        file.set_permissions(fs::Permissions::from_mode(0o600)).with_context(|| format!("keep {WRITING} to root"))?;
++    }
+     file.write_all(settings.text().as_bytes()).with_context(|| format!("write {WRITING}"))?;
+     file.sync_all().with_context(|| format!("write {WRITING}"))?;
+     fs::rename(WRITING, FILE).with_context(|| format!("move {WRITING} over {FILE}"))?;
+diff --git a/crates/skyward/src/wlan.rs b/crates/skyward/src/wlan.rs
+index a6e13e5..336d4a1 100644
+--- a/crates/skyward/src/wlan.rs
++++ b/crates/skyward/src/wlan.rs
+@@ -640,7 +640,20 @@ fn bring_up(cfg: &Config, modules: &[PathBuf]) -> Result<()> {
+             thread::sleep(Duration::from_millis(100));
+         }
+     }
+-    iface::set_up(&cfg.interface, true)
++    // The interface appears before the driver has finished bringing the
++    // chip up, and setting it up meanwhile is answered EBUSY; it is tried
++    // until the driver takes it.
++    let until = Instant::now() + Duration::from_secs(10);
++    loop {
++        match iface::set_up(&cfg.interface, true) {
++            Ok(()) => return Ok(()),
++            Err(e) if Instant::now() < until => {
++                skyward_sys::kmsg(&format!("the WLAN interface is not ready yet: {e:#}"))?;
++                thread::sleep(Duration::from_millis(200));
++            }
++            Err(e) => return Err(e).with_context(|| format!("bring {} up", cfg.interface)),
++        }
++    }
+ }
+ 
+ /// Put a file the driver asks for where the firmware loader looks.
+@@ -662,6 +675,21 @@ fn place(file: &Firmware) -> Result<()> {
+     fs::write(&to, bytes).with_context(|| format!("write {}", to.display()))
+ }
+ 
++/// The country whose WLAN rules the phone is set to: the market it was
++/// built for, as the properties name it, or China where they name none
++/// (the builds this was brought up on are Chinese ones).
++fn country() -> String {
++    const NAMES: [&str; 3] = ["ro.boot.ptcountrycode", "ro.vendor.radio.build_region", "ro.product.locale.region"];
++    for name in NAMES {
++        let Some(value) = skyward_sys::prop(name) else { continue };
++        let code = value.trim().to_ascii_uppercase();
++        if code.len() == 2 && code.bytes().all(|b| b.is_ascii_uppercase()) {
++            return code;
++        }
++    }
++    "CN".to_string()
++}
++
+ /// Start the supplicant on the interface, and wait for its control socket.
+ fn start_supplicant(cfg: &Config, libraries: Option<&Path>) -> Result<Child> {
+     let home = Path::new(HOME);
+@@ -671,8 +699,29 @@ fn start_supplicant(cfg: &Config, libraries: Option<&Path>) -> Result<Child> {
+     std::os::unix::fs::chown(&sockets, Some(WIFI), Some(WIFI)).with_context(|| format!("give {} to the supplicant", sockets.display()))?;
+     fs::set_permissions(&sockets, fs::Permissions::from_mode(0o770)).with_context(|| format!("keep {} to the supplicant", sockets.display()))?;
+     let settings = home.join("wpa_supplicant.conf");
+-    fs::write(&settings, format!("ctrl_interface={}\nupdate_config=0\np2p_disabled=1\npmf=1\nsae_pwe=2\n", sockets.display()))
+-        .with_context(|| format!("write {}", settings.display()))?;
++    // The country the phone was sold in, so that the channels its rules
++    // open, the 5 GHz ones among them, are scanned and joined. Without one
++    // the kernel keeps the world rules, which leave the 5.8 GHz channels
++    // to a passive scan and some access points never show.
++    let country = country();
++    fs::write(
++        &settings,
++        format!(
++            "ctrl_interface={}\n\
++             update_config=0\n\
++             p2p_disabled=1\n\
++             # Ask the supplicant for its own scans: the chip's offloaded ones do not\n\
++             # cover every band, and a 5 GHz network left out cannot be joined.\n\
++             disable_scan_offload=1\n\
++             # SAE both ways: the H2E newer access points want, and the\n\
++             # hunting-and-pecking the older ones do.\n\
++             sae_pwe=2\n\
++             # The country the phone was sold in, whose rules open its channels.\n\
++             country={country}\n",
++            sockets.display()
++        ),
++    )
++    .with_context(|| format!("write {}", settings.display()))?;
+     fs::set_permissions(&settings, fs::Permissions::from_mode(0o644)).with_context(|| format!("open {} to the supplicant", settings.display()))?;
+     let socket = sockets.join(&cfg.interface);
+     // One an earlier run left would answer nothing.
+@@ -683,16 +732,23 @@ fn start_supplicant(cfg: &Config, libraries: Option<&Path>) -> Result<Child> {
+     if let Some(dir) = libraries {
+         path.push(dir.to_string_lossy().into_owned());
+     }
+-    let mut child = Process::new(&cfg.supplicant)
++    let mut command = Process::new(&cfg.supplicant);
++    command
+         .args(["-i", &cfg.interface, "-D", "nl80211", "-c"])
+         .arg(&settings)
+         .env("LD_LIBRARY_PATH", path.join(":"))
+         .current_dir("/")
+         .stdin(Stdio::null())
+         .stdout(Stdio::null())
+-        .stderr(Stdio::null())
+-        .spawn()
+-        .with_context(|| format!("start {}", cfg.supplicant))?;
++        .stderr(Stdio::null());
++    // A vendor supplicant built with Android's AIDL interface registers a
++    // service the recovery's service directory does not know; the library
++    // named here answers that registration as done, so the supplicant goes
++    // on to the interface the pages join networks over.
++    if let Some(preload) = &cfg.preload {
++        command.env("LD_PRELOAD", preload);
++    }
++    let mut child = command.spawn().with_context(|| format!("start {}", cfg.supplicant))?;
+     let until = Instant::now() + SOCKET_WAIT;
+     while !socket.exists() {
+         if let Some(status) = child.try_wait().context("look at wpa_supplicant")? {
