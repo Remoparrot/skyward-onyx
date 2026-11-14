@@ -333,3 +333,13 @@ export PATH="$HOME/.cargo/bin:$PATH"
 **解法**：写 `country=<ro.boot.ptcountrycode / ro.vendor.radio.build_region / ro.product.locale.region，默认 CN>`、`disable_scan_offload=1`、`sae_pwe=2`；WPA2-PSK 网络 `ieee80211w=1`，SAE 仍是 `2`；去掉全局 `pmf=1`。
 
 **如何避免**：接 WLAN 前先看 `iw reg get` 与 `wpa_supplicant.conf` 里有没有 `country`；`sae_pwe` 用 2（H2E 与 hunting-and-pecking 都试）而不是 1（只 H2E）。
+
+## 27. 调色板整体「色域校正」让颜色发灰
+
+**现象**：onyx.5 初版刷上后用户反馈「颜色太淡了」；设置页蓝色滑杆从 `(74,128,247)` 变成 `(97,126,200)`，首页图标蓝从 `(52,130,255)` 变成 `(84,126,204)`。
+
+**根因**：为了让页面「接近系统原色」，`Theme::light/dark` 对整套 `LIGHT`/`DARK` 采样值做了 sRGB → Display P3 再压饱和度 0.68（`graded()` → `Palette::original()` → `stock()`），图标底色又单独走 `Theme::ink()`。压饱和度那一步等于把每个彩色往灰里拉。
+
+**解法**：把这一层整套删掉（`graded` / `original` / `stock` / `ink`、`color::p3`、`color::desaturated`、`icons::tile()` 里的 `t.ink()`），采样值原样绘制；`patches/0008` 里对应三段一起删，干净上游 apply 0001–0008 后 `diff -r` 仍与 vendor 树一致。
+
+**如何避免**：显示效果以用户实际观感为准，别拿「更接近系统」当理由整体改调色板；真要试色域就做成可选、默认关，并先给用户看两张对比图。

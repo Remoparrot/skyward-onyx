@@ -16,9 +16,9 @@
 | --- | --- |
 | 最新 release | [`v0.3.0-onyx.5`](https://github.com/Remoparrot/skyward-onyx/releases/tag/v0.3.0-onyx.5) |
 | 镜像 | `recovery.img` · **104,857,600 字节**（整分区） |
-| SHA-256 | `e66006df7673e4340770635d1f82ae701b6be11e579e89abce089a2b5b2853e1` |
-| ramdisk | 50,694,276 字节（LZ4）· 1062 个 cpio 条目 |
-| 内含 skyward | 8,769,424 字节 · `a339f899c9fbded0830c05bc998fb760b7f14fe09b011d9cb715f095896fa183` |
+| SHA-256 | `ac9be2c5f8d9604e2384d57c99f544df3c002c3f65b430ceb0b1f822fc9e0de2` |
+| ramdisk | 50,692,327 字节（LZ4）· 1062 个 cpio 条目 |
+| 内含 skyward | 8,769,040 字节 · `4b712147e584ab227d56f5006187b8306fbb1b9f3b7fbec66c3e7a7e2fc0c846` |
 | 底包 | HyperOS **OS4.0.2.0.XOLCNXM**（Android 17） |
 | 上游 | `kirklin/skyward` @ `ff1668f`（v0.2.0）+ 8 个补丁 |
 | 真机 | ✅ 已刷入 onyx 并验证：触摸服务、`/data` 自动挂载、user 0 CE（`/data/media/0` 与相册 JPEG 可读）、WLAN 自动连接（`CMCC-A9s7-5G`，`192.168.1.227`）、振动驱动；用 `sendevent` 注入触摸验证滑动锁屏；电源键注入验证息屏/点亮后先显示滑动锁屏（背景为上一页的模糊快照，浅色/深色，可调强度）；5 GHz WLAN 连上 `CMCC-A9s7-5G`（5260 MHz）；唤醒黑屏已修（面板不再 rest/off，息屏只关背光） |

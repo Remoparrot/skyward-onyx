@@ -38,6 +38,23 @@
 - 5 GHz WLAN：`iw dev wlan0 link` 显示 `SSID: CMCC-A9s7-5G`、`freq: 5260`；`dmesg`：`wlan0 has 192.168.1.227`、`the network on wlan0 reaches the internet`；状态栏出现 WiFi 图标。
 - 未验证：纯文本网页页未逐项点过；下载页的网址下载/二维码回传未逐项复测；数字键盘锁屏未复测。
 
+### 同日重建：调色恢复原样（版本号不变，2026-11-14）
+
+- **现象**：用户反馈初版 onyx.5「颜色太淡了」。根因是页面把 sRGB 采样值先转 Display P3、再压饱和度 0.68（`Theme::graded()` → `Palette::original()` → `stock()`，图标底色另走 `Theme::ink()`），等于把每个彩色往灰里拉：设置页滑杆蓝 `(74,128,247)` → `(97,126,200)`。
+- **处理**：整层撤销——删 `theme.rs` 的 `graded()` / `Palette::original()` / `stock()` / `Theme::ink()`，删 `color.rs` 的 `p3()` / `desaturated()`，`icons::tile()` 不再调 `t.ink()`；`patches/0008` 里对应三段一并删除，干净上游 apply 0001–0008 后 `diff -r` 与 vendor 树 rc=0。版本号仍是 `v0.3.0-onyx.5`（用户明确要求不变）。
+- **重建产物**（上面的表是初版数值，以本小节为准）：
+
+| 项 | 值 |
+| --- | --- |
+| 镜像 | `recovery.img` · 104,857,600 字节 |
+| SHA-256 | `ac9be2c5f8d9604e2384d57c99f544df3c002c3f65b430ceb0b1f822fc9e0de2` |
+| 内含 skyward | 8,769,040 字节 · `4b712147e584ab227d56f5006187b8306fbb1b9f3b7fbec66c3e7a7e2fc0c846` |
+| ramdisk | 50,692,327 字节 · 1062 条 |
+| zip | `skyward-v0.3.0-onyx.5-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,860,277 字节 · `6f54c7ec721e7ed25c012a9ddbbd5ce3d9765810ba5cf5a1011e79e5ffbd5c91` |
+| 原厂 recovery | 未改动 · `ce538507…cd3357` |
+
+- **真机**：`fastboot flash recovery` 后 `dmesg` 仍是 `onyx 0.3.0-onyx.5 recovery up`；设置页滑杆取色回到 `(74,128,247)`，首页图标蓝 `(52,130,255)` 与 onyx.4 截图一致；浅色/深色与锁屏复验正常。
+
 ## v0.3.0-onyx.4 · 2026-11-14
 
 **主题：「下载」页改成图形浏览器（自带 HTML/CSS 排版与图片，不跑 JavaScript）+ 浏览器里的下载走 512 并行 + 关于本机署名**
