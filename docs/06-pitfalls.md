@@ -303,3 +303,33 @@ export PATH="$HOME/.cargo/bin:$PATH"
 
 **如何避免**：先查 `/proc/bus/input/devices`、`/sys/bus/i2c/devices/*` 和驱动日志，不要假设 FF 通用。
 
+
+## 24. 锁屏滑块一拖，背后就是一块纯色
+
+**现象**：锁屏上按住圆形按钮往右拖，滑块轨道那一整块矩形变成纯色（浅色 `#f3f3f3`、深色黑），松手才恢复模糊。
+
+**根因**：`paint_knob` 每次移动都 `fill_rect(track, t.pal.bg)` 清掉控件区域再画控件；普通页面底色就是 `pal.bg` 所以看不出来，锁屏的底色是模糊快照，一清就是纯色块（圆角外的四个角尤其明显）。
+
+**解法**：改成把控件所在行标脏（`redraw_rows` → `stale`），由 `render()` 按页重画这几行，模糊快照随页面一起回来。
+
+**如何避免**：就地重画控件时不要用主题底色清洗；除非能证明控件背后就是主题底色。
+
+## 25. 锁屏模糊「采样率太低」
+
+**现象**：锁屏背景糊成一团色块；用户反馈「采样率太低」，连色彩切换都看不出来。
+
+**根因**：`remember()` 最初每 22 px 取一点，再叠压暗层，细节全没了；模糊半径固定。
+
+**解法**：每 10 px 采样、按 `lock_blur` 调模糊半径；`lock_blur=0` 时不保存快照，锁屏退回主题底色。
+
+**如何避免**：小图只用来做背景，别指望看清内容；强度为 0 要有独立路径。
+
+## 26. 5 GHz WiFi 扫不到 / 连不上
+
+**现象**：2.4 GHz 能连，5 GHz 网络不出现或连不上；`iw reg get` 为 `country 00: DFS-UNSET`。
+
+**根因**：`wpa_supplicant.conf` 没写监管域，内核按世界规则把 5.8 GHz 留给被动扫描；芯片 offload 扫描覆盖不全；WPA2 网络没给 PMF（有的 5 GHz AP 要求）。
+
+**解法**：写 `country=<ro.boot.ptcountrycode / ro.vendor.radio.build_region / ro.product.locale.region，默认 CN>`、`disable_scan_offload=1`、`sae_pwe=2`；WPA2-PSK 网络 `ieee80211w=1`，SAE 仍是 `2`；去掉全局 `pmf=1`。
+
+**如何避免**：接 WLAN 前先看 `iw reg get` 与 `wpa_supplicant.conf` 里有没有 `country`；`sae_pwe` 用 2（H2E 与 hunting-and-pecking 都试）而不是 1（只 H2E）。

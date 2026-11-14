@@ -2,7 +2,7 @@
 
 > 状态：**现行**
 > 最后更新：2026-11-14
-> 对应版本：`v0.3.0-onyx.4`
+> 对应版本：`v0.3.0-onyx.5`
 > 设备：Redmi Turbo 4 Pro（`onyx`）· 底包 OS4.0.2.0.XOLCNXM（Android 17）
 
 ---
@@ -11,16 +11,16 @@
 
 | 项 | 值 |
 | --- | --- |
-| 版本 | `v0.3.0-onyx.4`（OS4 底包 + WLAN / 振动 / UI + 图形浏览器 + 并行下载） |
+| 版本 | `v0.3.0-onyx.5`（OS4 底包 + WLAN / 振动 / UI + 锁屏模糊与滑块 + 512 并行下载，下载页回归） |
 | 构建日期 | 2026-11-14 |
 | 镜像 | `recovery.img` · 104,857,600 字节 |
-| 镜像 SHA-256 | `239d0fbb38c2dbde16595c1335ffe038df3ff48001d167bf3a9c2cfd4020f3ea` |
-| ramdisk | 51,185,270 字节（LZ4）· 1062 个 cpio 条目 |
-| 内含 skyward | 9,532,768 字节 · `84342335344898eda01fd9977a3b1be272c49a1cb92945d2be21bfb0a7fc6a85` |
-| zip（在线更新用） | `skyward-v0.3.0-onyx.4-onyx-OS4.0.2.0.XOLCNXM.zip` · 46,292,174 字节 · `bdbff7e77664d1e5471ebb32d2cbc1fecd64083504568bdfbc949ebbc8de5935` |
+| 镜像 SHA-256 | `e66006df7673e4340770635d1f82ae701b6be11e579e89abce089a2b5b2853e1` |
+| ramdisk | 50,694,276 字节（LZ4）· 1062 个 cpio 条目 |
+| 内含 skyward | 8,769,424 字节 · `a339f899c9fbded0830c05bc998fb760b7f14fe09b011d9cb715f095896fa183` |
+| zip（在线更新用） | `skyward-v0.3.0-onyx.5-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,861,788 字节 · `a428f0c9ea3b8797e6e0a0d2aedaf8c5110ffc6eafd5a734887eb6ea00621805` |
 | 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · 104,857,600 字节 · `ce53850714fe2ca9ab22600a00e71813df2775dc94244192c83a224d7ecd3357` |
-| 上游 | `kirklin/skyward` @ `ff1668fdb72a46f22152a6540f49728c42081aba`（v0.2.0）+ 0001–0007 |
-| 真机 | ✅ 已刷入 onyx：触摸服务、`/data` 自动挂载、WLAN 自动连接、振动驱动、自动进入解密页；锁屏（每次息屏点亮）已实现，见第 3 节 |
+| 上游 | `kirklin/skyward` @ `ff1668fdb72a46f22152a6540f49728c42081aba`（v0.2.0）+ 0001–0008 |
+| 真机 | ✅ 已刷入 onyx：触摸服务、`/data` 自动挂载、WLAN 自动连接、振动驱动、开机直接进解密页（解密前不锁屏）；锁屏背景为上一页的模糊快照（浅色/深色），滑块拖动时背景保持模糊；见第 3 节 |
 
 发布资产在 [Releases](https://github.com/Remoparrot/skyward-onyx/releases)；仓库内只有源码、补丁、配置和文档。
 
@@ -35,7 +35,8 @@
 | v0.3.0-onyx.1 | `714dfc27…0ba5` | OS4.0.2.0 底包；WLAN / 振动 / 锁屏（每次亮屏）/ 双击亮屏 / 自动解密页 / AVB 页；控制中心已按用户要求删除 |
 | v0.3.0-onyx.2 | `ebed2df2…3060` | 首页机型卡片四列读数；在线更新接受裸 `recovery.img`、支持本地刷入 |
 | v0.3.0-onyx.3 | `d0a67128…60c5` | 更新下载最多 512 连接并行；可用空间读数在解密后补齐；更新页对本地刷入显示进度/结果 |
-| v0.3.0-onyx.4 | `239d0fbb…f3ea` | **当前**；「下载」页改成图形浏览器（HTML/CSS 子集 + 图片 + 链接）；URL 下载走 512 并行；关于本机署名加上 Remoparrot |
+| v0.3.0-onyx.4 | `239d0fbb…f3ea` | 旧版；「下载」页改成图形浏览器（HTML/CSS 子集 + 图片 + 链接）；URL 下载走 512 并行；关于本机署名加上 Remoparrot。浏览器在 onyx.5 删除 |
+| v0.3.0-onyx.5 | `e66006df…53e1` | **当前**；删掉浏览器、下载页回归；锁屏背景模糊 + 强度滑杆 + 滑块拖动修复（浅色/深色）；5 GHz WLAN（监管域/扫描/PMF）；解密前不锁屏；调色按面板色域校正（不再有色彩风格切换） |
 
 ---
 
@@ -45,16 +46,20 @@
 
 | 项 | 证据 |
 | --- | --- |
-| 镜像结构 | `header v4  kernel 0 bytes  ramdisk 50624092 bytes`；`skyward-pack list` 1062 条 |
-| 版本 | `dmesg`：`onyx 0.3.0-onyx.1 recovery up` |
+| 镜像结构 | `header v4  kernel 0 bytes  ramdisk 50694276 bytes`；`skyward-pack list` 1062 条 |
+| 版本 | `dmesg`：`onyx 0.3.0-onyx.5 recovery up` |
 | 触摸服务 | `touch_report_debug` 由 `prepare()` 拉起；本次未逐项做滑动验证（v4 已验） |
-| `/data` 自动打开 | `dmesg`：`/dev/block/dm-9 holds f2fs at /data`；锁屏滑动后首屏即「解密」 |
+| `/data` 自动打开 | `dmesg`：`/dev/block/dm-9 holds f2fs at /data`；开机首屏即「解密」（解密前不锁屏），记住密码时自动打开 |
 | user 0 CE | `skyward data --credential <用户锁屏密码>`：`/data/media/0` 出现真实文件名，`DCIM/Camera` 的 JPEG 可读；user 999 仍锁 |
 | WLAN 扫描 | 5 GHz / 2.4 GHz 共 20+ 个网络；`wpa_state=COMPLETED`，SSID `CMCC-A9s7-5G`，`key_mgmt=SAE` |
+| 5 GHz WLAN（onyx.5 配置） | `/skyward/run/supplicant/wpa_supplicant.conf` 为 `country=CN`、`disable_scan_offload=1`、`sae_pwe=2`；`iw dev wlan0 link`：`SSID: CMCC-A9s7-5G`、`freq: 5260`；`dmesg`：`wlan0 has 192.168.1.227`、`the network on wlan0 reaches the internet`；主机 `ping 192.168.1.227` 通 |
 | WLAN 自动连接 | 重启 recovery 后自动连上，`ifconfig wlan0`：`192.168.1.227/24`，IPv6 全局地址；密码由 `/metadata/skyward/settings.json` 保存（0600） |
 | 振动 | `skyward haptic --config /skyward/device.toml`：驱动 `awinic_haptic` 进入 RAM 模式，`level=0x40`，`duration=16`；实际振感待用户确认 |
-| recovery 锁屏（启动） | 无 recovery 密码时为图 1 的滑动锁屏（日期 / 时钟 / 电量 / 滑动解锁）；种入 4 位恢复密码后为数字键盘；启动时 `/data` 不打开，滑动/解锁后才进「解密」 |
-| 每次息屏点亮锁屏 | 用 `sendevent` 注入 `pmic_pwrkey` 电源键：息屏后背光 0，再按点亮背光；`App::wake()` 把 `Lock` 压栈，解锁后回原页 |
+| recovery 锁屏（亮屏） | 启动时不再弹锁屏，直接进「解密」；data 解密后息屏再点亮才显示锁屏（无恢复密码为滑动解锁，有密码为数字键盘） |
+| 每次息屏点亮锁屏 | 用 `sendevent` 注入 `pmic_pwrkey` 电源键：息屏后背光 0，再按点亮背光；`App::wake()` 在 data 已解密时把 `Lock` 压栈，解锁后回原页 |
+| 锁屏背景模糊 | 浅色/深色各截一张：背景是上一页的模糊快照（`remember()` 1/10 采样 + 盒式模糊 + 双线性拉伸），上面压半透明层；设置页滑杆 0～1 实时生效并存进 `settings.json` |
+| 锁屏滑块拖动 | 按住圆形按钮拖到 50% 截图：轨道区域仍是模糊背景 + 半透明蓝色进度，圆角外像素随模糊画面变化（`(235,236,239)` 等）；修复前是整块 `(243,243,243)` |
+| 色彩风格删除 | 设置页无「色彩风格」行，搜索无此项；`settings.json` 不再写 `vivid`；调色板统一按面板色域校正 |
 | 唤醒黑屏修复 | 第一版 `wake` 后物理屏黑、后台截图却是锁屏页；原因是面板被 `surface.rest()`/`turn_off()` 后本机不恢复。改为息屏只关背光、面板保持 On，唤醒后背光 10926、DPMS On，锁屏帧重新 present |
 | 记住密码 / 自动解密 | 解密页打开「记住密码」并输入手机锁屏密码后成功；重启 recovery，滑动锁屏后日志从 `[0, 999]` 变为 `[999]`，user 0 自动打开，页面显示「data 分区已解密」 |
 | 解密完成倒计时 | 自动解密后截图「完成 · 3 秒后进入主界面」；3 秒后自动回到主界面，主界面已有「下载」行 |
@@ -78,7 +83,8 @@
 | --- | --- | --- |
 | user 0 CE（相册 / 微信） | ✅ | 用用户锁屏密码通过 `skyward data --credential` 验证：`/data/media/0` 真实文件名，`DCIM/Camera` 的 JPEG 可读 |
 | user 999（第二空间 / 应用分身） | ❌ | 只有 weaver 绑定的 protector；recovery 没有 eSE 通道；不再作为解密页的等待项 |
-| recovery 锁屏（输入解锁） | ⚠️ | 图 1 的滑动锁屏已用注入触摸验证；开机解锁进解密页，亮屏解锁回原页；4–8 位数字键盘未手动点过 |
+| recovery 锁屏（输入解锁） | ⚠️ | 滑动锁屏已用注入触摸验证（点亮 → 解锁 → 回原页）；4–8 位数字键盘未手动点过 |
+| 纯文本网页页 | ⚠️ | 删掉浏览器后保留的上游网页页（标题/正文/链接）；未逐项点过 |
 | 双击亮屏 | ⚠️ | 已实现（息屏 400 ms 内两次点击）；有注入触摸手段，但未逐项点过 |
 | 禁用 AVB 2.0 | ⚠️ | 页面与 `avbctl` 调用已实现；**按要求未测试** |
 | Skyward 在线更新 | ✅ | `0.3.0-onyx.1` → `0.3.0-onyx.2` 全流程实测；onyx.3 起优先下 release 里的裸 `recovery.img`，没有再退回 zip |
@@ -96,7 +102,8 @@
 ## 4. 当前阻塞 / 下一步
 
 1. **user 0 CE 在 OS4 底包回归**：已用 `skyward data --credential` 验证；用户仍可在 UI「解密」页输入同一密码，确认相册/微信目录。
-2. **WLAN 自动连接的用户可见验证**：开机已自动连上 `CMCC-A9s7-5G` 并拿到 `192.168.1.227`；可在 WLAN 页确认图标/网络。
+2. **下载页回归验证**：网址下载、`link.txt`、二维码回传、U 盘/内部存储选文件各走一遍（浏览器删除后这些是主路径）。
+3. **5 GHz WLAN 的其它 AP**：本机 `CMCC-A9s7-5G` 已在 5260 MHz 连上；换 AP 时看 `/skyward/run/supplicant/` 下的扫描结果与 `wpa_state`。
 3. **锁屏滑动、双击亮屏**：锁屏滑动已用注入触摸验证；双击亮屏未逐项点。
 4. **Skyward 在线更新**：`0.3.0-onyx.1` → `0.3.0-onyx.2` 已实测「检查 → 下载 → 写入 recovery」；onyx.3 起下载最多 512 连接并行。下一步可找一个几 GB 的系统 OTA 验证并行路径。
 5. **AVB 2.0**：用户明确不测试；如果以后要测，先备份 `vbmeta_a/b` 与 boot，并确认能 `fastboot flash vbmeta` 回滚。
@@ -123,7 +130,7 @@
 ## 6. 发布检查单
 
 - [x] 镜像大小 104,857,600
-- [x] 头部 v4 / kernel 0 / ramdisk 50,681,746
+- [x] 头部 v4 / kernel 0 / ramdisk 50,694,276
 - [x] `system/bin/recovery`、`skyward/system-init`、`skyward/device.toml`、`skyward/wpa-aidl-shim.so` 存在
 - [x] 镜像内二进制与编译产物 sha256 一致
 - [x] 原厂 recovery 的 sha256 与配置 `[stock] recovery` 一致（`ce538507…`）
@@ -132,5 +139,7 @@
 - [x] `docs/07-changelog.md` 顶部已记录
 - [x] README 版本 / 哈希表已更新
 - [x] user 0 CE 在 OS4 上用 `skyward data --credential` 验证
+- [x] 锁屏背景模糊（浅色/深色）与滑块拖动（浅色/深色）
+- [x] 设置/搜索中的「色彩风格」已删除
 - [ ] 锁屏滑动 / 双击亮屏（锁屏滑动已注入验证；双击未点）
 - [ ] AVB 2.0（明确不测试）

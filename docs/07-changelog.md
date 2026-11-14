@@ -6,6 +6,38 @@
 
 ---
 
+## v0.3.0-onyx.5 · 2026-11-14
+
+**主题：下载页回归（删掉图形浏览器）+ 锁屏模糊与滑块 + 5 GHz WLAN + 解密前不锁屏 + 颜色按面板色域校正**
+
+| 项 | 值 |
+| --- | --- |
+| 镜像 | `recovery.img` · 104,857,600 字节 |
+| SHA-256 | `e66006df7673e4340770635d1f82ae701b6be11e579e89abce089a2b5b2853e1` |
+| 内含 skyward | 8,769,424 字节 · `a339f899c9fbded0830c05bc998fb760b7f14fe09b011d9cb715f095896fa183` |
+| ramdisk | 50,694,276 字节 · 1062 条 |
+| 底包 | OS4.0.2.0.XOLCNXM（Android 17） |
+| zip | `skyward-v0.3.0-onyx.5-onyx-OS4.0.2.0.XOLCNXM.zip` · 45,861,788 字节 · `a428f0c9ea3b8797e6e0a0d2aedaf8c5110ffc6eafd5a734887eb6ea00621805` |
+| 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · `ce538507…cd3357`（未改动） |
+
+### 改了什么
+
+- **删掉图形浏览器**：回退 0007 的 `skyward-ui/src/web/`（HTML/CSS 排版、图片、链接、地址栏与键盘，约 2,700 行），「下载」页回到 onyx.3：网址输入 + 开始下载 + `/sdcard/Download/link.txt` + 二维码回传 + 进度卡；按键盘「确定」打开上游的纯文本网页页（只取标题/正文/链接）。
+- **锁屏背景模糊**：锁屏画上一页的模糊快照（1/10 采样的小图拉伸），上面压一层半透明：浅色白 56、深色黑 88；设置页新增「锁屏背景模糊」滑杆（0 为关闭），值存 `/metadata/skyward/settings.json`。
+- **锁屏滑块修复**：拖动圆形按钮时，原来用页面底色 `pal.bg` 把控件区域抹平，锁屏上就留下「背后一块纯色」；改为把控件所在行按页重画，模糊快照随页面一起回来（浅色/深色都验过）。
+- **5 GHz WLAN**：`wpa_supplicant.conf` 写入 `country=<机型属性，默认 CN>`、`disable_scan_offload=1`、`sae_pwe=2`，去掉全局 `pmf=1`；WPA2-PSK 网络加 `ieee80211w=1`（可选 PMF），SAE 仍是 `ieee80211w=2`。世界监管域把 5.8 GHz 留给被动扫描、芯片 offload 扫描覆盖不全，是 5 GHz AP 扫不到/连不上的原因。
+- **解密前不锁屏**：启动首屏直接是「解密」页；recovery 锁屏只在 data 解密后、息屏再点亮时出现。
+- **颜色**：调色板统一做 sRGB → Display P3 + 饱和度 0.68 校正，观感接近系统「原色」；「色彩风格」页、设置项与搜索项一并删除（旧的 `vivid` 字段会被忽略）。
+- **版本/补丁**：`0.3.0-onyx.5`；`patches/0008-onyx.5-lock-display-wifi.patch` 用干净上游重建（0001–0008 依次 apply 无警告，`diff -r` 与 vendor 树逐字一致）。
+
+### 真机验证
+
+- `fastboot flash recovery` 后 `dmesg`：`skyward: onyx 0.3.0-onyx.5 recovery up`。
+- 首页：「下载」行回归、没有「浏览器」；设置页没有「色彩风格」行；`settings.json` 不再写 `vivid`。
+- 锁屏（浅色/深色）：息屏 → 点亮，背景是上一页的模糊快照；按住滑块拖到 50% 截图，轨道与圆角处仍是模糊背景（圆角外取像素 `(235,236,239)`、`(240,242,244)`，随模糊画面变化；修复前是整块 `(243,243,243)`）。
+- 5 GHz WLAN：`iw dev wlan0 link` 显示 `SSID: CMCC-A9s7-5G`、`freq: 5260`；`dmesg`：`wlan0 has 192.168.1.227`、`the network on wlan0 reaches the internet`；状态栏出现 WiFi 图标。
+- 未验证：纯文本网页页未逐项点过；下载页的网址下载/二维码回传未逐项复测；数字键盘锁屏未复测。
+
 ## v0.3.0-onyx.4 · 2026-11-14
 
 **主题：「下载」页改成图形浏览器（自带 HTML/CSS 排版与图片，不跑 JavaScript）+ 浏览器里的下载走 512 并行 + 关于本机署名**

@@ -14,14 +14,14 @@
 
 | 项 | 值 |
 | --- | --- |
-| 最新 release | [`v0.3.0-onyx.4`](https://github.com/Remoparrot/skyward-onyx/releases/tag/v0.3.0-onyx.4) |
+| 最新 release | [`v0.3.0-onyx.5`](https://github.com/Remoparrot/skyward-onyx/releases/tag/v0.3.0-onyx.5) |
 | 镜像 | `recovery.img` · **104,857,600 字节**（整分区） |
-| SHA-256 | `239d0fbb38c2dbde16595c1335ffe038df3ff48001d167bf3a9c2cfd4020f3ea` |
-| ramdisk | 51,185,270 字节（LZ4）· 1062 个 cpio 条目 |
-| 内含 skyward | 9,532,768 字节 · `84342335344898eda01fd9977a3b1be272c49a1cb92945d2be21bfb0a7fc6a85` |
+| SHA-256 | `e66006df7673e4340770635d1f82ae701b6be11e579e89abce089a2b5b2853e1` |
+| ramdisk | 50,694,276 字节（LZ4）· 1062 个 cpio 条目 |
+| 内含 skyward | 8,769,424 字节 · `a339f899c9fbded0830c05bc998fb760b7f14fe09b011d9cb715f095896fa183` |
 | 底包 | HyperOS **OS4.0.2.0.XOLCNXM**（Android 17） |
-| 上游 | `kirklin/skyward` @ `ff1668f`（v0.2.0）+ 7 个补丁 |
-| 真机 | ✅ 已刷入 onyx 并验证：触摸服务、`/data` 自动挂载、user 0 CE（`/data/media/0` 与相册 JPEG 可读）、WLAN 自动连接（`CMCC-A9s7-5G`，`192.168.1.227`）、振动驱动；用 `sendevent` 注入触摸验证滑动锁屏；电源键注入验证息屏/点亮后先显示滑动锁屏；唤醒黑屏已修（面板不再 rest/off，息屏只关背光） |
+| 上游 | `kirklin/skyward` @ `ff1668f`（v0.2.0）+ 8 个补丁 |
+| 真机 | ✅ 已刷入 onyx 并验证：触摸服务、`/data` 自动挂载、user 0 CE（`/data/media/0` 与相册 JPEG 可读）、WLAN 自动连接（`CMCC-A9s7-5G`，`192.168.1.227`）、振动驱动；用 `sendevent` 注入触摸验证滑动锁屏；电源键注入验证息屏/点亮后先显示滑动锁屏（背景为上一页的模糊快照，浅色/深色，可调强度）；5 GHz WLAN 连上 `CMCC-A9s7-5G`（5260 MHz）；唤醒黑屏已修（面板不再 rest/off，息屏只关背光） |
 | 风险 | ⚠️ 需要解锁 bootloader；只刷 recovery 分区，详见[安装](docs/04-install.md) |
 
 > **一句话结论**：不需要 weaver，也不需要 OMAPI 桥。onyx 的 user 0 有两份 protector，其中一份绑在 gatekeeper 上；weaver 不可用时回退到它，用同一个锁屏密码即可拿到合成密码（SP），解开 CE。详细原理见[设计思路](docs/05-design-notes.md)。
@@ -42,13 +42,12 @@
 | 从本地 recovery.img 刷入 | ✅ | 同一页把 `/sdcard/Download/recovery.img` 校验后写入 recovery 分区，不需要网络；onyx.2 → onyx.3 实测 |
 | 首页机型卡片读数 | ✅ | 机型名/底包下四列：当前槽位 / 数据分区 / 可用空间 / 电量（充电时写充电中）；读不到的项自动省略，解密完成后补上可用空间 |
 | 振动 | ✅ | AW8697（`awinic_haptic`，i2c 5-005a）的 `activate` / `duration` / `gain`；设置页滑杆与触摸反馈走同一路径 |
-| recovery 锁屏 | ✅ | 每次息屏再点亮都先显示图 1 的滑动锁屏（日期 / 时钟 / 电量 / 滑动解锁），解锁回原页面；开机首屏滑动后进解密页；设置 4–8 位 recovery 密码后改为数字键盘；只存 salt + SHA-256 |
+| recovery 锁屏 | ✅ | 每次息屏再点亮都先显示滑动锁屏（日期 / 时钟 / 电量 / 滑动解锁），解锁回原页面；背景是上一页的模糊快照（浅色/深色），设置页可调模糊强度；开机首屏直接是解密页（data 解密前不锁屏）；设置 4–8 位 recovery 密码后改为数字键盘；只存 salt + SHA-256 |
 | 双击亮屏 | ✅ | 息屏后 400 ms 内两次点击点亮；设置页可关 |
-| 浏览器 | ✅ | 主界面「浏览器」：图形化网页，**不运行 JavaScript**。自带 HTML/CSS 子集引擎：标题/正文/列表/表格/颜色/背景/图片（PNG / JPEG / WebP / GIF）、链接点按、后退/刷新、地址栏与屏幕键盘、触摸滚动；只有脚本才生成的页面（如原神官网）显示其标题、简介、页面自带的图片和链接。已实测 Bing 搜索页、`bilibili.com`（封面图与卡片文字）、`ys.mihoyo.com/main/`（官方简介与图）、本地测试页 |
-| 下载（浏览器内） | ✅ | 地址栏「下载」直接下载，或在页面里点到文件链接（非 HTML 的响应自动转下载）；URL 下载与 Skyward 更新共用同一套 512 连接并行分段下载（服务端支持 `Range` 时），进度卡显示网速，可暂停/继续/停止；文件存 `/sdcard/Download`，名字取 URL 最后一段。实测本机 range 服务器 100 MB 用约 12 秒（≈8.7 MB/s）下完 |
-| 二维码回传链接 | ✅ | 浏览器页的「二维码」显示本机 8080 网页，另一台手机扫码输入 URL，回传到地址栏 |
+| 下载 | ✅ | 主界面「下载」：输入/粘贴网址后「开始下载」；进度卡显示网速，可暂停/继续/停止；文件存 `/sdcard/Download`，名字取网址最后一段。与 Skyward 更新共用同一套 512 连接并行分段（服务端支持 `Range` 时，不支持自动退回单连接）；也可从 `/sdcard/Download/link.txt` 读链接。二维码让另一台手机扫码输入网址回传（需先连 WLAN）。图形浏览器在 onyx.5 已按要求删除 |
+| 网页（纯文本） | ⚠️ | 下载页里按键盘「确定」，按输入的网址打开上游的网页页：取回标题、正文和链接（不解析样式、不下载图片）。浏览器删除后保留这一项，未逐项真机验证 |
 | 禁用 AVB 2.0 | ⚠️ | 高级 → 「禁用 AVB 2.0」页，写入当前槽位 vbmeta；**按要求未在真机点过** |
-| 自动打开解密页 | ✅ | 正常进 recovery 首屏即「解密」，自动打开 `/data`；有 recovery 锁屏时先锁屏 |
+| 自动打开解密页 | ✅ | 正常进 recovery 首屏即「解密」，自动打开 `/data`（解密前不锁屏）；记住密码时自动解锁 |
 | 记住解锁密码 | ✅ | 解密页「记住密码，下次自动解密」打开后，成功解锁即保存；下次开机自动解密 user 0。密码明文存 `/metadata/skyward/settings.json`（0600），换机/共享镜像前删掉 |
 | 解密完成倒计时 | ✅ | data 打开后「完成」后面显示「完成 · N 秒后进入主界面」，3 秒后自动回主界面；点「完成」可立即走 |
 | 双系统 / OTA / fastbootd | ⚠️ | 未在 onyx 上验证，不建议依赖 |
