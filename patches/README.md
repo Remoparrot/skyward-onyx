@@ -100,7 +100,7 @@ v0.3.0-onyx.1 … onyx.5 的 UI 改动移植到上游 0.3.1 的页面状态机�
 
 **行数**：约 250
 
-把 workspace 版本改成 `0.3.1-onyx.2`，并更新 `Cargo.lock`（新增 `qrcodegen`、`sha2` 等依赖）。
+把 workspace 版本改成 `0.3.1-onyx.3`，并更新 `Cargo.lock`（新增 `qrcodegen`、`sha2` 等依赖）。
 
 ---
 
