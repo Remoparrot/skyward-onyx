@@ -15,4 +15,5 @@
 | 2026-11-14 | [onyx.5：调色恢复原样](2026-11-14-onyx5-palette-revert.md) | 撤销初版的 P3 + 饱和度 0.68 校正，回到 `LIGHT`/`DARK` 采样原值；同版本 v0.3.0-onyx.5 重建刷机，滑杆蓝回到 `(74,128,247)` | 已完成（Release 资产待定） |
 | 2026-11-14 | [同步上游 Skyward v0.3.1](2026-11-14-upstream-031.md) | 补丁重放到 `bd34c05`（8 → 6 个）；UI 迁到 `app/*`、密钥服务交给 `skyward-programs` 自动发现；修复 keymint 缺 `libvndksupport.so` 导致的「data 打不开、没有锁屏」；真机复验 CE/WLAN/锁屏/读数 | 已完成 |
 | 2026-11-19 | [安装期两处修复：整包刷完自动刷回、写入进度](2026-11-19-install-fixes.md) | 补丁 0007：`update_engine` 校验后目标块设备只读 → 收尾写 recovery 报 `EPERM`（清 `BLKRO`、写完恢复）；进度只统计 payload 区间（不再一上来 100%）；镜像与 123 个单测通过，真机整包复验待做 | 部分完成 |
+| 2026-11-19 | [data 备份每次失败：内存扩展的交换文件](2026-11-19-backup-extm.md) | 复现抓到 `/data/extm` 的 6 GiB 交换文件 `ENOKEY`；`[backup] data_skipped = ["extm"]` 后 34.4 GB data 备份真机跑通并校验 | 已完成（restore 未验证） |
 | 2026-11-19 | [把 onyx.2 刷进真机](2026-11-19-flash-onyx2.md) | `fastboot flash recovery` 写 onyx.2 后 `/system/bin/recovery` 哈希 `6e2c030e…6840` 与构建记录一致，`/data` 自动打开；验证时以 `recovery` 名字执行二进制触发黑屏重启，重启后未复验 UI；cmdline 底包显示 `OS4.0.3.1.XOLCN`，待确认 | 已完成（UI 未复验） |

@@ -42,6 +42,8 @@
 
 > 2026-11-19 13:31 真机刷入：`fastboot flash recovery` 写入本版镜像，重启后 `/system/bin/recovery` 8,959,728 字节、sha256 `6e2c030e…6840`（与构建记录一致），`/data` 自动打开、user 0 自动解开、MTP 正常。刷后验证时误执行 `/system/bin/recovery --version`，按第 3 条坑触发黑屏重启，重启后 USB 暂未枚举，UI 未复验；详见 `sessions/2026-11-19-flash-onyx2.md`。另：该次启动的 cmdline 为 `swinfo.fingerprint=onyx:15/OS4.0.3.1.XOLCN:user`，用户确认**系统最近更新过**：设备底包现为 `OS4.0.3.1.XOLCN`，而本版镜像仍基于 `OS4.0.2.0` 原厂 recovery 构建；本次启动 `/data`、MTP、WLAN 模块加载正常，触摸 / 锁屏 / 读数未复测，服务路径与 VINTF 需按新底包复核。
 
+> 2026-11-19 19:23 复刷（验证 `/data/extm` 修复）：同一份 `system/bin/recovery`（`6e2c030e…6840`）加新 `device.toml` 打成 `out/test-skip-extm.img`（`0c3b1498…af98`）刷入；本次启动底包已是 `OS4.0.4.0.XOLCNXM`，`/data` 自动打开、MTP / WLAN / 截帧正常，data 备份 34.4 GB 跑通并校验。底包再前进一版，服务路径 / VINTF 仍待按新底包复核。
+
 ---
 
 ## 2. 已验证（真机）
@@ -114,7 +116,7 @@
 | 系统 OTA 并行下载 | ⚠️ | 走同一条并行下载路径；未在真机完整下载过几 GB 的 OTA |
 | WLAN 密码安全 | ⚠️ | 明文存 `/metadata/skyward/settings.json`（0600）；recovery 内 adb 本来就是 root，但共享镜像/换机前应删掉 |
 | 振动强度 | ⚠️ | 驱动 `gain` 0x00–0x80 映射；实际振感与强度曲线待用户确认 |
-| 备份 / 安装 / 文件管理 / 终端 / MTP | ⚠️ | 上游能力，未逐项验证 |
+| 备份 / 安装 / 文件管理 / 终端 / MTP | ⚠️ | 上游能力。**data 备份**于 2026-11-19 真机跑通（`[backup] data_skipped = ["extm"]` 之后，34.4 GB + 校验通过，见 `sessions/2026-11-19-backup-extm.md`）；**恢复**、系统分区 / 启动分区 / EFS 备份、U 盘目标、文件管理、终端未逐项验证 |
 | 双系统 / OTA / fastbootd | ⚠️ | 未在 onyx 上验证，不建议依赖 |
 | 换底包 | ⚠️ | 本镜像只对 OS4.0.2.0.XOLCNXM 验证；换版本后服务路径 / VINTF / WLAN 固件路径可能变 |
 | `setprop ctl.stop recovery` | ❌ | 实测会重启整机，禁止使用 |
@@ -123,7 +125,8 @@
 
 ## 4. 当前阻塞 / 下一步
 
-0. **onyx.2 的安装期修复要在真机上再刷一次整包才算闭环**：刷入 onyx.2 → 进「安装」选官方整包 → 看进度是否从 0 走到 100%、结束有没有「已将 Skyward 重新刷入B 的 recovery 分区」→ 重启进 recovery 是否还是 Skyward → `dmesg | grep 'install:'` 应有 `this recovery written back to [B]: Ok(())`。步骤见 [`07-changelog.md`](07-changelog.md) 与 [坑 31/32](06-pitfalls.md)。
+0. **`/data/extm` 修复等发版**（2026-11-19 晚）：`devices/onyx.toml` 新增 `[backup] data_skipped = ["extm"]`，解决 data 备份必失败（坑 33）；改动只涉及设备配置，手机侧二进制未重编，真机刷的是测试镜像 `out/test-skip-extm.img`（104,857,600 字节，SHA-256 `0c3b1498…af98`，内含 `system/bin/recovery` 仍为 `6e2c030e…6840`）。要闭环需发 `v0.3.1-onyx.3`：改补丁 0006 的版本号 → `build-phone.sh` → `build-image.sh` → 刷机 → 再跑一次 data 备份，并同步 changelog / README / `SHA256SUMS`。详见 `sessions/2026-11-19-backup-extm.md`。
+0b. **onyx.2 的安装期修复要在真机上再刷一次整包才算闭环**：刷入 onyx.2 → 进「安装」选官方整包 → 看进度是否从 0 走到 100%、结束有没有「已将 Skyward 重新刷入B 的 recovery 分区」→ 重启进 recovery 是否还是 Skyward → `dmesg | grep 'install:'` 应有 `this recovery written back to [B]: Ok(())`。步骤见 [`07-changelog.md`](07-changelog.md) 与 [坑 31/32](06-pitfalls.md)。
 1. **触摸与振动复测**：0.3.1 的触摸服务仍由 `[[service]]` 拉起、振动配置未变，但本次只验证了「服务在跑」，没有重新注入滑动 / 听感复测；下次刷机补一次。
 2. **下载页 / 纯文本网页 / AVB**：代码已随 0005 移植并编译通过，页面未逐项点；AVB 按用户要求不测试。
 3. **纯数字键盘锁屏**：设置有 recovery 密码时的数字键盘路径未在本版点过；滑动锁屏已验。

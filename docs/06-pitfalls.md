@@ -409,3 +409,25 @@ library "libvndksupport.so" not found: needed by /vendor/lib64/libhardware.so
 **解法**：`patches/0007`：`apply()` 先用 `Mount::watch_payload(payload_offset, payload_size)` 标出 payload 区间；FUSE 的 `Server::read()` 只累计落在这个区间里的字节（`payload_read`），`Stage::Writing` 用它、再由调用方 clamp 到 payload 大小。之后 `update_engine` 的校验阶段仍按分区显示「第 2 步，共 3 步：校验 …（n/m）」。
 
 **如何避免**：文件系统层统计「读了多少」时，先想清楚这个文件的哪一段才是业务进度；zip/镜像这类容器先读目录、后读数据，用「最远偏移」当进度一定失真。单测 `only_bytes_of_the_payload_range_count` 固定了这个行为。
+
+## 33. HyperOS 的 `/data/extm` 交换文件让 data 备份必然失败
+
+**现象**：备份页勾「data 分区」→ 内部存储 → 完成后校验，备份能跑起来，写到约 17 GB（进度约 45%）时失败，进度页转成失败页；`dmesg` 只有一行：
+
+```
+skyward: backup failed: back up the data partition's files: archive /data/extm/OuEEYQAAAAAriBSUBbu0U1W8A4UpuT1s:
+open /data/extm/OuEEYQAAAAAriBSUBbu0U1W8A4UpuT1s: Required key not available (os error 126)
+```
+
+**根因**：`/data/extm` 是 HyperOS「内存扩展」的交换文件目录（本机一个 6442450944 字节的文件，root:system 0600）。文件名每次开机重新生成，内容用与安全世界绑定的密钥封装；换一次启动（Android → recovery）再打开就是 `ENOKEY`（`os error 126`）。备份需要的空间也因此多算 6 GB（40.9 GB → 34.4 GB）。
+
+**解法**：`devices/onyx.toml` 加
+
+```toml
+[backup]
+data_skipped = ["extm"]
+```
+
+机制与上游默认表里的 `vendor/goodix`、`vendor/tzstorage` 相同：点名跳过「本机安全世界自己管、旧副本打不开」的目录。恢复时解包同样跳过它，所以不会把交换文件写回去。刷入后同一台机器 data 备份 34.4 GB 跑完，`skyward: backup saved in /sdcard/Skyward/backups/20261119-192419`。
+
+**如何避免**：备份失败先看 `dmesg` 里 `os error 126`（`ENOKEY`）——那是「文件还在，但打开它的钥匙没了」，通常是你这台机器上一次启动才有的易失文件，不该进备份。Xiaomi/HyperOS 先看 `/data/extm`；换底包后如新增同类目录，往 `[backup] data_skipped` 里点名加，不要去改 `archive::pack` 的语义（那会把真的读失败也吞掉）。
