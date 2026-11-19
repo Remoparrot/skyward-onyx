@@ -22,11 +22,12 @@ fi
 
 size=$(stat -c%s "$IMG" 2>/dev/null || stat -f%z "$IMG")
 echo "大小：$size 字节"
-if [[ "$size" != "104857600" ]]; then
-  echo "✗ 不是 onyx 的 recovery 分区大小（104857600）" >&2
+expected_size="${EXPECTED_SIZE:-104857600}"
+if [[ "$size" != "$expected_size" ]]; then
+  echo "✗ 不是 recovery 分区大小（$expected_size）" >&2
   exit 1
 fi
-echo "✓ 大小 104857600 字节"
+echo "✓ 大小 $expected_size 字节"
 
 listing="$("$PACK" list "$IMG")"
 echo "$listing" | head -1

@@ -21,6 +21,18 @@ if [[ -f "$SHIM_C" ]]; then
   echo "shim: $SHIM_SO"
 fi
 
+# The version the build shows: the device's own, when its configuration
+# names one, so that the same tree builds for more than one phone and each
+# phone's About page carries its own name.
+CONFIG="${CONFIG:-$ROOT/devices/onyx.toml}"
+if [[ -f "$CONFIG" ]]; then
+  version="$(awk '/^\[device\]/{f=1;next} /^\[/{f=0} f && /^version[[:space:]]*=/{sub(/^version[[:space:]]*=[[:space:]]*"/,"");sub(/".*/,"");print;exit}' "$CONFIG")"
+  if [[ -n "$version" ]]; then
+    export SKYWARD_VERSION="$version"
+    echo "version: $SKYWARD_VERSION"
+  fi
+fi
+
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/build/phone}"
 cd "$SKYWARD_SRC"
 exec cargo build --release --target aarch64-linux-android -p skyward "$@"

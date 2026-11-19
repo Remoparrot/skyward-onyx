@@ -128,6 +128,9 @@
 
 ## 4. 当前阻塞 / 下一步
 
+> **源码领先于已发布镜像（2026-11-19）**：补丁 0008 与脚本的 `CONFIG` 化已进仓库，onyx 镜像仍是 v0.3.1-onyx.3，尚未用新源码重打、未在 onyx 上刷机。0008 改了密钥程序的库顺序，发 next onyx 镜像前必须真机复验 qseecomd 与 `/data` 解密。
+
+
 0. **`/data/extm` 修复已随 `v0.3.1-onyx.3` 发出**（2026-11-19 晚）：`devices/onyx.toml` 的 `[backup] data_skipped = ["extm"]` 解决 data 备份必失败（坑 33），真机刷入本版并核对版本 / 配置 / 二进制哈希；备份复跑按用户要求中止。剩余：恢复（restore）流程、系统分区 / 启动分区 / EFS 备份、U 盘目标未验证。详见 `sessions/2026-11-19-backup-extm.md`。
 0b. **onyx.2 的安装期修复要在真机上再刷一次整包才算闭环**：刷入 onyx.2 → 进「安装」选官方整包 → 看进度是否从 0 走到 100%、结束有没有「已将 Skyward 重新刷入B 的 recovery 分区」→ 重启进 recovery 是否还是 Skyward → `dmesg | grep 'install:'` 应有 `this recovery written back to [B]: Ok(())`。步骤见 [`07-changelog.md`](07-changelog.md) 与 [坑 31/32](06-pitfalls.md)。
 1. **触摸与振动复测**：0.3.1 的触摸服务仍由 `[[service]]` 拉起、振动配置未变，但本次只验证了「服务在跑」，没有重新注入滑动 / 听感复测；下次刷机补一次。

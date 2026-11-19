@@ -159,3 +159,21 @@ done
 3. 特别注意：上游若再次重排 UI 的 `app/` 模块或改服务发现，`0005` 与 `0003` 的库路径要重新对；
 4. 重新构建 + 真机回归（触摸、`/data`、CE、WLAN、回滚）；
 5. 更新 `NOTICE.md` 的版本号和 `docs/07-changelog.md`。
+
+---
+
+## 0008-libraries-version-files.patch
+
+**文件**：`crates/skyward/src/services.rs`、`crates/skyward-config/src/lib.rs`、`crates/skyward-info/src/lib.rs`、`crates/skyward-ui/src/pages.rs`、`crates/skyward-ui/src/app/{mod,state,act,nav,partitions}.rs`
+
+**行数**：约 530
+
+1. vendor / odm 程序的 `LD_LIBRARY_PATH` 把 VNDK bundle（`/apex/com.android.vndk.v33/lib64`）插到安装系统库之前，qseecomd 才能拿到 `libdmabufheap.so` 的 vendor 版；system 程序的顺序不动；
+2. `[device] version` 字段与 `SKYWARD_VERSION`（`skyward-info` 用 `option_env!`），显示版本按设备走；
+3. 文件管理入口放到首页设备卡片内、读数条正下方；
+4. 分区工具：安装页「分区」，A/B 合并、槽位页、提取 / 刷入、分区搜索，长列表用 `Rows` 按需绘制；
+5. Root 模块管理：首页「安装」下面，读 `/data/adb/modules`，开关 `disable`。
+
+**为什么**：vermeer 的密钥链必须用 VNDK 库；其余三项是同一套代码在两台设备上共用的能力。
+
+**注意**：0008 影响所有设备的密钥程序启动；onyx 还没有在真机上复验。

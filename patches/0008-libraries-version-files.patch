@@ -1,0 +1,745 @@
+diff --git a/crates/skyward-config/src/lib.rs b/crates/skyward-config/src/lib.rs
+index d00a0e9..b0ead43 100644
+--- a/crates/skyward-config/src/lib.rs
++++ b/crates/skyward-config/src/lib.rs
+@@ -291,6 +291,11 @@ pub struct Device {
+     /// System property that carries the vendor OS version.
+     #[serde(default = "default_os_version_prop")]
+     pub os_version_prop: String,
++    /// The version this build shows, when the device's build names one of
++    /// its own; the package version otherwise. One portable build serves
++    /// several devices, whose owners read the device's name in it.
++    #[serde(default)]
++    pub version: Option<String>,
+ }
+ 
+ #[derive(Debug, Clone, Default, Deserialize)]
+diff --git a/crates/skyward-info/src/lib.rs b/crates/skyward-info/src/lib.rs
+index 6f5dc71..c3b88d2 100644
+--- a/crates/skyward-info/src/lib.rs
++++ b/crates/skyward-info/src/lib.rs
+@@ -11,8 +11,12 @@ use std::path::Path;
+ use std::str::FromStr;
+ use std::sync::Mutex;
+ 
+-/// Version of this build, shown on the About page.
+-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
++/// Version of this build, shown on the About page: the one the build was
++/// given for its device, and the package's own where it was given none.
++pub const VERSION: &str = match option_env!("SKYWARD_VERSION") {
++    Some(version) => version,
++    None => env!("CARGO_PKG_VERSION"),
++};
+ 
+ const CPU: &str = "/sys/devices/system/cpu";
+ const POWER_SUPPLY: &str = "/sys/class/power_supply";
+diff --git a/crates/skyward-ui/src/app/act.rs b/crates/skyward-ui/src/app/act.rs
+index 20991f6..22e9116 100644
+--- a/crates/skyward-ui/src/app/act.rs
++++ b/crates/skyward-ui/src/app/act.rs
+@@ -8,6 +8,9 @@ impl App {
+         let l = self.state.lang;
+         match action {
+             Action::Open(s) => {
++                if s == Screen::Search {
++                    self.state.partition_search = false;
++                }
+                 if s == Screen::Search && self.screen() == Screen::Home {
+                     // The bar moves up from where it stands unfolded: a
+                     // page easing there for the keys gets there at once.
+@@ -249,6 +252,53 @@ impl App {
+                     self.refresh();
+                 }
+             }
++            Action::OpenPartition(k) => self.open_partition(k),
++            Action::OpenPartitionGroup(k) => {
++                if let Some(Ok(parts)) = &self.state.partitions {
++                    let groups = groups(parts);
++                    if let Some(group) = groups.get(k) {
++                        if group.variants.len() == 1 {
++                            self.open_partition(group.variants[0]);
++                        } else {
++                            self.state.partition_group = k;
++                            self.state.partition_images = None;
++                            self.state.partition_notice = None;
++                            self.open(Screen::PartitionGroup);
++                        }
++                    }
++                }
++            }
++            Action::OpenPartitionVariant(k) => self.open_partition(k),
++            Action::OpenPartitionSearch => {
++                self.state.partition_search = true;
++                self.state.search.clear();
++                self.state.layer = Layer::Letters;
++                self.open(Screen::Search);
++            }
++            Action::PartitionExtract => {
++                if let Some(Ok(parts)) = &self.state.partitions
++                    && let Some(part) = parts.get(self.state.partition_open)
++                {
++                    return vec![Effect::ExtractPartition { name: part.name.clone() }];
++                }
++            }
++            Action::PartitionImages => return vec![Effect::ReadPartitionImages],
++            Action::PartitionFlash(k) => {
++                if let Some(Ok(parts)) = &self.state.partitions
++                    && let Some(part) = parts.get(self.state.partition_open)
++                    && let Some(Ok(images)) = &self.state.partition_images
++                    && let Some((file, _)) = images.get(k)
++                {
++                    return vec![Effect::FlashPartitionImage { name: part.name.clone(), path: format!("/sdcard/Download/{file}") }];
++                }
++            }
++            Action::ToggleRootModule(k) => {
++                if let Some(Ok(modules)) = &self.state.root_modules
++                    && let Some(module) = modules.get(k)
++                {
++                    return vec![Effect::ToggleRootModule { dir: format!("/data/adb/modules/{}", module.dir), enabled: !module.enabled }];
++                }
++            }
+             Action::SystemSize(k) => {
+                 if let Install::SystemChoosing(choice) = &mut self.state.install {
+                     choice.size = k;
+diff --git a/crates/skyward-ui/src/app/mod.rs b/crates/skyward-ui/src/app/mod.rs
+index eb23efd..c4ee856 100644
+--- a/crates/skyward-ui/src/app/mod.rs
++++ b/crates/skyward-ui/src/app/mod.rs
+@@ -46,6 +46,7 @@ mod keys;
+ mod manager;
+ mod mount;
+ mod nav;
++mod partitions;
+ mod power;
+ mod prefs;
+ mod reboot;
+@@ -69,6 +70,7 @@ pub use frame::*;
+ pub use install::*;
+ pub use manager::*;
+ pub use mount::*;
++pub use partitions::*;
+ pub use prefs::*;
+ pub use reboot::*;
+ pub use relabel::*;
+@@ -98,6 +100,14 @@ pub enum Screen {
+     /// Mounting and unmounting the slot's partitions.
+     Mount,
+     Install,
++    /// The phone's partitions, to flash or extract one.
++    Partitions,
++    /// One partition and its slot copies, to choose which to work on.
++    PartitionGroup,
++    /// One partition: what it holds, and flashing or extracting it.
++    Partition,
++    /// The root solution's modules, to switch each on or off.
++    RootModules,
+     /// A place's folders and the files in them that can be installed, to
+     /// choose one.
+     Choose(Place),
+@@ -278,6 +288,22 @@ pub enum Action {
+     FlashPartition(usize),
+     /// Send the image to these slots.
+     FlashSlots(Pick),
++    /// Open the partition at this place in the by-name table.
++    OpenPartition(usize),
++    /// Open the partition group at this place in the grouped list.
++    OpenPartitionGroup(usize),
++    /// Open the copy of a partition group at this place in the table.
++    OpenPartitionVariant(usize),
++    /// Look through the partitions by name, on the search page.
++    OpenPartitionSearch,
++    /// Write the selected partition into internal storage.
++    PartitionExtract,
++    /// List the images in internal storage to write into the selected partition.
++    PartitionImages,
++    /// Write the image at this place in the list into the selected partition.
++    PartitionFlash(usize),
++    /// Switch the root module at this place in the list on or off.
++    ToggleRootModule(usize),
+     /// Leave the recovery for this target at once.
+     RebootTo(Target),
+     /// Stop fastboot and bring the recovery's own pages up, without
+@@ -649,6 +675,23 @@ pub enum Effect {
+     Merge,
+     /// Turn off dm-verity and verification in the booted slot's vbmeta.
+     DisableAvb,
++    /// Read the phone's by-name partitions, telling them with
++    /// [`App::set_partitions`].
++    ReadPartitions,
++    /// List the images in internal storage, telling them with
++    /// [`App::set_partition_images`].
++    ReadPartitionImages,
++    /// Write the partition with this name into internal storage, telling
++    /// how it ended with [`App::partition_done`].
++    ExtractPartition { name: String },
++    /// Write the image at this path into the partition with this name,
++    /// telling how it ended with [`App::partition_done`].
++    FlashPartitionImage { name: String, path: String },
++    /// Read the root solution's modules, telling them with
++    /// [`App::set_root_modules`].
++    ReadRootModules,
++    /// Switch the module in this folder on or off, then read them again.
++    ToggleRootModule { dir: String, enabled: bool },
+ }
+ 
+ enum Drag {
+diff --git a/crates/skyward-ui/src/app/nav.rs b/crates/skyward-ui/src/app/nav.rs
+index f5cced5..454bba5 100644
+--- a/crates/skyward-ui/src/app/nav.rs
++++ b/crates/skyward-ui/src/app/nav.rs
+@@ -287,6 +287,8 @@ impl App {
+     pub(super) fn arrive_at(&mut self, s: Screen) -> Vec<Effect> {
+         match s {
+             Screen::Mount => vec![Effect::ReadMounts],
++            Screen::Partitions => vec![Effect::ReadPartitions],
++            Screen::RootModules => vec![Effect::ReadRootModules],
+             Screen::Filesystems => vec![Effect::ReadFilesystems],
+             Screen::Slot | Screen::Reboot => vec![Effect::ReadSlots],
+             Screen::Systems => vec![Effect::ReadSystems],
+diff --git a/crates/skyward-ui/src/app/partitions.rs b/crates/skyward-ui/src/app/partitions.rs
+new file mode 100644
+index 0000000..43b7da9
+--- /dev/null
++++ b/crates/skyward-ui/src/app/partitions.rs
+@@ -0,0 +1,80 @@
++//! Whole partitions: what the phone's by-name table holds, flashing one
++//! from an image in internal storage, and writing one back into an image.
++
++use super::*;
++
++/// A partition the phone's by-name table holds.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct Partition {
++    pub name: String,
++    pub device: String,
++    pub size: u64,
++}
++
++/// A partition and the slot variants it has, such as `boot`'s `boot_a`
++/// and `boot_b`, or a partition with one copy, such as `misc`.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct PartitionGroup {
++    pub base: String,
++    /// Places, in [`Partition`]s, of the copies the group holds.
++    pub variants: Vec<usize>,
++}
++
++/// The partitions gathered by their name without a slot suffix, in name
++/// order.
++pub fn groups(parts: &[Partition]) -> Vec<PartitionGroup> {
++    let mut map: std::collections::BTreeMap<String, Vec<usize>> = std::collections::BTreeMap::new();
++    for (k, part) in parts.iter().enumerate() {
++        let base = part.name.strip_suffix("_a").or_else(|| part.name.strip_suffix("_b")).unwrap_or(&part.name).to_string();
++        map.entry(base).or_default().push(k);
++    }
++    map.into_iter().map(|(base, variants)| PartitionGroup { base, variants }).collect()
++}
++
++/// A module the root solution installed under `/data/adb/modules`.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct RootModule {
++    /// The folder under `/data/adb/modules`.
++    pub dir: String,
++    pub title: String,
++    pub version: String,
++    pub enabled: bool,
++}
++
++impl App {
++    /// What the by-name table holds, as the runtime read it.
++    pub fn set_partitions(&mut self, read: Result<Vec<Partition>, String>) {
++        self.state.partitions = Some(read);
++        self.refresh();
++    }
++
++    /// Open the partition at this place in the list.
++    pub fn open_partition(&mut self, k: usize) {
++        self.state.partition_open = k;
++        self.state.partition_images = None;
++        self.state.partition_notice = None;
++        self.open(Screen::Partition);
++    }
++
++    /// The images internal storage holds that a partition can be written
++    /// from, or why they could not be read.
++    pub fn set_partition_images(&mut self, read: Result<Vec<(String, u64)>, String>) {
++        self.state.partition_images = Some(read);
++        self.refresh();
++    }
++
++    /// How writing a partition or an image into one ended.
++    pub fn partition_done(&mut self, what: Result<String, String>) {
++        self.state.partition_notice = Some(match what {
++            Ok(done) => done,
++            Err(e) => e,
++        });
++        self.refresh();
++    }
++
++    /// The root solution's modules, as the runtime read them.
++    pub fn set_root_modules(&mut self, read: Result<Vec<RootModule>, String>) {
++        self.state.root_modules = Some(read);
++        self.refresh();
++    }
++}
+diff --git a/crates/skyward-ui/src/app/state.rs b/crates/skyward-ui/src/app/state.rs
+index f18a5c6..e190b13 100644
+--- a/crates/skyward-ui/src/app/state.rs
++++ b/crates/skyward-ui/src/app/state.rs
+@@ -210,6 +210,22 @@ pub struct State {
+     pub skyward_job: Option<SkywardJob>,
+     /// How fast data went over the network joined in the last second.
+     pub traffic: Traffic,
++    /// The phone's by-name partitions, as the runtime last read them, or
++    /// why it could not; none until it has.
++    pub partitions: Option<Result<Vec<Partition>, String>>,
++    /// The partition the partition page shows, by its place in them.
++    pub partition_open: usize,
++    /// The group the group page shows, by its place in the grouped list.
++    pub partition_group: usize,
++    /// The search page looks through the partitions, not the features.
++    pub partition_search: bool,
++    /// The images in internal storage the partition page offers to flash,
++    /// or why it could not list them.
++    pub partition_images: Option<Result<Vec<(String, u64)>, String>>,
++    /// What flashing or extracting a partition last did.
++    pub partition_notice: Option<String>,
++    /// The root solution's modules, as the runtime last read them, or why.
++    pub root_modules: Option<Result<Vec<RootModule>, String>>,
+ }
+ 
+ impl Default for State {
+@@ -310,6 +326,13 @@ impl Default for State {
+             skyward_check: SkywardCheck::Idle,
+             skyward_job: None,
+             traffic: Traffic::default(),
++            partitions: None,
++            partition_open: 0,
++            partition_group: 0,
++            partition_search: false,
++            partition_images: None,
++            partition_notice: None,
++            root_modules: None,
+         }
+     }
+ }
+diff --git a/crates/skyward-ui/src/pages.rs b/crates/skyward-ui/src/pages.rs
+index a8ab91d..bc69e24 100644
+--- a/crates/skyward-ui/src/pages.rs
++++ b/crates/skyward-ui/src/pages.rs
+@@ -1,9 +1,9 @@
+ use crate::app::{
+     Action, BackupAt, BackupEnd, BackupJob, Check, ClashChoice, Confirm, Damage, Data, Dock, DownloadEnd, EraseStop, Field, FileKind,
+-    FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, Install, JobEnd, Keys, Pick, Place, Rows, Screen,
++    FileOp, FileTask, Fold, Folder, Frame, FsAction, FsChoice, FsRow, Have, HeroArt, Hit, Install, JobEnd, Keys, PartitionGroup, Pick, Place, Rows, Screen,
+     SkywardCheck, SkywardEnd, SkywardJob, SkywardStage, Slider, Source, State, Switch, SystemsWork, Target, UsbDrive, UsbLink, Wipe, ADDABLE,
+     BACKUP_PARTS, DATA_ERASED, DATA_PARTITION, DOWNLOADS, FASTBOOT_CHOICES, SCREEN_OFF, TARGETS, TIME_ZONES, USB_DRIVE_UNREADABLE,
+-    USB_DRIVE_WANTED, WIPES, installs, starting,
++    USB_DRIVE_WANTED, WIPES, groups, installs, starting,
+ };
+ use crate::canvas::Canvas;
+ use crate::color::Rgba;
+@@ -76,6 +76,10 @@ pub fn render(screen: Screen, cx: &Ctx) -> Frame {
+         Screen::Wipe => wipe(cx),
+         Screen::Mount => mount(cx),
+         Screen::Install => install(cx),
++        Screen::Partitions => partitions(cx),
++        Screen::PartitionGroup => partition_group(cx),
++        Screen::Partition => partition(cx),
++        Screen::RootModules => root_modules(cx),
+         Screen::Choose(place) => choose(cx, place),
+         Screen::Installing => installing(cx),
+         Screen::About => about(cx),
+@@ -381,6 +385,10 @@ pub fn home(cx: &Ctx) -> Frame {
+     };
+     let mut rows = Vec::new();
+     let mut opens = Vec::new();
++    // The phone's files stay in the card the readings are in, right under
++    // them: they are what the data the strip reports is kept in.
++    rows.push(Row::new(l.pick(FILES)).icon(BLUE, Icon::Folder).trail(Trail::Arrow));
++    opens.push(Some(Action::Open(Screen::Files)));
+     if let Some((title, note)) = &low {
+         rows.push(Row::new(title).icon(RED, Icon::Battery).subtitle(note).trail(Trail::None));
+         opens.push(None);
+@@ -445,6 +453,7 @@ pub fn home(cx: &Ctx) -> Frame {
+     }
+     let tools = widgets::list(&mut c, t, f, y, &[
+         Row::new(l.pick(["安装", "安裝", "Install"])).icon(GREEN, Icon::Install),
++        Row::new(l.pick(["Root 模块管理", "Root 模組管理", "Root modules"])).icon(ORANGE, Icon::Layers),
+         Row::new(l.pick(["备份", "備份", "Backup"])).icon(BLUE, Icon::Backup),
+         Row::new(l.pick(["恢复", "還原", "Restore"])).icon(PURPLE, Icon::Restore),
+         Row::new(l.pick(["挂载", "掛載", "Mount"])).icon(SLATE, Icon::Mount),
+@@ -453,6 +462,7 @@ pub fn home(cx: &Ctx) -> Frame {
+     ]);
+     out.extend(hits(&tools.rows, &[
+         Action::Open(Screen::Install),
++        Action::Open(Screen::RootModules),
+         Action::Open(Screen::Backup),
+         Action::Open(Screen::Restore),
+         Action::Open(Screen::Mount),
+@@ -1059,13 +1069,22 @@ pub fn install(cx: &Ctx) -> Frame {
+         facts.push((l.pick(CURRENT_SLOT), detail));
+     }
+     let ways = l.pick(["安装方式", "安裝方式", "Ways to install"]);
++    // The partition tools come right under the phone's facts, before the
++    // ways to install: they are about the phone's own partitions, not a
++    // package that installs a system.
++    let mut out = Vec::new();
+     let y = if facts.is_empty() {
+-        widgets::section_first(&mut c, t, f, top, ways)
++        widgets::section_first(&mut c, t, f, top, l.pick(["分区", "分割區", "Partitions"]))
+     } else {
+         let y = widgets::section_first(&mut c, t, f, top, l.pick(["本机", "本機", "This phone"]));
+         let y = widgets::info_card(&mut c, t, f, y, &facts);
+-        widgets::section(&mut c, t, f, y, ways)
++        widgets::section(&mut c, t, f, y + t.m.card_gap, l.pick(["分区", "分割區", "Partitions"]))
+     };
++    let partitions = widgets::list(&mut c, t, f, y, &[Row::new(l.pick(["分区", "分割區", "Partitions"]))
++        .icon(SLATE, Icon::Mount)
++        .subtitle(l.pick(["刷入或提取分区镜像", "刷入或提取分割區映像檔", "Flash or extract a partition image"]))]);
++    out.extend(hits(&partitions.rows, &[Action::Open(Screen::Partitions)]));
++    let y = widgets::section(&mut c, t, f, partitions.bottom + t.m.card_gap, ways);
+     let mut rows = Vec::new();
+     if let Some(note) = fmt::snapshot_note(l, &i.snapshot) {
+         rows.push(Row::new(fmt::snapshot(l, &i.snapshot)).icon(ORANGE, Icon::Layers).subtitle(note).trail(Trail::None));
+@@ -1096,7 +1115,7 @@ pub fn install(cx: &Ctx) -> Frame {
+     rows.push(Row::new(install_title(l, Source::Computer)).icon(GREEN, Icon::Usb).subtitle(sideload));
+     let methods = widgets::list(&mut c, t, f, y, &rows);
+     let from_usb = Action::Open(Screen::Choose(Place::UsbDrive));
+-    let mut out = hits(&methods.rows[methods.rows.len() - 3..], &[from_storage, from_usb, Action::Sideload]);
++    out.extend(hits(&methods.rows[methods.rows.len() - 3..], &[from_storage, from_usb, Action::Sideload]));
+     // A phone that can hold a second system installs one from here too.
+     let what = l.pick(match cx.state.dual_boot {
+         true => [
+@@ -1964,7 +1983,42 @@ pub fn search(cx: &Ctx) -> Frame {
+     out.push(Hit { rect: cancel, action: Action::CloseSearch });
+     let top = field.field.y + field.field.h + m.dp(12.0);
+     let kb_top = m.h as f32 - widgets::keyboard_height(t);
+-    if s.search.trim().is_empty() {
++    if s.partition_search {
++        if s.search.trim().is_empty() {
++            widgets::footnote(&mut c, t, f, top, l.pick([
++                "输入分区名称，A/B 两份合成一项。例如输入 rec 可找到 recovery。",
++                "輸入分割區名稱，A/B 兩份合成一項。例如輸入 rec 可找到 recovery。",
++                "Type a partition name; A/B copies share one entry, so rec finds recovery.",
++            ]));
++        } else {
++            let query = s.search.trim().to_lowercase();
++            let parts = match &s.partitions {
++                Some(Ok(parts)) => parts.as_slice(),
++                _ => &[],
++            };
++            let grouped = groups(parts);
++            let found: Vec<(usize, &PartitionGroup)> =
++                grouped.iter().enumerate().filter(|(_, g)| g.base.to_lowercase().contains(&query)).collect();
++            if found.is_empty() {
++                let typed = s.search.trim();
++                let none = tr!(l, "未找到\"{typed}\"", "找不到「{typed}」", "Nothing found for “{typed}”");
++                widgets::list(&mut c, t, f, top, &[Row::new(&none).trail(Trail::None)]);
++            } else {
++                let subs: Vec<String> = found
++                    .iter()
++                    .map(|(_, g)| match (g.variants.first(), g.variants.len()) {
++                        (Some(&k), 1) => partition_size(l, parts[k].size),
++                        (Some(&k), _) => format!("A/B · {}", partition_size(l, parts[k].size)),
++                        (None, _) => String::new(),
++                    })
++                    .collect();
++                let rows: Vec<Row> = found.iter().zip(&subs).map(|((_, g), sub)| Row::new(&g.base).subtitle(sub)).collect();
++                let list = widgets::list(&mut c, t, f, top, &rows);
++                let shown = list.rows.iter().zip(&found).filter(|(r, _)| r.y + r.h <= kb_top);
++                out.extend(shown.map(|(&rect, (k, _))| Hit { rect, action: Action::OpenPartitionGroup(*k) }));
++            }
++        }
++    } else if s.search.trim().is_empty() {
+         let how = l.pick([
+             "输入功能或分区名称，支持拼音全拼和首字母，例如输入 bf 可找到「备份」。",
+             "輸入功能或分割區名稱，支援英文和漢語拼音的全拼與首字母，例如輸入 bf 可找到「備份」。",
+@@ -3582,6 +3636,30 @@ pub fn row(screen: Screen, cx: &Ctx, i: usize, c: &mut Canvas) {
+             let work = cx.state.part_work.as_ref().expect("the page of partition work shows work");
+             widgets::output_row(c, cx.t, cx.f, &work.output, i)
+         }
++        Screen::Partitions => {
++            let l = cx.state.lang;
++            let Some(Ok(parts)) = &cx.state.partitions else { return };
++            let grouped = groups(parts);
++            let Some(group) = grouped.get(i) else { return };
++            let (t, f) = (cx.t, cx.f);
++            let m = &t.m;
++            c.clear(t.pal.card);
++            let x = m.margin + m.inner;
++            c.text_top(&f.heading, &group.base, x, m.dp(12.0), m.dp(17.0), t.pal.text, None);
++            let summary = match (group.variants.first(), group.variants.len()) {
++                (Some(&k), 1) => partition_size(l, parts[k].size),
++                (Some(&k), _) => format!("A/B · {}", partition_size(l, parts[k].size)),
++                (None, _) => String::new(),
++            };
++            c.text(&f.body, &summary, x, m.dp(48.0), m.dp(14.0), t.pal.subtitle, None);
++            let right = c.w as f32 - m.margin - m.chevron_inset;
++            let cy = c.h as f32 / 2.0;
++            let (w, h, sw) = (m.chevron_w, m.chevron_h, m.chevron_stroke);
++            let x0 = right - w + sw / 2.0;
++            let x1 = right - sw / 2.0;
++            c.line(x0, cy - h / 2.0 + sw / 2.0, x1, cy, sw, t.pal.chevron);
++            c.line(x1, cy, x0, cy + h / 2.0 - sw / 2.0, sw, t.pal.chevron);
++        }
+         other => unreachable!("{other:?} draws no list row by row"),
+     }
+ }
+@@ -4499,3 +4577,231 @@ mod tests {
+         assert_eq!(capitalized(Lang::Hans, "清空 data 分区"), "清空 data 分区");
+     }
+ }
++
++const PARTITIONS_TITLE: Text = ["分区", "分割區", "Partitions"];
++
++fn partition_size(l: Lang, size: u64) -> String {
++    match size {
++        0 => l.pick(["大小未知", "大小未知", "Size unknown"]).to_string(),
++        _ => fmt::bytes(size),
++    }
++}
++
++pub fn partitions(cx: &Ctx) -> Frame {
++    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
++    let mut c = long_page(cx);
++    let mut out = Vec::new();
++    let top = t.m.content_top;
++    let y = widgets::section_first(&mut c, t, f, top, l.pick(PARTITIONS_TITLE));
++    let search = widgets::list(&mut c, t, f, y, &[Row::new(l.pick(["搜索分区", "搜尋分割區", "Search partitions"])).trail(Trail::Arrow)]);
++    out.extend(hits(&search.rows, &[Action::OpenPartitionSearch]));
++    let y = search.bottom;
++    let y = match &s.partitions {
++        None => widgets::list(&mut c, t, f, y, &[Row::new(l.pick(["正在读取分区…", "正在讀取分割區…", "Reading the partitions…"])).trail(Trail::None)]).bottom,
++        Some(Err(why)) => {
++            let y = widgets::list(&mut c, t, f, y, &[Row::new(l.pick(["无法读取分区", "無法讀取分割區", "Couldn't read the partitions"])).trail(Trail::None)]).bottom;
++            widgets::footnote(&mut c, t, f, y, why)
++        }
++        Some(Ok(parts)) if parts.is_empty() => {
++            widgets::list(&mut c, t, f, y, &[Row::new(l.pick(["没有可用的分区", "沒有可用的分割區", "No partitions"])).trail(Trail::None)]).bottom
++        }
++        Some(Ok(parts)) => {
++            // A/B copies are one entry, and the copies show on the page it
++            // opens; more entries than one canvas holds are drawn as they
++            // scroll into view, the way the file manager draws a folder.
++            let y = widgets::footnote(&mut c, t, f, y, l.pick([
++                "A/B 分区合成一项，点进去选槽位；再点一个槽位可以把它提取成镜像，或把 /sdcard/Download 里的镜像写进去。",
++                "A/B 分割區合成一項，點進去選槽位；再點一個槽位可以把它提取成映像檔，或把 /sdcard/Download 裡的映像檔寫進去。",
++                "A/B copies share one entry; open it to pick a slot, then extract that partition or write an image from /sdcard/Download into it.",
++            ]));
++            let grouped = groups(parts);
++            let step = t.m.dp(72.0).round();
++            let mut edges = Vec::with_capacity(grouped.len() + 1);
++            let mut at = y.round();
++            edges.push(at);
++            for _ in grouped.iter() {
++                at += step;
++                edges.push(at);
++            }
++            return Frame { rows: Some(Rows { edges, action: Some(Action::OpenPartitionGroup) }), ..Frame::new(t, fit(c, t, y), out, l.pick(PARTITIONS_TITLE), top) };
++        }
++    };
++    Frame::new(t, fit(c, t, y), out, l.pick(PARTITIONS_TITLE), top)
++}
++
++pub fn partition_group(cx: &Ctx) -> Frame {
++    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
++    let mut c = long_page(cx);
++    let mut out = Vec::new();
++    let top = t.m.content_top;
++    let title = l.pick(PARTITIONS_TITLE);
++    let parts = match &s.partitions {
++        Some(Ok(parts)) => parts,
++        _ => {
++            let y = widgets::section_first(&mut c, t, f, top, title);
++            let y = widgets::list(&mut c, t, f, y, &[Row::new(l.pick(["正在读取分区…", "正在讀取分割區…", "Reading the partitions…"])).trail(Trail::None)]).bottom;
++            return Frame::new(t, fit(c, t, y), out, title, top);
++        }
++    };
++    let grouped = groups(parts);
++    let Some(group) = grouped.get(s.partition_group) else {
++        let y = widgets::section_first(&mut c, t, f, top, title);
++        return Frame::new(t, fit(c, t, y), out, title, top);
++    };
++    let y = widgets::section_first(&mut c, t, f, top, &group.base);
++    let names: Vec<String> = group
++        .variants
++        .iter()
++        .map(|&k| {
++            let part = &parts[k];
++            if part.name.ends_with("_a") {
++                l.pick(["槽位 A", "槽位 A", "Slot A"]).to_string()
++            } else if part.name.ends_with("_b") {
++                l.pick(["槽位 B", "槽位 B", "Slot B"]).to_string()
++            } else {
++                l.pick(["唯一", "唯一", "Only"]).to_string()
++            }
++        })
++        .collect();
++    let subs: Vec<String> = group
++        .variants
++        .iter()
++        .map(|&k| {
++            let part = &parts[k];
++            format!("{} · {}", part.name, partition_size(l, part.size))
++        })
++        .collect();
++    let rows: Vec<Row> = names
++        .iter()
++        .zip(&subs)
++        .map(|(name, sub)| Row::new(name).subtitle(sub).trail(Trail::Arrow))
++        .collect();
++    let list = widgets::list(&mut c, t, f, y, &rows);
++    let actions: Vec<Action> = group.variants.iter().map(|&k| Action::OpenPartitionVariant(k)).collect();
++    out.extend(hits(&list.rows, &actions));
++    let y = widgets::footnote(&mut c, t, f, list.bottom, l.pick([
++        "选一个槽位，再决定提取它还是把镜像写进去。",
++        "選一個槽位，再決定提取它還是把映像檔寫進去。",
++        "Pick a slot, then extract it or write an image into it.",
++    ]));
++    Frame::new(t, fit(c, t, y), out, title, top)
++}
++
++pub fn partition(cx: &Ctx) -> Frame {
++    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
++    let mut c = long_page(cx);
++    let mut out = Vec::new();
++    let top = t.m.content_top;
++    let title = l.pick(PARTITIONS_TITLE);
++    let (part, mut y) = match &s.partitions {
++        Some(Ok(parts)) if s.partition_open < parts.len() => (&parts[s.partition_open], top),
++        Some(Err(why)) => {
++            let y = widgets::section_first(&mut c, t, f, top, title);
++            let y = widgets::footnote(&mut c, t, f, y, why);
++            return Frame::new(t, fit(c, t, y), out, title, top);
++        }
++        _ => {
++            let y = widgets::section_first(&mut c, t, f, top, title);
++            let y = widgets::list(&mut c, t, f, y, &[Row::new(l.pick(["正在读取分区…", "正在讀取分割區…", "Reading the partitions…"])).trail(Trail::None)]).bottom;
++            return Frame::new(t, fit(c, t, y), out, title, top);
++        }
++    };
++    let facts = [
++        (l.pick(["名称", "名稱", "Name"]), part.name.clone()),
++        (l.pick(["大小", "大小", "Size"]), partition_size(l, part.size)),
++        (l.pick(["设备", "裝置", "Device"]), part.device.clone()),
++    ];
++    y = widgets::info_card(&mut c, t, f, y, &facts);
++    y = widgets::section(&mut c, t, f, y + t.m.card_gap, l.pick(["操作", "操作", "Actions"]));
++    let rows = [
++        Row::new(l.pick(["提取分区", "提取分割區", "Extract partition"]))
++            .icon(BLUE, Icon::Folder)
++            .subtitle(l.pick(["把整个分区写成 /sdcard/Download/<分区名>.img", "把整個分割區寫成 /sdcard/Download/<分割區名>.img", "Write the whole partition to /sdcard/Download/<name>.img"])),
++        Row::new(l.pick(["刷入镜像", "刷入映像檔", "Flash an image"]))
++            .icon(GREEN, Icon::Install)
++            .subtitle(l.pick(["从 /sdcard/Download 里的镜像写入这个分区", "從 /sdcard/Download 裡的映像檔寫入這個分割區", "Write an image in /sdcard/Download into this partition"])),
++    ];
++    let acts = widgets::list(&mut c, t, f, y, &rows);
++    out.extend(hits(&acts.rows, &[Action::PartitionExtract, Action::PartitionImages]));
++    y = widgets::footnote(&mut c, t, f, acts.bottom, l.pick([
++        "提取不改变分区；刷入会覆盖这个分区里的原有内容，且不可撤销。",
++        "提取不改變分割區；刷入會覆寫這個分割區裡的原有內容，且不可復原。",
++        "Extracting changes nothing; flashing covers what the partition holds, and cannot be undone.",
++    ]));
++    match &s.partition_images {
++        None => {}
++        Some(Err(why)) => {
++            y = widgets::footnote(&mut c, t, f, y + t.m.card_gap, why);
++        }
++        Some(Ok(images)) if images.is_empty() => {
++            y = widgets::footnote(&mut c, t, f, y + t.m.card_gap, l.pick([
++                "/sdcard/Download 里没有镜像文件。",
++                "/sdcard/Download 裡沒有映像檔。",
++                "There is no image in /sdcard/Download.",
++            ]));
++        }
++        Some(Ok(images)) => {
++            y = widgets::section(&mut c, t, f, y + t.m.card_gap, l.pick(["可刷入的镜像", "可刷入的映像檔", "Images to flash"]));
++            let sizes: Vec<String> = images.iter().map(|(_, size)| partition_size(l, *size)).collect();
++            let rows: Vec<Row> = images.iter().zip(&sizes).map(|((name, _), size)| Row::new(name).subtitle(size).trail(Trail::Arrow)).collect();
++            let list = widgets::list(&mut c, t, f, y, &rows);
++            let actions: Vec<Action> = (0..images.len()).map(Action::PartitionFlash).collect();
++            out.extend(hits(&list.rows, &actions));
++            y = widgets::footnote(&mut c, t, f, list.bottom, l.pick([
++                "点一个镜像就会把它写进这个分区；写之前先确认镜像对应的是这个分区。",
++                "點一個映像檔就會把它寫進這個分割區；寫之前先確認映像檔對應的是這個分割區。",
++                "Tap an image to write it into this partition; make sure the image is meant for it first.",
++            ]));
++        }
++    }
++    if let Some(note) = &s.partition_notice {
++        y = widgets::footnote(&mut c, t, f, y + t.m.card_gap, note);
++    }
++    Frame::new(t, fit(c, t, y), out, title, top)
++}
++
++pub fn root_modules(cx: &Ctx) -> Frame {
++    let (t, f, s, l) = (cx.t, cx.f, cx.state, cx.state.lang);
++    let mut c = long_page(cx);
++    let mut out = Vec::new();
++    let top = t.m.content_top;
++    let title = l.pick(["Root 模块", "Root 模組", "Root modules"]);
++    let y = widgets::section_first(&mut c, t, f, top, title);
++    let y = if !s.data.storage_open() {
++        widgets::footnote(&mut c, t, f, y, l.pick([
++            "需要先解开 data 分区，才能看到 /data/adb/modules。",
++            "需要先解開 data 分割區，才能看到 /data/adb/modules。",
++            "The data partition has to be open before /data/adb/modules can be read.",
++        ]))
++    } else {
++        match &s.root_modules {
++            None => widgets::list(&mut c, t, f, y, &[Row::new(l.pick(["正在读取模块…", "正在讀取模組…", "Reading the modules…"])).trail(Trail::None)]).bottom,
++            Some(Err(why)) => {
++                let y = widgets::list(&mut c, t, f, y, &[Row::new(l.pick(["无法读取模块", "無法讀取模組", "Couldn't read the modules"])).trail(Trail::None)]).bottom;
++                widgets::footnote(&mut c, t, f, y, why)
++            }
++            Some(Ok(modules)) if modules.is_empty() => {
++                let y = widgets::list(&mut c, t, f, y, &[Row::new(l.pick(["没有找到 Root 模块", "沒有找到 Root 模組", "No root modules"])).trail(Trail::None)]).bottom;
++                widgets::footnote(&mut c, t, f, y, l.pick([
++                    "这里读取的是 /data/adb/modules（KernelSU / Magisk 的模块目录）。装好 root 并重启后再来看。",
++                    "這裡讀取的是 /data/adb/modules（KernelSU / Magisk 的模組目錄）。裝好 root 並重新啟動後再來看。",
++                    "This reads /data/adb/modules, the KernelSU / Magisk module folder. Come back after root is installed and the phone restarted.",
++                ]))
++            }
++            Some(Ok(modules)) => {
++                let rows: Vec<Row> = modules
++                    .iter()
++                    .map(|m| Row::new(&m.title).subtitle(&m.version).trail(Trail::Switch(m.enabled)))
++                    .collect();
++                let list = widgets::list(&mut c, t, f, y, &rows);
++                out.extend(list.rows.iter().enumerate().map(|(k, &rect)| Hit { rect, action: Action::ToggleRootModule(k) }));
++                widgets::footnote(&mut c, t, f, list.bottom, l.pick([
++                    "开关会写入或删除模块目录下的 disable 文件，重启后生效。",
++                    "開關會寫入或刪除模組目錄下的 disable 檔案，重新啟動後生效。",
++                    "Switching writes or removes the disable file in the module's folder; it takes effect after a restart.",
++                ]))
++            }
++        }
++    };
++    Frame::new(t, fit(c, t, y), out, title, top)
++}
+diff --git a/crates/skyward/src/services.rs b/crates/skyward/src/services.rs
+index 27fd768..869e8dc 100644
+--- a/crates/skyward/src/services.rs
++++ b/crates/skyward/src/services.rs
+@@ -109,7 +109,19 @@ fn readied(program: &Started, libraries: Option<&Path>, known: &HashMap<String,
+         bail!("{} is missing; is its partition mounted?", s.path);
+     }
+     if let Some(dir) = libraries {
+-        s.libraries.push(dir.to_string_lossy().into_owned());
++        let dir = dir.to_string_lossy().into_owned();
++        // The bundle of the phone's own libraries is what the programs on
++        // its vendor and odm partitions were built against, and some of
++        // those programs (qseecomd, for one) need files only it carries.
++        // Its folder goes before the installed system's copies of the same
++        // files, which are built for the system's own programs and may ask
++        // for libraries a recovery has not got.
++        let at = if s.path.starts_with("/vendor/") || s.path.starts_with("/odm/") {
++            s.libraries.iter().position(|p| p.starts_with("/mnt/system/")).unwrap_or(s.libraries.len())
++        } else {
++            s.libraries.len()
++        };
++        s.libraries.insert(at, dir);
+     }
+     let who = Credentials::of(&s, known)?;
+     let given = Given::of(program, known)?;

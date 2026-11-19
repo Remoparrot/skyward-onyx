@@ -13,10 +13,12 @@ if [[ ! -x "$PACK" ]]; then
   exit 1
 fi
 
-mkdir -p "$ROOT/stock"
-"$PACK" stock --config "$ROOT/devices/onyx.toml" --out "$ROOT/stock/recovery.img"
+CONFIG="${CONFIG:-$ROOT/devices/onyx.toml}"
+OUT="${OUT:-$ROOT/stock/recovery.img}"
+mkdir -p "$(dirname "$OUT")"
+"$PACK" stock --config "$CONFIG" --out "$OUT"
 
 echo
-echo "stock/recovery.img："
-ls -l "$ROOT/stock/recovery.img"
-sha256sum "$ROOT/stock/recovery.img"
+echo "$OUT："
+ls -l "$OUT"
+sha256sum "$OUT"

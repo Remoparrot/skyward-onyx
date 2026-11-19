@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 把编译好的 skyward / system-init / 原厂 recovery 打成整分区镜像。
 #
+#   CONFIG        设备配置，默认 devices/onyx.toml
 #   STOCK         原厂 recovery，默认 stock/recovery.img
 #   SKYWARD_BIN   手机侧 skyward，默认 build/phone/aarch64-linux-android/release/skyward
 #   SYSTEM_INIT   手机侧 system-init，默认 build/system-init/aarch64-linux-android/release/system-init
@@ -9,6 +10,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CONFIG="${CONFIG:-$ROOT/devices/onyx.toml}"
 STOCK="${STOCK:-$ROOT/stock/recovery.img}"
 SKYWARD_BIN="${SKYWARD_BIN:-$ROOT/build/phone/aarch64-linux-android/release/skyward}"
 SYSTEM_INIT="${SYSTEM_INIT:-$ROOT/build/system-init/aarch64-linux-android/release/system-init}"
@@ -37,7 +39,7 @@ echo "==> 打镜像"
   --stock "$STOCK" \
   --binary "$SKYWARD_BIN" \
   --system-init "$SYSTEM_INIT" \
-  --config "$ROOT/devices/onyx.toml" \
+  --config "$CONFIG" \
   --font "$FONT" \
   --mono "$MONO" \
   --mono-license "$MONO_LICENSE" \
@@ -45,8 +47,9 @@ echo "==> 打镜像"
   --out "$OUT"
 
 size=$(stat -c%s "$OUT" 2>/dev/null || stat -f%z "$OUT")
-if [[ "$size" != "104857600" ]]; then
-  echo "镜像大小 $size，不是分区大小 104857600" >&2
+stock_size=$(stat -c%s "$STOCK" 2>/dev/null || stat -f%z "$STOCK")
+if [[ "$size" != "$stock_size" ]]; then
+  echo "镜像大小 $size，不是分区大小 $stock_size" >&2
   exit 1
 fi
 
