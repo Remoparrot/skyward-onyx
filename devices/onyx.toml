@@ -88,6 +88,15 @@ gain = "/sys/bus/i2c/devices/5-005a/gain"
 resonance = "/sys/bus/i2c/devices/5-005a/f0"
 strength = { lightest = 0.35, strongest = 1.0 }
 
+# Xiaomi's memory extension keeps its swap file in /data/extm: six gigabytes
+# under a name made afresh at every start, sealed with a key only that start
+# of the phone had. Opening it in a later start answers ENOKEY, as the
+# recovery's own backup found, and what it holds is memory, not the user's
+# data: a restore would write back a swap file that cannot open. It is left
+# out, as the phone's own system makes it again.
+[backup]
+data_skipped = ["extm"]
+
 # The stock build the recovery is made on: the Chinese system's
 # OS4.0.2.0, whose full update package on the phone maker's own download
 # server holds the recovery partition the recovery is built on top of. The
