@@ -5,7 +5,7 @@ model = "Redmi Turbo 4 Pro"
 ab = true
 soc = { hans = "第四代骁龙®8s移动平台", hant = "Snapdragon® 8s Gen 4 行動平台", en = "Snapdragon® 8s Gen 4 Mobile Platform" }
 os_version_prop = "ro.mi.os.version.incremental"
-version = "0.3.1-onyx.3"
+version = "0.3.1-onyx.4"
 
 [display]
 # The panel's own mode: 1280 by 2772, the 6.83 inch 1.5K panel the POCO F7

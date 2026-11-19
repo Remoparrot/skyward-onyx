@@ -2,7 +2,7 @@
 
 > 状态：**现行**
 > 最后更新：2026-11-19
-> 对应版本：`v0.3.1-onyx.3`
+> 对应版本：`v0.3.1-onyx.4`
 > 设备：Redmi Turbo 4 Pro（`onyx`）· 构建底包 OS4.0.2.0.XOLCNXM（Android 17）；真机系统已到 OS4.0.4.0.XOLCNXM
 
 ---
@@ -11,16 +11,16 @@
 
 | 项 | 值 |
 | --- | --- |
-| 版本 | `v0.3.1-onyx.3`（上游 v0.3.1 + onyx.2 的安装期两处修复 + data 备份跳过 `/data/extm`） |
+| 版本 | `v0.3.1-onyx.4`（上游 v0.3.1 + 0001–0008：库顺序、按设备版本、分区工具、Root 模块、文件管理入口） |
 | 构建日期 | 2026-11-19 |
 | 镜像 | `recovery.img` · 104,857,600 字节 |
-| 镜像 SHA-256 | `a525afa9fef1d2166547b7b2ac21f8c99053960730e93f77f94199c063d06376` |
-| ramdisk | 50,815,375 字节（LZ4）· 1062 个 cpio 条目 |
-| 内含 skyward | 8,965,824 字节 · `d470bc4068b821759c67813d3593e67e64bf89831c40f3cd27211f153cd19e13` |
+| 镜像 SHA-256 | `5ed7093847dd4e88eeb6c8dc369dd4bba9e209260794c76dbb552a23cc4451bd` |
+| ramdisk | 50,848,041 字节（LZ4）· 1062 个 cpio 条目 |
+| 内含 skyward | 9,021,808 字节 · `e00535ab8e94baa19ccb5a9015c196febe4c60ac4239a3bb9881ca83d5599f5f` |
 | zip（在线更新用） | 本次未打；在线更新优先取 release 里的裸 `recovery.img`，不需要 zip |
 | 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · 104,857,600 字节 · `ce53850714fe2ca9ab22600a00e71813df2775dc94244192c83a224d7ecd3357` |
-| 上游 | `kirklin/skyward` @ `bd34c05`（v0.3.1）+ 0001–0007 |
-| 真机 | ✅ 已刷入 onyx：`/data` 自动挂载、user 0 CE 自动解开（旧版保存的锁屏密码）、WLAN 自动连接 5 GHz 并上网、首页读数、息屏再点亮先出锁屏（模糊快照）、设置页新滑块/开关、关于本机显示 `0.3.1-onyx.3`。data 备份 34.4 GB 跑通并校验，验证时用的是与本版只差版本号的测试镜像（本版刷入后没有复跑备份）。触摸与振动未逐项复测，见第 2/3 节。onyx.2 的安装期修复本身尚未跑过一次完整 OTA，见第 3 节 |
+| 上游 | `kirklin/skyward` @ `bd34c05`（v0.3.1）+ 0001–0008 |
+| 真机 | ✅ 已刷入 onyx：`dmesg` 为 `onyx 0.3.1-onyx.4 recovery up`，qseecomd / ssgtzd / keymint / gatekeeper 在跑；新增文件管理入口 / 分区工具（A/B 合并 + 搜索）/ Root 模块页面随镜像提供，页面操作待解锁后复验 |
 
 发布资产在 [Releases](https://github.com/Remoparrot/skyward-onyx/releases)；仓库内只有源码、补丁、配置和文档。
 
@@ -128,7 +128,7 @@
 
 ## 4. 当前阻塞 / 下一步
 
-> **onyx 特性构建（2026-11-19，版本号仍为 v0.3.1-onyx.3）**：补丁 0008 已应用到源码并重编，镜像 `out/skyward-v0.3.1-onyx.3-features.img`（sha256 `1512e723d9d78d1ce86097dbcd9e5ad2f52ed38908d883eaf89ddf835a0816db`）已 `fastboot flash recovery` 刷入 onyx，启动到解密页；`dmesg` 为 `onyx 0.3.1-onyx.3 recovery up`，qseecomd / ssgtzd / keymint / gatekeeper 在跑。文件管理入口 / 分区工具 / Root 模块页面待解锁后复验。该镜像未替换 Release 资产。
+> **v0.3.1-onyx.4 已构建并刷入（2026-11-19）**：版本号按用户要求加 1；镜像 `out/skyward-v0.3.1-onyx.4-OS4.0.2.0.XOLCNXM.img`，sha256 `5ed7093847dd4e88eeb6c8dc369dd4bba9e209260794c76dbb552a23cc4451bd`。Release 尚未创建。
 
 
 0. **`/data/extm` 修复已随 `v0.3.1-onyx.3` 发出**（2026-11-19 晚）：`devices/onyx.toml` 的 `[backup] data_skipped = ["extm"]` 解决 data 备份必失败（坑 33），真机刷入本版并核对版本 / 配置 / 二进制哈希；备份复跑按用户要求中止。剩余：恢复（restore）流程、系统分区 / 启动分区 / EFS 备份、U 盘目标未验证。详见 `sessions/2026-11-19-backup-extm.md`。

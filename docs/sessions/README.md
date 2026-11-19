@@ -18,3 +18,4 @@
 | 2026-11-19 | [data 备份每次失败：内存扩展的交换文件](2026-11-19-backup-extm.md) | 复现抓到 `/data/extm` 的 6 GiB 交换文件 `ENOKEY`；`[backup] data_skipped = ["extm"]` 后 34.4 GB data 备份真机跑通并校验 | 已完成（restore 未验证） |
 | 2026-11-19 | [把 onyx.2 刷进真机](2026-11-19-flash-onyx2.md) | `fastboot flash recovery` 写 onyx.2 后 `/system/bin/recovery` 哈希 `6e2c030e…6840` 与构建记录一致，`/data` 自动打开；验证时以 `recovery` 名字执行二进制触发黑屏重启，重启后未复验 UI；cmdline 底包显示 `OS4.0.3.1.XOLCN`，待确认 | 已完成（UI 未复验） |
 | 2026-11-19 | [vermeer 移植与两处通用修复](2026-11-19-vermeer-port.md) | 为 K70 移植时反哺：VNDK 库顺序、按设备版本、分区工具 / Root 模块 / 文件管理入口；onyx 未重编未上机 | 部分完成 |
+| 2026-11-19 | [onyx.4：分区工具 / Root 模块 / 文件管理入口](2026-11-19-onyx4.md) | 版本号加 1；带 0008 的分区/Root 模块/库顺序重新构建刷入，启动到解密页，密钥服务全在跑；页面操作待复验 | 部分完成 |

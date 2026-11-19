@@ -34,7 +34,7 @@ recovery 是**会刷坏分区、会让手机起不来**的东西，比普通 App
 
 ```
 接手确认
-- 当前版本：v0.3.1-onyx.2（recovery.img f1b7685e…）
+- 当前版本：v0.3.1-onyx.4（recovery.img 5ed70938…）
 - 设备与底包：onyx / OS4.0.2.0.XOLCNXM
 - 本次目标：<一句话>
 - 是否需要真机 / 是否会刷机：<是 / 否>

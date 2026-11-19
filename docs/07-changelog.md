@@ -6,6 +6,40 @@
 
 ---
 
+## v0.3.1-onyx.4 · 2026-11-19
+
+**主题：分区工具、Root 模块管理、文件管理入口；密钥程序库顺序**
+
+| 项 | 值 |
+| --- | --- |
+| 镜像 | `recovery.img` · 104,857,600 字节 |
+| SHA-256 | `5ed7093847dd4e88eeb6c8dc369dd4bba9e209260794c76dbb552a23cc4451bd` |
+| 内含 skyward | 9,021,808 字节 · `e00535ab8e94baa19ccb5a9015c196febe4c60ac4239a3bb9881ca83d5599f5f` |
+| ramdisk | 50,848,041 字节 · 1062 条 |
+| 底包 | OS4.0.2.0.XOLCNXM（构建底包不变；真机系统 OS4.0.4.0.XOLCNXM） |
+| 上游 | `kirklin/skyward` @ `bd34c05`（v0.3.1）+ 0001–0008 |
+
+### 新增
+
+- 安装页「分区」（在「安装方式」上面）：A/B 分区合并成一项，点进去选槽位；可把分区提取成 `/sdcard/Download/<name>.img`，或把 `/sdcard/Download` 里的 `.img` 刷入；带分区搜索；
+- 首页「安装」下面新增「Root 模块管理」：读 `/data/adb/modules`，开关写/删 `disable`；
+- 文件管理入口移到首页设备卡片内、读数条正下方；
+- 补丁 0008：vendor/odm 程序的 VNDK 库排到安装系统库之前；`[device] version` + `SKYWARD_VERSION`。
+
+### 验证（onyx 真机）
+
+- `fastboot flash recovery` 刷入后启动到解密页；
+- `dmesg`：`onyx 0.3.1-onyx.4 recovery up`；
+- qseecomd / ssgtzd / keymint / gatekeeper 在跑，`vendor.sys.listeners.registered=true`。
+
+### 未验证
+
+- 解锁后的 `/data` 解密、文件管理 / 分区 / Root 模块页面的视觉与操作；
+- 安装整包 / 备份 / 恢复 / MTP；
+- 本版本尚未创建 Release。
+
+---
+
 ## v0.3.1-onyx.3 · 2026-11-19
 
 **主题：data 备份不再被小米内存扩展的 `/data/extm` 交换文件卡死**
