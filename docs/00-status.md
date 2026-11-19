@@ -128,7 +128,7 @@
 
 ## 4. 当前阻塞 / 下一步
 
-> **源码领先于已发布镜像（2026-11-19）**：补丁 0008 与脚本的 `CONFIG` 化已进仓库，onyx 镜像仍是 v0.3.1-onyx.3，尚未用新源码重打、未在 onyx 上刷机。0008 改了密钥程序的库顺序，发 next onyx 镜像前必须真机复验 qseecomd 与 `/data` 解密。
+> **onyx 特性构建（2026-11-19，版本号仍为 v0.3.1-onyx.3）**：补丁 0008 已应用到源码并重编，镜像 `out/skyward-v0.3.1-onyx.3-features.img`（sha256 `1512e723d9d78d1ce86097dbcd9e5ad2f52ed38908d883eaf89ddf835a0816db`）已 `fastboot flash recovery` 刷入 onyx，启动到解密页；`dmesg` 为 `onyx 0.3.1-onyx.3 recovery up`，qseecomd / ssgtzd / keymint / gatekeeper 在跑。文件管理入口 / 分区工具 / Root 模块页面待解锁后复验。该镜像未替换 Release 资产。
 
 
 0. **`/data/extm` 修复已随 `v0.3.1-onyx.3` 发出**（2026-11-19 晚）：`devices/onyx.toml` 的 `[backup] data_skipped = ["extm"]` 解决 data 备份必失败（坑 33），真机刷入本版并核对版本 / 配置 / 二进制哈希；备份复跑按用户要求中止。剩余：恢复（restore）流程、系统分区 / 启动分区 / EFS 备份、U 盘目标未验证。详见 `sessions/2026-11-19-backup-extm.md`。

@@ -1,6 +1,6 @@
 # vermeer 移植与两处通用修复（2026-11-19）
 
-状态：**部分完成**（源码改动已落地；onyx 未重编未上机）
+状态：**部分完成**（源码已推送；onyx 已用同一版本号重编并刷入，UI 解锁后待复验）
 关联版本：v0.3.1-onyx.3（源码领先于已发布镜像）
 关联提交：（本次提交）
 
@@ -42,10 +42,10 @@
 
 - vermeer 真机（K70，b 槽）：`dmesg` 显示 `vermeer 0.3.1-vermeer.1 recovery up`；qseecomd / ssgtzd / keymint / gatekeeper 全起来，`/data` 解密；5 GHz 连上 5260 MHz；锁屏、文件管理、Root 模块页、分区页（A/B 合并 + 搜索）在真机打开。
 - 镜像：`e661d91741689cb10ed7f57df0a2771e3b3f6ca35c1ab38dcf02ef58f31fe2fd`（vermeer 仓库）。
-- **onyx 未验证**：本次没有重编 onyx 镜像、没有在 onyx 上刷机；新代码对 onyx 的影响只经过代码审查（库顺序对 onyx 也应更正确）。
+- **onyx 已验证到哪一步**：用同一版本号 `0.3.1-onyx.3` 重编并 `fastboot flash recovery` 刷入 onyx（镜像 `1512e723…`），启动到解密页；`dmesg` 为 `onyx 0.3.1-onyx.3 recovery up`，qseecomd / ssgtzd / keymint / gatekeeper 全部在跑，说明 VNDK 库顺序在 onyx 上也成立。文件管理/分区/Root 模块页面的视觉效果待解锁后复验。
 
 ## 7. 未完成 / 下一步 / 风险
 
-- 重打 onyx 镜像并在 onyx 上刷一次，确认 0008 的库顺序与首页改动没有回归（尤其 qseecomd 与文件管理入口）。
+- 解锁 onyx 的 data 后复验文件管理入口、分区工具（A/B 合并/搜索/提取）与 Root 模块页面；确认回归后再考虑替换 `v0.3.1-onyx.3` 的 Release 资产（用户要求版本号不变）。
 - KernelSU root 未做。
-- 风险：0008 改的是所有设备的服务启动路径；onyx 上没跑过，发版前必须真机验证。
+- 风险：0008 改的是所有设备的服务启动路径；onyx 已在真机启动并确认密钥服务在跑，但安装/备份等流程未复验。
