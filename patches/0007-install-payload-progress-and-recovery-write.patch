@@ -1,0 +1,350 @@
+diff --git a/crates/skyward-install/src/fuse.rs b/crates/skyward-install/src/fuse.rs
+index 9dda5be..748ace8 100644
+--- a/crates/skyward-install/src/fuse.rs
++++ b/crates/skyward-install/src/fuse.rs
+@@ -15,6 +15,8 @@ use std::fs::File;
+ use std::mem::size_of;
+ use std::os::unix::fs::FileExt;
+ use std::path::Path;
++use std::sync::atomic::{AtomicU64, Ordering};
++use std::sync::Arc;
+ use zerocopy::{FromBytes, IntoBytes};
+ 
+ pub const MOUNT_POINT: &str = "/sideload";
+@@ -107,6 +109,14 @@ pub(crate) fn file_block(size: u64) -> u32 {
+     u32::try_from(fits).map_or(u32::MAX, |b| b.max(FILE_BLOCK))
+ }
+ 
++/// The range of the package that is its update's payload, watched once the
++/// package is known; the bytes read from it are the update's progress.
++#[derive(Default)]
++pub(crate) struct Payload {
++    pub(crate) start: AtomicU64,
++    pub(crate) len: AtomicU64,
++}
++
+ /// The filesystem's state: the package's blocks as served so far.
+ pub struct Server {
+     offer: Offer,
+@@ -119,6 +129,10 @@ pub struct Server {
+     fault: Option<Fault>,
+     /// The furthest byte any read reached.
+     served: u64,
++    /// The range of the package that is the update's payload, watched by
++    /// the mount, and the bytes of it reads have served.
++    pub(crate) payload: Arc<Payload>,
++    pub(crate) payload_read: u64,
+ }
+ 
+ impl Server {
+@@ -130,6 +144,8 @@ impl Server {
+             block: vec![0; offer.block_size as usize],
+             fault: None,
+             served: 0,
++            payload: Arc::new(Payload::default()),
++            payload_read: 0,
+         }
+     }
+ 
+@@ -137,6 +153,11 @@ impl Server {
+         self.served
+     }
+ 
++    /// How many bytes of the payload reads have served so far.
++    pub fn payload_read(&self) -> u64 {
++        self.payload_read
++    }
++
+     pub fn fault(&self) -> Option<&Fault> {
+         self.fault.as_ref()
+     }
+@@ -241,7 +262,16 @@ impl Server {
+             data.extend_from_slice(&self.block[within..within + take]);
+             at += take as u64;
+         }
+-        self.served = self.served.max(at.min(self.offer.size));
++        let start = offset.min(self.offer.size);
++        let end = at.min(self.offer.size);
++        let base = self.payload.start.load(Ordering::Relaxed);
++        let len = self.payload.len.load(Ordering::Relaxed);
++        let from = start.max(base);
++        let to = end.min(base.saturating_add(len));
++        if to > from {
++            self.payload_read += to - from;
++        }
++        self.served = self.served.max(end);
+         reply(unique, &data)
+     }
+ 
+@@ -286,7 +316,7 @@ pub use device::{mount, Mount, Mounted};
+ 
+ #[cfg(target_os = "android")]
+ mod device {
+-    use super::{Fault, Handled, Server, Source, EXIT, MOUNT_POINT};
++    use super::{Fault, Handled, Payload, Server, Source, EXIT, MOUNT_POINT};
+     use crate::adb::Offer;
+     use anyhow::{Context, Result};
+     use std::ffi::CString;
+@@ -313,6 +343,8 @@ mod device {
+     pub struct Mount<S> {
+         thread: JoinHandle<(S, Result<Option<Fault>>)>,
+         served: Arc<AtomicU64>,
++        payload: Arc<Payload>,
++        payload_read: Arc<AtomicU64>,
+     }
+ 
+     /// Mount the package `offer` describes at /sideload, read-only.
+@@ -349,21 +381,26 @@ mod device {
+         /// Serve the package from `source`.
+         pub fn serve<S: Source + Send + 'static>(self, source: S) -> Mount<S> {
+             let served = Arc::new(AtomicU64::new(0));
++            let payload = Arc::new(Payload::default());
++            let watched = payload.clone();
++            let payload_read = Arc::new(AtomicU64::new(0));
+             let reach = served.clone();
++            let reading = payload_read.clone();
+             let thread = thread::Builder::new()
+                 .name("sideload-fuse".into())
+                 .spawn(move || {
+                     let mut source = source;
+                     let mut server = Server::new(self.offer);
+-                    let result = serve(&self.dev, &mut server, &mut source, &reach);
++                    server.payload = watched;
++                    let result = serve(&self.dev, &mut server, &mut source, &reach, &reading);
+                     (source, result.map(|()| server.fault().cloned()))
+                 })
+                 .expect("the FUSE thread starts");
+-            Mount { thread, served }
++            Mount { thread, served, payload, payload_read }
+         }
+     }
+ 
+-    fn serve(dev: &File, server: &mut Server, source: &mut impl Source, served: &AtomicU64) -> Result<()> {
++    fn serve(dev: &File, server: &mut Server, source: &mut impl Source, served: &AtomicU64, payload_read: &AtomicU64) -> Result<()> {
+         let mut buf = vec![0u8; REQUEST_BUFFER];
+         loop {
+             let n = match { dev }.read(&mut buf) {
+@@ -376,6 +413,7 @@ mod device {
+             let mut fetch = |index: u64, out: &mut [u8]| source.read_block(index, out);
+             let handled = server.handle(&buf[..n], &mut fetch)?;
+             served.store(server.served(), Ordering::Relaxed);
++            payload_read.store(server.payload_read(), Ordering::Relaxed);
+             match handled {
+                 Handled::Reply(r) => answer(dev, &r)?,
+                 Handled::Silent => {}
+@@ -400,6 +438,18 @@ mod device {
+             self.served.load(Ordering::Relaxed)
+         }
+ 
++        /// Watch the package's payload range, so the bytes read from it can
++        /// be told from the package's directory and metadata.
++        pub fn watch_payload(&self, start: u64, size: u64) {
++            self.payload.start.store(start, Ordering::Relaxed);
++            self.payload.len.store(size, Ordering::Relaxed);
++        }
++
++        /// How many bytes of the payload reads have served.
++        pub fn payload_read(&self) -> u64 {
++            self.payload_read.load(Ordering::Relaxed)
++        }
++
+         /// Stop serving and unmount. The source always comes back; the
+         /// result says whether serving went well, and why the package
+         /// stopped being readable if it did.
+@@ -529,6 +579,21 @@ mod tests {
+         assert_eq!(fetches.get(), 3);
+     }
+ 
++    #[test]
++    fn only_bytes_of_the_payload_range_count() {
++        let (pkg, fetches) = (package(), Cell::new(0));
++        let (mut server, mut fetch) = (server_for(&pkg), fetch_from(&pkg, &fetches));
++        server.payload.start.store(4096, Ordering::Relaxed);
++        server.payload.len.store(4096, Ordering::Relaxed);
++        server.handle(&read_request(0, 4096), &mut fetch).unwrap();
++        assert_eq!(server.payload_read(), 0, "the package before the payload is not it");
++        server.handle(&read_request(4096, 4096), &mut fetch).unwrap();
++        assert_eq!(server.payload_read(), 4096);
++        server.handle(&read_request(4096, 4096), &mut fetch).unwrap();
++        assert_eq!(server.payload_read(), 8192, "a read again counts again, and the caller clamps");
++        assert_eq!(server.served(), 8192, "the package was read as far as byte 8192");
++    }
++
+     #[test]
+     fn a_block_that_changes_fails_every_read_after() {
+         let (mut pkg, fetches) = (package(), Cell::new(0));
+diff --git a/crates/skyward-install/src/image.rs b/crates/skyward-install/src/image.rs
+index 1d5294e..aa9c3d5 100644
+--- a/crates/skyward-install/src/image.rs
++++ b/crates/skyward-install/src/image.rs
+@@ -12,6 +12,11 @@ use std::fs::OpenOptions;
+ use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
+ use std::path::{Path, PathBuf};
+ 
++#[cfg(any(target_os = "linux", target_os = "android"))]
++mod protection;
++#[cfg(any(target_os = "linux", target_os = "android"))]
++use protection::ReadOnly;
++
+ const BOOT_MAGIC: &[u8] = b"ANDROID!";
+ const VENDOR_BOOT_MAGIC: &[u8] = b"VNDRBOOT";
+ /// A dtbo image starts with this, big-endian.
+@@ -202,8 +207,15 @@ pub fn partitions(kind: ImageKind, dir: &Path) -> Result<Vec<&'static str>> {
+ /// of all.
+ pub fn flash<R: Read + Seek>(image: &mut R, len: u64, devices: &[PathBuf], progress: &mut dyn FnMut(u64, u64)) -> Result<()> {
+     ensure!(!devices.is_empty(), "no partition to write");
++    // update_engine's verifier can leave the partitions it wrote read-only,
++    // and a read-only block device turns every write away. Only the devices
++    // picked here get their flag cleared, and each gets it back after.
++    #[cfg(any(target_os = "linux", target_os = "android"))]
++    let mut flags = Vec::with_capacity(devices.len());
+     let mut outs = Vec::with_capacity(devices.len());
+     for path in devices {
++        #[cfg(any(target_os = "linux", target_os = "android"))]
++        flags.push(ReadOnly::clear(path)?);
+         let mut f = OpenOptions::new().read(true).write(true).open(path).with_context(|| format!("open {}", path.display()))?;
+         let size = f.seek(SeekFrom::End(0)).with_context(|| format!("find the size of {}", path.display()))?;
+         f.seek(SeekFrom::Start(0)).with_context(|| format!("rewind {}", path.display()))?;
+@@ -259,6 +271,19 @@ pub fn flash<R: Read + Seek>(image: &mut R, len: u64, devices: &[PathBuf], progr
+         }
+         ensure!(back.finalize() == written, "{} reads back different from what was written", path.display());
+     }
++    drop(outs);
++    #[cfg(any(target_os = "linux", target_os = "android"))]
++    {
++        let mut failed = None;
++        for flag in &mut flags {
++            if let Err(e) = flag.restore() {
++                failed.get_or_insert(e);
++            }
++        }
++        if let Some(e) = failed {
++            return Err(e);
++        }
++    }
+     Ok(())
+ }
+ 
+diff --git a/crates/skyward-install/src/image/protection.rs b/crates/skyward-install/src/image/protection.rs
+new file mode 100644
+index 0000000..7ac1411
+--- /dev/null
++++ b/crates/skyward-install/src/image/protection.rs
+@@ -0,0 +1,76 @@
++//! Temporarily permit writes to selected block devices left read-only by
++//! update_engine's verifier. Ordinary files never receive block ioctls.
++
++use anyhow::{ensure, Context, Result};
++use std::fs::File;
++use std::io;
++use std::os::fd::AsRawFd;
++use std::os::unix::fs::FileTypeExt;
++use std::path::{Path, PathBuf};
++
++const BLKROSET: u32 = 0x125d;
++const BLKROGET: u32 = 0x125e;
++
++fn ioctl(file: &File, request: u32, flag: &mut libc::c_int) -> io::Result<()> {
++    // libc::Ioctl is c_int on bionic, c_ulong on glibc.
++    if unsafe { libc::ioctl(file.as_raw_fd(), request as libc::Ioctl, flag) } != 0 {
++        return Err(io::Error::last_os_error());
++    }
++    Ok(())
++}
++
++pub(super) fn read_only(file: &File) -> io::Result<bool> {
++    let mut flag = 0;
++    ioctl(file, BLKROGET, &mut flag)?;
++    Ok(flag != 0)
++}
++
++pub(super) fn set_read_only(file: &File, on: bool) -> io::Result<()> {
++    ioctl(file, BLKROSET, &mut libc::c_int::from(on))
++}
++
++/// A device left read-only, held open so its flag can go back as it was.
++pub(super) struct ReadOnly {
++    path: PathBuf,
++    held: Option<File>,
++}
++
++impl ReadOnly {
++    /// Let writes through to `path` for as long as this is alive, where it
++    /// is a block device left read-only; the flag goes back on drop, or
++    /// where [`ReadOnly::restore`] is told to.
++    pub fn clear(path: &Path) -> Result<Self> {
++        let file = File::open(path).with_context(|| format!("open {} read-only", path.display()))?;
++        let block = file.metadata().with_context(|| format!("stat {}", path.display()))?.file_type().is_block_device();
++        let mut guard = Self { path: path.to_path_buf(), held: None };
++        if block && read_only(&file).with_context(|| format!("read the read-only flag of {}", path.display()))? {
++            // Arm before changing anything: even a failed check of the
++            // change must put the original flag back.
++            guard.held = Some(file);
++            let file = guard.held.as_ref().expect("just armed");
++            set_read_only(file, false).with_context(|| format!("clear the read-only flag of {}", path.display()))?;
++            ensure!(!read_only(file)?, "{} stays read-only", path.display());
++        }
++        Ok(guard)
++    }
++
++    /// Put the flag back as it was found; nothing happens where it was not
++    /// read-only to begin with.
++    pub fn restore(&mut self) -> Result<()> {
++        if let Some(file) = &self.held {
++            set_read_only(file, true).with_context(|| format!("restore the read-only flag of {}", self.path.display()))?;
++            ensure!(read_only(file)?, "{} did not become read-only again", self.path.display());
++            // Only now is there nothing left to put back.
++            self.held = None;
++        }
++        Ok(())
++    }
++}
++
++impl Drop for ReadOnly {
++    fn drop(&mut self) {
++        if let Err(e) = self.restore() {
++            let _ = skyward_sys::kmsg(&format!("install: {e:#}"));
++        }
++    }
++}
+diff --git a/crates/skyward-install/src/run.rs b/crates/skyward-install/src/run.rs
+index e2dea55..12419cd 100644
+--- a/crates/skyward-install/src/run.rs
++++ b/crates/skyward-install/src/run.rs
+@@ -612,6 +612,7 @@ fn update_system<S>(ctx: &mut Context, mount: &Mount<S>, update: &Update) -> Res
+ /// being flashed.
+ fn hold(ctx: &Context, current: Slot) -> Result<Option<Kept>> {
+     if !ctx.options.keep {
++        let _ = kmsg("install: this recovery is not asked to be kept, so it is not held");
+         return Ok(None);
+     }
+     let kept = Kept::hold(Path::new(skyward_block::BY_NAME), current).context("hold this recovery from its partition")?;
+@@ -626,7 +627,10 @@ fn hold(ctx: &Context, current: Slot) -> Result<Option<Kept>> {
+ /// screen how far it is and then how it went.
+ fn reflash(ctx: &Context, kept: &Kept, next: Result<Slot>) {
+     let slots = match next.and_then(|next| kept.wanted(next)) {
+-        Ok(slots) if slots.is_empty() => return,
++        Ok(slots) if slots.is_empty() => {
++            let _ = kmsg("install: the recovery partitions hold this build already, so nothing is written back");
++            return;
++        }
+         Ok(slots) => slots,
+         Err(e) => return ctx.send(Event::Reflashed(Reflash::Failed(format!("{e:#}")))),
+     };
+@@ -726,6 +730,7 @@ fn apply<S>(ctx: &Context, mount: &Mount<S>, update: &Update) -> Result<i32> {
+ 
+     let total = update.payload_size;
+     let mut stage = Stage::Writing { done: 0, total };
++    mount.watch_payload(update.payload_offset, total);
+     ctx.send(Event::Progress(stage.clone()));
+     let mut told = Instant::now();
+     let (mut partitions, mut verifying, mut finishing, mut error) = (0, None, false, None);
+@@ -745,7 +750,7 @@ fn apply<S>(ctx: &Context, mount: &Mount<S>, update: &Update) -> Result<i32> {
+         } else if let Some((index, partition)) = &verifying {
+             Stage::Verifying { index: *index, count: partitions.max(index + 1), partition: partition.clone() }
+         } else {
+-            Stage::Writing { done: mount.served().saturating_sub(update.payload_offset).min(total), total }
++            Stage::Writing { done: mount.payload_read().min(total), total }
+         };
+         let moved_on = std::mem::discriminant(&now) != std::mem::discriminant(&stage);
+         if now != stage && (moved_on || told.elapsed() >= PROGRESS_EVERY) {

@@ -100,7 +100,24 @@ v0.3.0-onyx.1 … onyx.5 的 UI 改动移植到上游 0.3.1 的页面状态机�
 
 **行数**：约 250
 
-把 workspace 版本改成 `0.3.1-onyx.1`，并更新 `Cargo.lock`（新增 `qrcodegen`、`sha2` 等依赖）。
+把 workspace 版本改成 `0.3.1-onyx.2`，并更新 `Cargo.lock`（新增 `qrcodegen`、`sha2` 等依赖）。
+
+---
+
+## 0007-install-payload-progress-and-recovery-write.patch
+
+**文件**：`crates/skyward-install/src/{fuse.rs,run.rs,image.rs}`、`crates/skyward-install/src/image/protection.rs`（新增）
+
+**行数**：约 200
+
+两个安装期的老问题一起修，都只在「安装」那条路上，和设备无关：
+
+1. **进度一到 100% 就不动**：原来的进度取的是「包被读到的最远字节」（`Mount::served()`）。`package::identify` 为了读 zip 目录会读文件末尾的中央目录，`served()` 立刻等于包大小，`done = served - payload_offset` 被 clamp 成 `total`，于是进度条一开始就是 100%，真正写系统的那十几分钟一直不动。现在 `apply` 先用 `Mount::watch_payload(payload_offset, payload_size)` 标出 payload 区间，FUSE 只累计落在这个区间里的读字节（`Mount::payload_read()`），进度随 update_engine 真正读到的 payload 走。
+2. **整包刷完不自动刷回 Skyward**：Android 17 的 `update_engine` 校验完写入的分区后，会把目标块设备置成只读（`BLKRO`），Skyward 收尾的 `Kept::write()` 再打开 `recovery_<slot>` 写就 `EPERM`，`Reflashed` 落到 `Failed`，recovery 分区留着 ROM 的原厂 recovery。现在 `image::flash()` 在写之前对**选中的那几个设备**读 `BLKROGET`、必要时 `BLKROSET 0` 清掉，写完 / 校验读完再把原来的标志放回去（成功和出错路径都放，`ReadOnly` 的 `Drop` 兜底）；普通文件不会被 ioctl。
+
+同补丁顺手加了两条诊断：安装页没勾「自动重新刷入 Skyward」、以及收尾时判断「两个槽位都已经是这个 build，不用写」，都会留 kmsg 行，下次看 `dmesg` 能分辨是没触发还是写失败。
+
+测试：`crates/skyward-install/src/fuse.rs` 加 `only_bytes_of_the_payload_range_count`（payload 区间之外的读不计入，重复读同区间会重复计、由调用方 clamp）。
 
 ---
 
@@ -123,7 +140,7 @@ done
 
 ## 验证
 
-在一个干净的上游工作树上（`bd34c05`）依次 apply 六个补丁，结果与 `vendor/skyward` 的当前树逐字一致（2026-11-14 用 `git write-tree` 比对：两边 tree 相同）。
+在一个干净的上游工作树上（`bd34c05`）依次 apply 七个补丁，结果与 `vendor/skyward` 的当前树逐字一致（2026-11-14 用 `git write-tree` 比对 0001–0006；2026-11-19 用 `diff -r` 比对 0001–0007）。
 
 ## 修改 / 新增补丁
 
