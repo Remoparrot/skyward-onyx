@@ -128,7 +128,7 @@
 
 ## 4. 当前阻塞 / 下一步
 
-> **v0.3.1-onyx.4 已构建并刷入（2026-11-19）**：版本号按用户要求加 1；镜像 `out/skyward-v0.3.1-onyx.4-OS4.0.2.0.XOLCNXM.img`，sha256 `5ed7093847dd4e88eeb6c8dc369dd4bba9e209260794c76dbb552a23cc4451bd`。Release 尚未创建。
+> **v0.3.1-onyx.4 已发布（2026-11-19）**：tag `v0.3.1-onyx.4` → `e182a4e`，release id `451399594`，资产 `recovery.img`（104,857,600 字节，sha256 `5ed70938…`）、`recovery-stock-OS4.0.2.0.XOLCNXM.img`（`ce538507…`）、`SHA256SUMS`。页面操作待解锁后复验。
 
 
 0. **`/data/extm` 修复已随 `v0.3.1-onyx.3` 发出**（2026-11-19 晚）：`devices/onyx.toml` 的 `[backup] data_skipped = ["extm"]` 解决 data 备份必失败（坑 33），真机刷入本版并核对版本 / 配置 / 二进制哈希；备份复跑按用户要求中止。剩余：恢复（restore）流程、系统分区 / 启动分区 / EFS 备份、U 盘目标未验证。详见 `sessions/2026-11-19-backup-extm.md`。

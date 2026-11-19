@@ -14,7 +14,7 @@
 
 | 项 | 值 |
 | --- | --- |
-| 最新版本 | `v0.3.1-onyx.4`（本地构建；Release 待发） |
+| 最新 release | [`v0.3.1-onyx.4`](https://github.com/Remoparrot/skyward-onyx/releases/tag/v0.3.1-onyx.4) |
 | 镜像 | `recovery.img` · **104,857,600 字节**（整分区） |
 | SHA-256 | `5ed7093847dd4e88eeb6c8dc369dd4bba9e209260794c76dbb552a23cc4451bd` |
 | ramdisk | 50,848,041 字节（LZ4）· 1062 个 cpio 条目 |

@@ -36,7 +36,7 @@
 
 - 解锁后的 `/data` 解密、文件管理 / 分区 / Root 模块页面的视觉与操作；
 - 安装整包 / 备份 / 恢复 / MTP；
-- 本版本尚未创建 Release。
+- Release：tag `v0.3.1-onyx.4` → `e182a4e`，release id `451399594`（`recovery.img` + 原厂 recovery + `SHA256SUMS`）。
 
 ---
 
