@@ -1,7 +1,7 @@
 # data 备份每次失败：内存扩展的交换文件（2026-11-19）
 
 状态：已完成
-关联版本：`v0.3.1-onyx.2` + `devices/onyx.toml` 一项（真机刷入 `out/test-skip-extm.img`）
+关联版本：`v0.3.1-onyx.2` → `v0.3.1-onyx.3`（真机刷入 onyx.3）
 关联提交：a21ea0e（config）+ 本次 docs 提交
 
 ## 1. TL;DR
@@ -104,9 +104,10 @@ sha256 = "8c98ce7cdf78d7b9965c177b4cd37792427813412f5985adb7e3f2a7934b2dfc"
 
 - 恢复（restore）没有跑：35 GB 写回 /data 是破坏性操作，本次不做。`data_key` 校验、`data_skipped` 在解包侧的跳过逻辑只有单测覆盖。
 - 底包 `OS4.0.4.0` 下服务路径 / VINTF 未逐项复核（本镜像仍构建在 `OS4.0.2.0` 原厂 recovery 上）。
+- `v0.3.1-onyx.3` 刷入后按用户要求**没有再跑第二遍备份**（第二遍跑到 22% 时中止，随后连同第一遍的 34.4 GB 备份一起删除：`/data` 从 98 GB 回到 55 GB）。本版与跑通备份的测试镜像只差版本号字符串。
 
 ## 7. 未完成 / 下一步 / 风险
 
-- 版本号仍是 `v0.3.1-onyx.2`：本次只动设备配置，手机侧二进制没有重编，所以首页/关于页仍显示 onyx.2。刷进手机的镜像是 `out/test-skip-extm.img`（未发版、未改 `SHA256SUMS`）。
-- 要发 `v0.3.1-onyx.3`：先改 `patches/0006-onyx-version.patch`（及 `vendor/skyward/Cargo.toml`）里的版本号 → `scripts/build-phone.sh`（NDK 在 `D:/skyward-work/ndk/android-ndk-r29`）→ `scripts/build-image.sh` → `scripts/verify-image.sh` → 刷机 → 再跑一次 data 备份，并按 agent.md 第 6 节同步 `07-changelog.md` / `00-status.md` / `README.md` / `SHA256SUMS`。
+- **已发版**：`v0.3.1-onyx.3`（tag `v0.3.1-onyx.3`，release id `451265604`，<https://github.com/Remoparrot/skyward-onyx/releases/tag/v0.3.1-onyx.3>），资产 `recovery.img`（104,857,600 字节 · `a525afa9…0376`）、`recovery-stock-OS4.0.2.0.XOLCNXM.img`（`ce538507…cd3357`）、`SHA256SUMS`（182 字节）。版本号由补丁 0006 与 `Cargo.toml`/`Cargo.lock` 升到 `0.3.1-onyx.3`，二进制 8,965,824 字节 · `d470bc40…9e13`。
+- 仍未做：恢复（restore）全流程；系统分区 / 启动分区 / EFS 备份与 U 盘目标；onyx.2 的安装期修复要在真机上完整跑一次官方整包（见 `00-status.md` 第 4 节）。
 - 风险：如果 HyperOS 以后把交换文件搬到别的目录，data 备份会在新位置同样失败；这一条只对 `extm` 有效。恢复 data 备份时若 data 分区被重建过，会按设计拒绝（`Refusal::DataReset`）。
