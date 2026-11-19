@@ -54,6 +54,8 @@ adb shell /tmp/skyward data --user 0
 
 **如何避免**：开发测试统一用 `/tmp/skyward`；脚本里不要 `cp ... /tmp/recovery`。
 
+**2026-11-19 复现**：在运行中的 recovery 里执行 `/system/bin/recovery --version`（本意是读版本号）同样触发：命令无输出，随后黑屏重启，adb / fastboot 一起掉线（未写坏分区）。验收版本请用 `ls -l` + `sha256sum /system/bin/recovery`，不要去执行它。
+
 ---
 
 ## 4. onyx 没有 `touch_report`，只有 `touch_report_debug`
