@@ -6,6 +6,44 @@
 
 ---
 
+## v0.3.1-onyx.2 · 2026-11-19
+
+**主题：修「官方整包刷完不自动刷回 Skyward」与「刷整包时进度卡在 100%」**
+
+| 项 | 值 |
+| --- | --- |
+| 镜像 | `recovery.img` · 104,857,600 字节 |
+| SHA-256 | `f1b7685e60498e92a19cda4c27202b4e470074702dcc8f8991376bb4429a7d38` |
+| 内含 skyward | 8,959,728 字节 · `6e2c030e0e216845a4ec242ac8a7ff99f7448fa4e0ce9c06d56be0442ea06840` |
+| ramdisk | 50,811,639 字节 · 1062 条 |
+| 底包 | OS4.0.2.0.XOLCNXM（Android 17；与 onyx.1 相同） |
+| 上游 | `kirklin/skyward` @ `bd34c05`（v0.3.1）+ 0001–0007 |
+| zip | 未打（在线更新取裸 `recovery.img`） |
+
+### 1. 整包刷完，recovery 还是原厂的
+
+**现象**：在「安装」里选官方整包（`payload.bin` 那种），update_engine 一路成功，重启能进新系统；但再进 recovery 是原厂界面。`dmesg` 里要么没有 `install: this recovery written back to …`，要么是 `Reflashed(Failed("write /dev/block/by-name/recovery_b: Operation not permitted"))`。
+
+**根因**：Android 17 的 `update_engine` 在校验（`FilesystemVerifierAction`）结束后会把刚写完的目标块设备置为只读（`BLKRO`）。Skyward 收尾用 `Kept::write()` 打开 `recovery_<目标槽>` 写回自己时拿到 `EPERM`，于是 `Reflashed` 落到 `Failed`，recovery 分区里留着包里的原厂镜像。同一结论见上游 PR #48 的实机记录（「update_engine 校验后留下目标块设备只读、导致保留 recovery 写入 EPERM」）。
+
+**修法**（补丁 0007，`crates/skyward-install/src/image/protection.rs` + `image.rs`）：`image::flash()` 在写每个设备之前先用 `BLKROGET` 读标志，只读就用 `BLKROSET 0` 清掉；写完、`sync_all`、读回校验完再把标志恢复原样（成功与出错路径都恢复，`ReadOnly` 的 `Drop` 兜底并写 kmsg）。只对**这次选中的设备**做，普通文件不碰 ioctl。顺手加两条 kmsg：没打开「自动重新刷入 Skyward」、以及收尾判断「两个槽位都已经是这个 build、不用写」，下次看 `dmesg` 就能分辨是没触发还是写失败。
+
+### 2. 刷整包时进度一到 100% 就不动
+
+**现象**：进度条很快跳到 100%，之后十几分钟一动不动，实际还在写；写完才跳「完成」。
+
+**根因**：进度取的是「包被读到的最远字节」（`Mount::served()`）。`package::identify` 要读 zip 末尾的中央目录，那一下 `served()` 就等于整个包的大小，`done = served - payload_offset` 被 clamp 成 `total`，于是从第一秒就是 100%。
+
+**修法**（补丁 0007，`fuse.rs` + `run.rs`）：`apply()` 先用 `Mount::watch_payload(payload_offset, payload_size)` 标出 payload 区间，FUSE 服务端只累计落在这个区间里的读字节（`Mount::payload_read()`），`Stage::Writing` 于是跟着 update_engine 真正读到的 payload 走；之后的校验阶段仍按分区显示「第 2 步，共 3 步：校验 …（n/m）」。
+
+### 3. 测试与验证
+
+- 单测：`crates/skyward-install/src/fuse.rs` 新增 `only_bytes_of_the_payload_range_count`（区间外的读不计、重复读同区间重复计、由调用方 clamp）。
+- 构建：三个产物（`skyward` / `system-init` / `skyward-pack`）重编通过；镜像 `skyward-pack list` 1062 条、`scripts/verify-image.sh` 全绿；镜像内 `system/bin/recovery` 含 `0.3.1-onyx.2`、`clear the read-only flag of`、两条新 kmsg 文案。
+- **未做**：没有在 onyx 上再刷一次完整 OTA。`BLKRO` 那一段依据的是上游 #48 在同类 Android 17 机器上的实机结论 + 本次代码；复验步骤见 [`00-status.md`](00-status.md) 第 3 节。
+
+---
+
 ## v0.3.1-onyx.1 · 2026-11-14
 
 **主题：同步上游 v0.3.1（新 UI 状态机、密钥服务自动发现、自带 OMAPI）+ 保留 onyx 全部设备能力**

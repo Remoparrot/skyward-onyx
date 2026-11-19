@@ -1,7 +1,7 @@
 # 构建
 
 > 状态：**现行**
-> 对应版本：`v0.3.1-onyx.1`
+> 对应版本：`v0.3.1-onyx.2`
 > 参考环境：Windows 10/11 + MSYS2 bash；Linux 理论可行但未实测。
 
 ---
@@ -57,7 +57,7 @@ scripts/bootstrap.sh
 
 1. `git clone https://github.com/kirklin/skyward.git vendor/skyward`；
 2. 检出固定 commit `bd34c05`（v0.3.1）；
-3. 按顺序应用 `patches/0001`–`0006`，并写 `vendor/skyward/.onyx-patched` 标记。
+3. 按顺序应用 `patches/0001`–`0007`，并写 `vendor/skyward/.onyx-patched` 标记。
 
 重来一遍：
 

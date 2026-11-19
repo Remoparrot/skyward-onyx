@@ -251,6 +251,15 @@ adb shell dmesg | grep -i awinic | tail
 
 本版本只实现页面，**没有测试**。不要在没有 `vbmeta` / boot 备份的情况下点。
 
+### 10.6 刷完官方整包，recovery 变回原厂
+
+- 先看 `dmesg | grep 'install:'`：
+  - `this recovery is not asked to be kept` → 安装页的「自动重新刷入 Skyward」没勾（手机有 `recovery_a/_b` 时才有这一行开关）；
+  - `hold this build already` → 两个槽的 recovery 都已经是这个 build，本来就不用写；
+  - `written back to [B]: Err(...)` → 写回失败（0.3.1-onyx.1 及更早会因 `update_engine` 留下的只读标志报 `EPERM`，见[坑 31](06-pitfalls.md)）。刷 onyx.2 或更新版本。
+- 无论如何都可以手动救：`fastboot flash recovery recovery.img`（只动 recovery 分区），或 `fastboot flash recovery_b recovery.img` 显式指定槽位。
+- 进度条一到 100% 就不动是 0.3.1-onyx.1 及更早的显示 bug（见[坑 32](06-pitfalls.md)），不影响实际刷入；onyx.2 起进度按 payload 走。
+
 ---
 
 ## 11. 构建失败

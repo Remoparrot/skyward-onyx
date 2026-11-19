@@ -35,7 +35,7 @@
 **是**：
 
 - onyx 的设备配置 `devices/onyx.toml`；
-- 相对上游 v0.3.1 的六个补丁（Windows 构建、CE 回退、配置/WLAN/振动/库路径、下载与更新、UI、版本）；
+- 相对上游 v0.3.1 的七个补丁（Windows 构建、CE 回退、配置/WLAN/振动/库路径、下载与更新、UI、版本、安装期进度与回刷）；
 - 可复现的构建脚本（取上游、取原厂镜像、编译、打包、校验）；
 - 真机验证记录、设计思路、踩坑、排错、版本记录；
 - 一个可以直接刷的 Release 镜像。
@@ -79,7 +79,7 @@
 | 禁用 AVB 2.0 | ⚠️ | 已实现；按要求未测试 |
 | 双系统 / OTA / fastbootd | ⚠️ | 未验证，不建议依赖 |
 
-「⚠️」表示二进制里有、上游也支持，但**没有在 onyx 上逐项跑过**。不要把它当成「已经能用」对外承诺；v0.3.1-onyx.1 的诚实边界见 [`00-status.md`](00-status.md)。
+「⚠️」表示二进制里有、上游也支持，但**没有在 onyx 上逐项跑过**。不要把它当成「已经能用」对外承诺；v0.3.1-onyx.2 的诚实边界见 [`00-status.md`](00-status.md)。
 
 ## 6. 四次迭代
 
@@ -91,6 +91,7 @@
 | v4 | `data.rs` 在 weaver 不可用时回退到 gatekeeper 绑定的 protector | **user 0 CE 解开**；相册、微信可读 |
 | v0.3.0-onyx.1 | OS4 底包；WLAN + 自动连接；AW8697 振动；首屏自动解密；锁屏（每次亮屏）/ 双击亮屏 / AVB 页；控制中心已删 | 真机：`/data` 自动打开、WLAN 自动连、振动驱动；其余见状态页 |
 | v0.3.1-onyx.1 | 同步上游 v0.3.1（UI 状态机、密钥服务自动发现、自带 OMAPI）；onyx 的 WLAN/振动/锁屏/读数/下载全部保留；修复 keymint 缺 `libvndksupport.so` | 真机：`/data` 自动挂载、user 0 CE 自动解开、WLAN 5 GHz 上网、锁屏与读数截图确认；触摸/振动未复测 |
+| v0.3.1-onyx.2 | 安装期两处修复：整包刷完把 Skyward 写回目标槽 recovery（清掉 update_engine 留下的只读标志再写、写完恢复）、写入进度只按 payload 区间计数 | 构建/镜像校验通过，`skyward-install` 123 个单测在真机 aarch64 上全过；**未再跑一次完整 OTA** |
 
 完整哈希与验证见 [`00-status.md`](00-status.md) 和 [`07-changelog.md`](07-changelog.md)。
 

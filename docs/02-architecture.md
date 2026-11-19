@@ -1,7 +1,7 @@
 # 架构
 
 > 状态：**现行**
-> 对应版本：`v0.3.1-onyx.1`
+> 对应版本：`v0.3.1-onyx.2`
 > 读者：要改代码 / 要判断某个现象该看哪一层的人。
 
 ---
@@ -60,7 +60,7 @@ flowchart LR
 | `system/etc/task_profiles.json` | 新增 1,709 字节 | 性能配置 |
 | `prop.default` | 追加 | `ro.secure=0`、`ro.adb.secure=0`、`ro.debuggable=1`、`ro.ota.allow_downgrade=true` |
 
-> OS4 原厂 stock ramdisk 是 30,175,673 字节 / 1051 条；v0.3.1-onyx.1 是 50,668,045 字节 / 1062 条。旧 README 里写的「998 / 996 条」是 v2/v3 时期的数字；以 `skyward-pack list` 为准。
+> OS4 原厂 stock ramdisk 是 30,175,673 字节 / 1051 条；v0.3.1-onyx.2 是 50,811,639 字节 / 1062 条（onyx.1 是 50,668,045）。旧 README 里写的「998 / 996 条」是 v2/v3 时期的数字；以 `skyward-pack list` 为准。
 
 ---
 
@@ -248,9 +248,10 @@ AW8697（`awinic_haptic`）在 i2c `5-005a`，input `event5` 有 FF，但它的�
 | `0003-onyx-config-wlan-haptics.patch` | `skyward-config/src/lib.rs`、`skyward-programs/src/secure.rs`、`skyward/src/{haptics,main,settings,wlan}.rs` | 配置新增 `[wlan] preload` / `[update] skyward` / 振动四路径；`/vendor` 程序的库目录补上安装系统的 `/system/lib64` 与 bootstrap；WLAN 5 GHz 与自动连接；AW8697 振动；设置持久化；首屏解密页 | onyx 的设备差异 + 0.3.1 自动发现密钥服务的库路径修复 |
 | `0004-onyx-updates-downloads.patch` | `skyward-net/src/{download,github,http,supplicant}.rs`、`skyward/src/updates.rs` | 512 连接并行下载、DNS 缓存、自更新仓库可配、优先裸 `recovery.img`、本地 `recovery.img` 刷入 | GitHub 直连单连接约 40 KB/s，45.85 MB 要 17 分钟 |
 | `0005-onyx-ui.patch` | `skyward-ui/**`、`skyward-preview/src/main.rs`、`skyward/src/ui.rs` | 锁屏（模糊快照、强度滑杆、滑块重画）、首页读数、解密页倒计时 / 记住密码、下载页 / 二维码 / 纯文本网页、更新页、双击亮屏、AVB 页、面板不 rest | onyx.1–onyx.5 的 UI 全部移植到 0.3.1 的 `app/*` 状态机 |
-| `0006-onyx-version.patch` | `Cargo.toml`、`Cargo.lock` | 版本 `0.3.1-onyx.1` 与依赖锁 | 发布与自更新版本比较 |
+| `0006-onyx-version.patch` | `Cargo.toml`、`Cargo.lock` | 版本 `0.3.1-onyx.2` 与依赖锁 | 发布与自更新版本比较 |
+| `0007-install-payload-progress-and-recovery-write.patch` | `skyward-install/src/{fuse,run,image}.rs`、`skyward-install/src/image/protection.rs`（新增） | FUSE 只累计 payload 区间的读字节（`Mount::watch_payload` / `payload_read`），`Stage::Writing` 按它走；`image::flash` 写前对选中设备 `BLKROGET`/`BLKROSET 0`，写完读回后恢复只读标志（`ReadOnly` 守卫，`Drop` 兜底） | 前者修「进度一上来就 100% 卡住」；后者修 update_engine 校验后把目标块设备置只读、收尾写 recovery 报 `EPERM` 导致不回刷 |
 
-补丁顺序固定，`scripts/bootstrap.sh` 按 `0001 → 0006` 应用。上游 commit 与每个补丁的说明见 [`patches/README.md`](../patches/README.md)。
+补丁顺序固定，`scripts/bootstrap.sh` 按 `0001 → 0007` 应用。上游 commit 与每个补丁的说明见 [`patches/README.md`](../patches/README.md)。
 
 ---
 

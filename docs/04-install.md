@@ -186,7 +186,18 @@ fastboot flash recovery recovery-v3-backup.img
 
 ---
 
-## 7. 卸载
+## 7. 刷官方整包（ROM）时 recovery 怎么自保
+
+在「安装」里选官方整包（zip 里有 `payload.bin` 的那种）时，是 `update_engine` 在写目标槽的 `system` / `boot` / **`recovery`** 等分区；写完它会把目标块设备置成只读来校验。所以：
+
+- 安装页的「自动重新刷入 Skyward」开关（默认开，手机有 `recovery_a` / `recovery_b` 时才显示）要保持打开；关掉就只在 `dmesg` 里留一行 `install: this recovery is not asked to be kept`；
+- `update_engine` 结束后 Skyward 会把**自己**写回目标槽的 recovery 分区，并在安装页底部显示「已将 Skyward 重新刷入 B 的 recovery 分区」；
+- 0.3.1-onyx.1 及更早的版本这一步会失败（`EPERM`，见 [坑 31](06-pitfalls.md)），表现为刷完整包再进 recovery 是原厂界面。onyx.2 起 `image::flash` 会先清掉只读标志、写完读回校验、再把标志恢复；
+- 万一还是失败：安装页会显示「未能将 Skyward 重新刷入 recovery 分区」和原因；用 `fastboot flash recovery` 刷回本版本镜像即可，系统与数据不受影响。
+
+---
+
+## 8. 卸载
 
 严格说没有「安装」，只是换了 recovery 分区：
 
@@ -198,7 +209,7 @@ fastboot flash recovery recovery-stock-OS4.0.2.0.XOLCNXM.img
 
 ---
 
-## 8. 安全与数据
+## 9. 安全与数据
 
 | 风险 | 说明 | 处置 |
 | --- | --- | --- |
@@ -210,7 +221,7 @@ fastboot flash recovery recovery-stock-OS4.0.2.0.XOLCNXM.img
 
 ---
 
-## 9. 刷入后检查单
+## 10. 刷入后检查单
 
 ```markdown
 - [ ] `fastboot flash recovery` 输出 OKAY

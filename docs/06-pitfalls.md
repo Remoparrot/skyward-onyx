@@ -387,3 +387,23 @@ library "libvndksupport.so" not found: needed by /vendor/lib64/libhardware.so
 **验证**：旧版本保存过密码的机器，刷 0.3.1 后第一次启动不走解密键盘，`dmesg` 从 `[0, 999]` 直接变成 `[999]`，WLAN 自动连上 `CMCC-A9s7-5G`。
 
 **如何避免**：改设置字段名时同时写迁移（或明确 `/metadata/skyward` 要清）；升级前先备份该文件。
+
+## 31. 整包刷完不自动刷回 Skyward：收尾写 recovery 报 EPERM
+
+**现象**：在「安装」里刷官方整包，`update_engine` 成功、系统能起；再进 recovery 是原厂界面。安装页底部没有「已将 Skyward 重新刷入…」，或者显示「未能将 Skyward 重新刷入 recovery 分区」+ `write /dev/block/by-name/recovery_b: Operation not permitted`。
+
+**根因**：Android 17 的 `update_engine` 在 `FilesystemVerifierAction` 校验完写入的分区后，会把目标块设备置成只读（`BLKRO`）。recovery 分区是物理分区，也在被它写与校验的名单里；Skyward 收尾的 `Kept::write()` → `image::flash()` 用 `O_RDWR` 打开 `recovery_<目标槽>` 写，内核回 `EPERM`（只读块设备拒绝一切写，和文件权限无关），于是 `Reflashed(Failed)`。
+
+**解法**：`patches/0007` 的 `crates/skyward-install/src/image/protection.rs`：写之前对这次选中的设备 `BLKROGET`，只读就 `BLKROSET 0` 清掉；写完 `sync_all` + 读回校验完再 `BLKROSET 1` 恢复（成功/出错都恢复，`ReadOnly` 的 `Drop` 兜底并写 kmsg）。只对块设备做（`FileTypeExt::is_block_device`），普通文件不会被 ioctl 碰到。
+
+**如何避免**：任何「安装收尾还要写分区」的逻辑，都默认目标设备可能被 `update_engine` 置成只读；`open(O_RDWR)` 成功不代表能写。另外 `/dmesg` 现在会分得清三种情况：没勾开关（`not asked to be kept`）、两个槽都已经是这个 build（`hold this build already`）、真的写失败（`Install: this recovery written back to … Err(...)`）。上游同类实机结论见 PR #48。
+
+## 32. 刷整包的进度一上来就 100%，然后十几分钟不动
+
+**现象**：安装页进度条几乎立刻到 100%，之后整个写入期都不动，写完才跳「完成」。实际刷入是成功的，只是「等好久」。
+
+**根因**：进度取的是「包被读到的最远字节」`Mount::served()`。`package::identify` 为了拿 zip 目录会读文件末尾的中央目录，`served()` 一下等于整个包的大小；`done = served - payload_offset` 超过 `total` 被 clamp 成 `total`，于是第一秒就 100%。`payload.bin` 在 zip 里靠前，但中央目录在最后，这个坑与机型无关。
+
+**解法**：`patches/0007`：`apply()` 先用 `Mount::watch_payload(payload_offset, payload_size)` 标出 payload 区间；FUSE 的 `Server::read()` 只累计落在这个区间里的字节（`payload_read`），`Stage::Writing` 用它、再由调用方 clamp 到 payload 大小。之后 `update_engine` 的校验阶段仍按分区显示「第 2 步，共 3 步：校验 …（n/m）」。
+
+**如何避免**：文件系统层统计「读了多少」时，先想清楚这个文件的哪一段才是业务进度；zip/镜像这类容器先读目录、后读数据，用「最远偏移」当进度一定失真。单测 `only_bytes_of_the_payload_range_count` 固定了这个行为。

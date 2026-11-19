@@ -1,8 +1,8 @@
 # 当前状态
 
 > 状态：**现行**
-> 最后更新：2026-11-14
-> 对应版本：`v0.3.1-onyx.1`
+> 最后更新：2026-11-19
+> 对应版本：`v0.3.1-onyx.2`
 > 设备：Redmi Turbo 4 Pro（`onyx`）· 底包 OS4.0.2.0.XOLCNXM（Android 17）
 
 ---
@@ -11,16 +11,16 @@
 
 | 项 | 值 |
 | --- | --- |
-| 版本 | `v0.3.1-onyx.1`（上游 v0.3.1：新 UI 状态机、密钥服务自动发现、自带 OMAPI；onyx 的 WLAN / 振动 / 锁屏 / 读数 / 下载全部保留） |
-| 构建日期 | 2026-11-14 |
+| 版本 | `v0.3.1-onyx.2`（上游 v0.3.1 + 安装期两处修复：整包刷完自动刷回自身、写入进度按 payload 走） |
+| 构建日期 | 2026-11-19 |
 | 镜像 | `recovery.img` · 104,857,600 字节 |
-| 镜像 SHA-256 | `27fbfc1c442b969fa3134fa9577f83031a34ed0979c0e697cbfa5f805f73cf5f` |
-| ramdisk | 50,668,045 字节（LZ4）· 1062 个 cpio 条目 |
-| 内含 skyward | 8,955,824 字节 · `81e6e4d92b8afa0da5c74c7d626ce1ee87cc6cd8f7990385ac1c10c17b4c66f1` |
+| 镜像 SHA-256 | `f1b7685e60498e92a19cda4c27202b4e470074702dcc8f8991376bb4429a7d38` |
+| ramdisk | 50,811,639 字节（LZ4）· 1062 个 cpio 条目 |
+| 内含 skyward | 8,959,728 字节 · `6e2c030e0e216845a4ec242ac8a7ff99f7448fa4e0ce9c06d56be0442ea06840` |
 | zip（在线更新用） | 本次未打；在线更新优先取 release 里的裸 `recovery.img`，不需要 zip |
 | 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · 104,857,600 字节 · `ce53850714fe2ca9ab22600a00e71813df2775dc94244192c83a224d7ecd3357` |
-| 上游 | `kirklin/skyward` @ `bd34c05`（v0.3.1）+ 0001–0006 |
-| 真机 | ✅ 已刷入 onyx：`/data` 自动挂载、user 0 CE 自动解开（旧版保存的锁屏密码）、WLAN 自动连接 5 GHz 并上网、首页读数、息屏再点亮先出锁屏（模糊快照）、设置页新滑块/开关；触摸与振动未逐项复测，见第 2/3 节 |
+| 上游 | `kirklin/skyward` @ `bd34c05`（v0.3.1）+ 0001–0007 |
+| 真机 | ✅ 已刷入 onyx：`/data` 自动挂载、user 0 CE 自动解开（旧版保存的锁屏密码）、WLAN 自动连接 5 GHz 并上网、首页读数、息屏再点亮先出锁屏（模糊快照）、设置页新滑块/开关；触摸与振动未逐项复测，见第 2/3 节。onyx.2 的安装期修复本身尚未跑过一次完整 OTA，见第 3 节 |
 
 发布资产在 [Releases](https://github.com/Remoparrot/skyward-onyx/releases)；仓库内只有源码、补丁、配置和文档。
 
@@ -37,7 +37,8 @@
 | v0.3.0-onyx.3 | `d0a67128…60c5` | 更新下载最多 512 连接并行；可用空间读数在解密后补齐；更新页对本地刷入显示进度/结果 |
 | v0.3.0-onyx.4 | `239d0fbb…f3ea` | 旧版；「下载」页改成图形浏览器（HTML/CSS 子集 + 图片 + 链接）；URL 下载走 512 并行；关于本机署名加上 Remoparrot。浏览器在 onyx.5 删除 |
 | v0.3.0-onyx.5 | `ac9be2c5…0de2` | 删掉浏览器、下载页回归；锁屏背景模糊 + 强度滑杆 + 滑块拖动修复（浅色/深色）；5 GHz WLAN（监管域/扫描/PMF）；解密前不锁屏；同日重建：调色恢复采样原值（撤销 P3 + 饱和度 0.68 校正）；不再有色彩风格切换 |
-| v0.3.1-onyx.1 | `27fbfc1c…cf5f` | **当前**；上游同步到 v0.3.1（UI 状态机拆分、`skyward-programs` 自动发现密钥服务、自带 `skyward-omapi`）；onyx 的 WLAN / 振动 / 锁屏模糊与滑块 / 首页读数 / 下载页全部移植；补丁 6 个；同日修复 keymint 因缺 `libvndksupport.so` 启动失败（库路径加安装系统 `/system/lib64` 与 bootstrap） |
+| v0.3.1-onyx.1 | `27fbfc1c…cf5f` | 上游同步到 v0.3.1（UI 状态机拆分、`skyward-programs` 自动发现密钥服务、自带 `skyward-omapi`）；onyx 的 WLAN / 振动 / 锁屏模糊与滑块 / 首页读数 / 下载页全部移植；补丁 6 个；同日修复 keymint 因缺 `libvndksupport.so` 启动失败（库路径加安装系统 `/system/lib64` 与 bootstrap） |
+| v0.3.1-onyx.2 | `f1b7685e…7d38` | **当前**；安装期两处修复（补丁 7）：整包刷完自动把 Skyward 写回目标槽的 recovery 分区（不再被 update_engine 留下的只读标志挡住）、写入进度只按 payload 区间计数（不再一上来就 100%）；底包仍是 OS4.0.2.0 |
 
 ---
 
@@ -99,6 +100,7 @@
 
 | 项 | 状态 | 说明 |
 | --- | --- | --- |
+| 安装期两处修复（onyx.2） | ⚠️ | 代码路径有单元测试（payload 区间计数），`BLKROSET` 那段按上游 #48 的真机结论实现；**尚未在 onyx 上再跑一次完整 OTA**。复验方法：进 Skyward 安装页选官方整包，观察进度是否从 0 走到 100%（不再一上来 100% 卡住）、结束时是否出现「已将 Skyward 重新刷入B 的 recovery 分区」；重启进 recovery 看是否还是 Skyward |
 | user 0 CE（相册 / 微信） | ✅ | 用用户锁屏密码通过 `skyward data --credential` 验证：`/data/media/0` 真实文件名，`DCIM/Camera` 的 JPEG 可读 |
 | user 999（第二空间 / 应用分身） | ❌ | 只有 weaver 绑定的 protector；recovery 没有 eSE 通道；不再作为解密页的等待项 |
 | recovery 锁屏（输入解锁） | ⚠️ | 滑动锁屏已用注入触摸验证（点亮 → 解锁 → 回原页）；4–8 位数字键盘未手动点过 |
@@ -119,6 +121,7 @@
 
 ## 4. 当前阻塞 / 下一步
 
+0. **onyx.2 的安装期修复要在真机上再刷一次整包才算闭环**：刷入 onyx.2 → 进「安装」选官方整包 → 看进度是否从 0 走到 100%、结束有没有「已将 Skyward 重新刷入B 的 recovery 分区」→ 重启进 recovery 是否还是 Skyward → `dmesg | grep 'install:'` 应有 `this recovery written back to [B]: Ok(())`。步骤见 [`07-changelog.md`](07-changelog.md) 与 [坑 31/32](06-pitfalls.md)。
 1. **触摸与振动复测**：0.3.1 的触摸服务仍由 `[[service]]` 拉起、振动配置未变，但本次只验证了「服务在跑」，没有重新注入滑动 / 听感复测；下次刷机补一次。
 2. **下载页 / 纯文本网页 / AVB**：代码已随 0005 移植并编译通过，页面未逐项点；AVB 按用户要求不测试。
 3. **纯数字键盘锁屏**：设置有 recovery 密码时的数字键盘路径未在本版点过；滑动锁屏已验。
@@ -147,7 +150,7 @@
 ## 6. 发布检查单
 
 - [x] 镜像大小 104,857,600
-- [x] 头部 v4 / kernel 0 / ramdisk 50,668,045
+- [x] 头部 v4 / kernel 0 / ramdisk 50,811,639
 - [x] `system/bin/recovery`、`skyward/system-init`、`skyward/device.toml`、`skyward/wpa-aidl-shim.so` 存在
 - [x] 镜像内二进制与编译产物 sha256 一致
 - [x] 原厂 recovery 的 sha256 与配置 `[stock] recovery` 一致（`ce538507…`）
