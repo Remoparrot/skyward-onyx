@@ -135,7 +135,7 @@ scripts/build-image.sh
 输出：
 
 ```
-out/skyward-v0.3.1-onyx.1-OS4.0.2.0.XOLCNXM.img
+out/skyward-v0.3.1-onyx.2-OS4.0.2.0.XOLCNXM.img
 ```
 
 脚本会检查大小必须正好 `104857600`，并打印 SHA-256。
@@ -143,7 +143,7 @@ out/skyward-v0.3.1-onyx.1-OS4.0.2.0.XOLCNXM.img
 校验：
 
 ```sh
-scripts/verify-image.sh out/skyward-v0.3.1-onyx.1-OS4.0.2.0.XOLCNXM.img
+scripts/verify-image.sh out/skyward-v0.3.1-onyx.2-OS4.0.2.0.XOLCNXM.img
 ```
 
 它会检查：
@@ -281,7 +281,7 @@ Cannot create temporary file in C:\Users\...\AppData\Local\Temp\: Permission den
 | system-init（手机） | `build/system-init/aarch64-linux-android/release/system-init` | ❌ |
 | skyward-pack（宿主） | `build/host/release/skyward-pack[.exe]` | ❌ |
 | 原厂 recovery | `stock/recovery.img` | ❌（Release 提供） |
-| 整分区镜像 | `out/skyward-v0.3.1-onyx.1-OS4.0.2.0.XOLCNXM.img` | ❌（Release 提供） |
+| 整分区镜像 | `out/skyward-v0.3.1-onyx.2-OS4.0.2.0.XOLCNXM.img` | ❌（Release 提供） |
 | zip | `out/*.zip`（可选，手动打） | ❌ |
 
 仓库只保留源码、补丁、配置、脚本、文档和 `SHA256SUMS`。
