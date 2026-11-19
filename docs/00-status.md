@@ -40,7 +40,7 @@
 | v0.3.1-onyx.1 | `27fbfc1c…cf5f` | 上游同步到 v0.3.1（UI 状态机拆分、`skyward-programs` 自动发现密钥服务、自带 `skyward-omapi`）；onyx 的 WLAN / 振动 / 锁屏模糊与滑块 / 首页读数 / 下载页全部移植；补丁 6 个；同日修复 keymint 因缺 `libvndksupport.so` 启动失败（库路径加安装系统 `/system/lib64` 与 bootstrap） |
 | v0.3.1-onyx.2 | `f1b7685e…7d38` | **当前**；安装期两处修复（补丁 7）：整包刷完自动把 Skyward 写回目标槽的 recovery 分区（不再被 update_engine 留下的只读标志挡住）、写入进度只按 payload 区间计数（不再一上来就 100%）；底包仍是 OS4.0.2.0 |
 
-> 2026-11-19 13:31 真机刷入：`fastboot flash recovery` 写入本版镜像，重启后 `/system/bin/recovery` 8,959,728 字节、sha256 `6e2c030e…6840`（与构建记录一致），`/data` 自动打开、user 0 自动解开、MTP 正常。刷后验证时误执行 `/system/bin/recovery --version`，按第 3 条坑触发黑屏重启，重启后 USB 暂未枚举，UI 未复验；详见 `sessions/2026-11-19-flash-onyx2.md`。另：该次启动的 cmdline 为 `swinfo.fingerprint=onyx:15/OS4.0.3.1.XOLCN:user`，与本文档记录的底包 `OS4.0.2.0.XOLCNXM` 不一致，是否已更新底包待确认。
+> 2026-11-19 13:31 真机刷入：`fastboot flash recovery` 写入本版镜像，重启后 `/system/bin/recovery` 8,959,728 字节、sha256 `6e2c030e…6840`（与构建记录一致），`/data` 自动打开、user 0 自动解开、MTP 正常。刷后验证时误执行 `/system/bin/recovery --version`，按第 3 条坑触发黑屏重启，重启后 USB 暂未枚举，UI 未复验；详见 `sessions/2026-11-19-flash-onyx2.md`。另：该次启动的 cmdline 为 `swinfo.fingerprint=onyx:15/OS4.0.3.1.XOLCN:user`，用户确认**系统最近更新过**：设备底包现为 `OS4.0.3.1.XOLCN`，而本版镜像仍基于 `OS4.0.2.0` 原厂 recovery 构建；本次启动 `/data`、MTP、WLAN 模块加载正常，触摸 / 锁屏 / 读数未复测，服务路径与 VINTF 需按新底包复核。
 
 ---
 
