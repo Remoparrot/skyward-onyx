@@ -6,6 +6,48 @@
 
 ---
 
+## v0.3.1-onyx.3 · 2026-11-19
+
+**主题：data 备份不再被小米内存扩展的 `/data/extm` 交换文件卡死**
+
+| 项 | 值 |
+| --- | --- |
+| 镜像 | `recovery.img` · 104,857,600 字节 |
+| SHA-256 | `a525afa9fef1d2166547b7b2ac21f8c99053960730e93f77f94199c063d06376` |
+| 内含 skyward | 8,965,824 字节 · `d470bc4068b821759c67813d3593e67e64bf89831c40f3cd27211f153cd19e13` |
+| ramdisk | 50,815,375 字节 · 1062 条 |
+| 底包 | OS4.0.2.0.XOLCNXM（构建底包不变；真机系统已到 OS4.0.4.0.XOLCNXM，见 `00-status.md`） |
+| 上游 | `kirklin/skyward` @ `bd34c05`（v0.3.1）+ 0001–0007 |
+| zip | 未打（在线更新取裸 `recovery.img`） |
+| 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · `ce538507…cd3357`（未改动） |
+
+### 1. 备份 data 每次都失败在进度约 45%
+
+**现象**：备份页勾「data 分区」→ 内部存储 → 完成后校验，备份能跑起来，写到约 17 GB（进度约 45%）时失败，进度页转成失败页；`dmesg` 只有一行：
+
+```
+skyward: backup failed: back up the data partition's files:
+archive /data/extm/OuEEYQAAAAAriBSUBbu0U1W8A4UpuT1s:
+open /data/extm/OuEEYQAAAAAriBSUBbu0U1W8A4UpuT1s: Required key not available (os error 126)
+```
+
+**根因**：`/data/extm` 是 HyperOS「内存扩展」放交换文件的目录（本机 6 GiB，文件名每次开机重起，内容用与安全世界绑定的密钥封装）。换一次启动再打开就是 `ENOKEY`，recovery 里永远打不开它；它还是易失的内存内容，备份回去也没有意义。
+
+**修法**：`devices/onyx.toml` 新增 `[backup] data_skipped = ["extm"]`，与上游默认表里跳过 `vendor/goodix`、`vendor/tzstorage`（指纹 / 安全世界）同一机制；解包侧同样跳过，恢复时不会把交换文件写回去。改动只在设备配置，Rust 代码与上游一致。详见 [`sessions/2026-11-19-backup-extm.md`](sessions/2026-11-19-backup-extm.md) 与 [坑 33](06-pitfalls.md)。
+
+### 2. 版本号
+
+`patches/0006` 与 `vendor/skyward/Cargo.toml` / `Cargo.lock` 的 workspace 版本从 `0.3.1-onyx.2` 改为 `0.3.1-onyx.3`（关于本机显示 `0.3.1-onyx.3`）。
+
+### 3. 测试与验证
+
+- 构建：`build-phone.sh` / `build-image.sh` / `verify-image.sh` 全绿；镜像 104,857,600 字节、ramdisk 50,815,375 字节、1062 条；镜像内 `system/bin/recovery` 含 `0.3.1-onyx.3`，其 SHA-256 与构建产物一致（`d470bc40…9e13`）。
+- data 备份（修复本体）：在**只差版本号的测试镜像**上跑通——同一份代码与 `device.toml`，勾 data + 内部存储 + 完成后校验，34.4 GB 写完并校验（`backup saved in /sdcard/Skyward/backups/…`，`backup.toml` 中 size/stored 34,833,827,840、sha256 `8c98ce7c…2dfc`），比修复前少 6.5 GB、不再卡在 `/data/extm`。
+- 真机（本版）：`fastboot flash recovery` 刷入；`dmesg`：`onyx 0.3.1-onyx.3 recovery up`；`sha256sum /system/bin/recovery` 为 `d470bc40…9e13`；`/skyward/device.toml` 含 `data_skipped = ["extm"]`；关于本机显示 `0.3.1-onyx.3`、`OS4.0.4.0.XOLCNXM`。
+- **未做**：本版刷入后按用户要求没有再跑第二遍 data 备份（第一次验证备份与随后的复跑均已删除）；恢复（restore）全流程未跑；onyx.2 的两处安装期修复仍待在真机上跑一次完整官方整包（见 `00-status.md` 第 4 节）。
+
+---
+
 ## v0.3.1-onyx.2 · 2026-11-19
 
 **主题：修「官方整包刷完不自动刷回 Skyward」与「刷整包时进度卡在 100%」**

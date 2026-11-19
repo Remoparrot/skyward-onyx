@@ -14,14 +14,14 @@
 
 | 项 | 值 |
 | --- | --- |
-| 最新 release | [`v0.3.1-onyx.2`](https://github.com/Remoparrot/skyward-onyx/releases/tag/v0.3.1-onyx.2) |
+| 最新 release | [`v0.3.1-onyx.3`](https://github.com/Remoparrot/skyward-onyx/releases/tag/v0.3.1-onyx.3) |
 | 镜像 | `recovery.img` · **104,857,600 字节**（整分区） |
-| SHA-256 | `f1b7685e60498e92a19cda4c27202b4e470074702dcc8f8991376bb4429a7d38` |
-| ramdisk | 50,811,639 字节（LZ4）· 1062 个 cpio 条目 |
-| 内含 skyward | 8,959,728 字节 · `6e2c030e0e216845a4ec242ac8a7ff99f7448fa4e0ce9c06d56be0442ea06840` |
+| SHA-256 | `a525afa9fef1d2166547b7b2ac21f8c99053960730e93f77f94199c063d06376` |
+| ramdisk | 50,815,375 字节（LZ4）· 1062 个 cpio 条目 |
+| 内含 skyward | 8,965,824 字节 · `d470bc4068b821759c67813d3593e67e64bf89831c40f3cd27211f153cd19e13` |
 | 底包 | HyperOS **OS4.0.2.0.XOLCNXM**（Android 17） |
 | 上游 | `kirklin/skyward` @ `bd34c05`（v0.3.1）+ 7 个补丁 |
-| 真机 | ✅ 已刷入 onyx 并验证：`/data` 自动挂载、user 0 CE（`/sdcard` 与 `DCIM/Camera` 里的 JPEG 可读，用旧版本记住的锁屏密码自动解密）、WLAN 自动连接并上网（`CMCC-A9s7-5G`，5260 MHz，`192.168.1.227`）、首页读数、息屏再点亮后的滑动锁屏（模糊快照）、双击亮屏与设置页的新滑块/开关；**触摸服务与振动沿用 0.3.0 的实测路径，这一次未逐项注入复测**。onyx.2 的两处安装期修复（整包刷完自动刷回、写入进度）待在真机上用一次官方整包复验 |
+| 真机 | ✅ 已刷入 onyx 并验证：`/data` 自动挂载、user 0 CE（`/sdcard` 与 `DCIM/Camera` 里的 JPEG 可读，用旧版本记住的锁屏密码自动解密）、WLAN 自动连接并上网（`CMCC-A9s7-5G`，5260 MHz，`192.168.1.227`）、首页读数、息屏再点亮后的滑动锁屏（模糊快照）、双击亮屏与设置页的新滑块/开关、关于本机显示 `0.3.1-onyx.3`；**data 备份 34.4 GB 跑通并校验**（`[backup] data_skipped = ["extm"]`，修掉备份必失败）；触摸服务与振动沿用 0.3.0 的实测路径，这一次未逐项注入复测。onyx.2 的两处安装期修复（整包刷完自动刷回、写入进度）待在真机上用一次官方整包复验 |
 | 风险 | ⚠️ 需要解锁 bootloader；只刷 recovery 分区，详见[安装](docs/04-install.md) |
 
 > **一句话结论**：不需要 weaver，也不需要 OMAPI 桥。onyx 的 user 0 有两份 protector，其中一份绑在 gatekeeper 上；weaver 不可用时回退到它，用同一个锁屏密码即可拿到合成密码（SP），解开 CE。详细原理见[设计思路](docs/05-design-notes.md)。

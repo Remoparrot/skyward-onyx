@@ -2,8 +2,8 @@
 
 > 状态：**现行**
 > 最后更新：2026-11-19
-> 对应版本：`v0.3.1-onyx.2`
-> 设备：Redmi Turbo 4 Pro（`onyx`）· 底包 OS4.0.2.0.XOLCNXM（Android 17）
+> 对应版本：`v0.3.1-onyx.3`
+> 设备：Redmi Turbo 4 Pro（`onyx`）· 构建底包 OS4.0.2.0.XOLCNXM（Android 17）；真机系统已到 OS4.0.4.0.XOLCNXM
 
 ---
 
@@ -11,16 +11,16 @@
 
 | 项 | 值 |
 | --- | --- |
-| 版本 | `v0.3.1-onyx.2`（上游 v0.3.1 + 安装期两处修复：整包刷完自动刷回自身、写入进度按 payload 走） |
+| 版本 | `v0.3.1-onyx.3`（上游 v0.3.1 + onyx.2 的安装期两处修复 + data 备份跳过 `/data/extm`） |
 | 构建日期 | 2026-11-19 |
 | 镜像 | `recovery.img` · 104,857,600 字节 |
-| 镜像 SHA-256 | `f1b7685e60498e92a19cda4c27202b4e470074702dcc8f8991376bb4429a7d38` |
-| ramdisk | 50,811,639 字节（LZ4）· 1062 个 cpio 条目 |
-| 内含 skyward | 8,959,728 字节 · `6e2c030e0e216845a4ec242ac8a7ff99f7448fa4e0ce9c06d56be0442ea06840` |
+| 镜像 SHA-256 | `a525afa9fef1d2166547b7b2ac21f8c99053960730e93f77f94199c063d06376` |
+| ramdisk | 50,815,375 字节（LZ4）· 1062 个 cpio 条目 |
+| 内含 skyward | 8,965,824 字节 · `d470bc4068b821759c67813d3593e67e64bf89831c40f3cd27211f153cd19e13` |
 | zip（在线更新用） | 本次未打；在线更新优先取 release 里的裸 `recovery.img`，不需要 zip |
 | 原厂 recovery | `recovery-stock-OS4.0.2.0.XOLCNXM.img` · 104,857,600 字节 · `ce53850714fe2ca9ab22600a00e71813df2775dc94244192c83a224d7ecd3357` |
 | 上游 | `kirklin/skyward` @ `bd34c05`（v0.3.1）+ 0001–0007 |
-| 真机 | ✅ 已刷入 onyx：`/data` 自动挂载、user 0 CE 自动解开（旧版保存的锁屏密码）、WLAN 自动连接 5 GHz 并上网、首页读数、息屏再点亮先出锁屏（模糊快照）、设置页新滑块/开关；触摸与振动未逐项复测，见第 2/3 节。onyx.2 的安装期修复本身尚未跑过一次完整 OTA，见第 3 节 |
+| 真机 | ✅ 已刷入 onyx：`/data` 自动挂载、user 0 CE 自动解开（旧版保存的锁屏密码）、WLAN 自动连接 5 GHz 并上网、首页读数、息屏再点亮先出锁屏（模糊快照）、设置页新滑块/开关、关于本机显示 `0.3.1-onyx.3`。data 备份 34.4 GB 跑通并校验，验证时用的是与本版只差版本号的测试镜像（本版刷入后没有复跑备份）。触摸与振动未逐项复测，见第 2/3 节。onyx.2 的安装期修复本身尚未跑过一次完整 OTA，见第 3 节 |
 
 发布资产在 [Releases](https://github.com/Remoparrot/skyward-onyx/releases)；仓库内只有源码、补丁、配置和文档。
 
@@ -38,11 +38,14 @@
 | v0.3.0-onyx.4 | `239d0fbb…f3ea` | 旧版；「下载」页改成图形浏览器（HTML/CSS 子集 + 图片 + 链接）；URL 下载走 512 并行；关于本机署名加上 Remoparrot。浏览器在 onyx.5 删除 |
 | v0.3.0-onyx.5 | `ac9be2c5…0de2` | 删掉浏览器、下载页回归；锁屏背景模糊 + 强度滑杆 + 滑块拖动修复（浅色/深色）；5 GHz WLAN（监管域/扫描/PMF）；解密前不锁屏；同日重建：调色恢复采样原值（撤销 P3 + 饱和度 0.68 校正）；不再有色彩风格切换 |
 | v0.3.1-onyx.1 | `27fbfc1c…cf5f` | 上游同步到 v0.3.1（UI 状态机拆分、`skyward-programs` 自动发现密钥服务、自带 `skyward-omapi`）；onyx 的 WLAN / 振动 / 锁屏模糊与滑块 / 首页读数 / 下载页全部移植；补丁 6 个；同日修复 keymint 因缺 `libvndksupport.so` 启动失败（库路径加安装系统 `/system/lib64` 与 bootstrap） |
-| v0.3.1-onyx.2 | `f1b7685e…7d38` | **当前**；安装期两处修复（补丁 7）：整包刷完自动把 Skyward 写回目标槽的 recovery 分区（不再被 update_engine 留下的只读标志挡住）、写入进度只按 payload 区间计数（不再一上来就 100%）；底包仍是 OS4.0.2.0 |
+| v0.3.1-onyx.2 | `f1b7685e…7d38` | 旧版；安装期两处修复（补丁 7）：整包刷完自动把 Skyward 写回目标槽的 recovery 分区（不再被 update_engine 留下的只读标志挡住）、写入进度只按 payload 区间计数（不再一上来就 100%）；底包仍是 OS4.0.2.0 |
+| v0.3.1-onyx.3 | `a525afa9…0376` | **当前**；`[backup] data_skipped = ["extm"]`（坑 33）修掉 data 备份必失败；版本号升到 0.3.1-onyx.3；其余与 onyx.2 相同 |
 
 > 2026-11-19 13:31 真机刷入：`fastboot flash recovery` 写入本版镜像，重启后 `/system/bin/recovery` 8,959,728 字节、sha256 `6e2c030e…6840`（与构建记录一致），`/data` 自动打开、user 0 自动解开、MTP 正常。刷后验证时误执行 `/system/bin/recovery --version`，按第 3 条坑触发黑屏重启，重启后 USB 暂未枚举，UI 未复验；详见 `sessions/2026-11-19-flash-onyx2.md`。另：该次启动的 cmdline 为 `swinfo.fingerprint=onyx:15/OS4.0.3.1.XOLCN:user`，用户确认**系统最近更新过**：设备底包现为 `OS4.0.3.1.XOLCN`，而本版镜像仍基于 `OS4.0.2.0` 原厂 recovery 构建；本次启动 `/data`、MTP、WLAN 模块加载正常，触摸 / 锁屏 / 读数未复测，服务路径与 VINTF 需按新底包复核。
 
-> 2026-11-19 19:23 复刷（验证 `/data/extm` 修复）：同一份 `system/bin/recovery`（`6e2c030e…6840`）加新 `device.toml` 打成 `out/test-skip-extm.img`（`0c3b1498…af98`）刷入；本次启动底包已是 `OS4.0.4.0.XOLCNXM`，`/data` 自动打开、MTP / WLAN / 截帧正常，data 备份 34.4 GB 跑通并校验。底包再前进一版，服务路径 / VINTF 仍待按新底包复核。
+> 2026-11-19 19:23 复刷（验证 `/data/extm` 修复）：同一份 `system/bin/recovery`（`6e2c030e…6840`）加新 `device.toml` 打成 `out/test-skip-extm.img`（`0c3b1498…af98`）刷入；本次启动底包已是 `OS4.0.4.0.XOLCNXM`，`/data` 自动打开、MTP / WLAN / 截帧正常，data 备份 34.4 GB 跑通并校验（备份副本验证后已按用户要求删除）。
+
+> 2026-11-19 19:37 发版复验 `v0.3.1-onyx.3`：版本号升到 0.3.1-onyx.3 后重编二进制（8,965,824 字节 · `d470bc40…9e13`）并打镜像（`a525afa9…0376`），`fastboot flash recovery` 刷入；`dmesg` 为 `onyx 0.3.1-onyx.3 recovery up`，关于本机显示 0.3.1-onyx.3，配置含 `data_skipped`。刷入后按用户要求没有再跑一遍备份；随后把手机重启回系统并清掉两次验证备份（`/data` 从 98 GB 回落到 55 GB）。
 
 ---
 
@@ -125,7 +128,7 @@
 
 ## 4. 当前阻塞 / 下一步
 
-0. **`/data/extm` 修复等发版**（2026-11-19 晚）：`devices/onyx.toml` 新增 `[backup] data_skipped = ["extm"]`，解决 data 备份必失败（坑 33）；改动只涉及设备配置，手机侧二进制未重编，真机刷的是测试镜像 `out/test-skip-extm.img`（104,857,600 字节，SHA-256 `0c3b1498…af98`，内含 `system/bin/recovery` 仍为 `6e2c030e…6840`）。要闭环需发 `v0.3.1-onyx.3`：改补丁 0006 的版本号 → `build-phone.sh` → `build-image.sh` → 刷机 → 再跑一次 data 备份，并同步 changelog / README / `SHA256SUMS`。详见 `sessions/2026-11-19-backup-extm.md`。
+0. **`/data/extm` 修复已随 `v0.3.1-onyx.3` 发出**（2026-11-19 晚）：`devices/onyx.toml` 的 `[backup] data_skipped = ["extm"]` 解决 data 备份必失败（坑 33），真机刷入本版并核对版本 / 配置 / 二进制哈希；备份复跑按用户要求中止。剩余：恢复（restore）流程、系统分区 / 启动分区 / EFS 备份、U 盘目标未验证。详见 `sessions/2026-11-19-backup-extm.md`。
 0b. **onyx.2 的安装期修复要在真机上再刷一次整包才算闭环**：刷入 onyx.2 → 进「安装」选官方整包 → 看进度是否从 0 走到 100%、结束有没有「已将 Skyward 重新刷入B 的 recovery 分区」→ 重启进 recovery 是否还是 Skyward → `dmesg | grep 'install:'` 应有 `this recovery written back to [B]: Ok(())`。步骤见 [`07-changelog.md`](07-changelog.md) 与 [坑 31/32](06-pitfalls.md)。
 1. **触摸与振动复测**：0.3.1 的触摸服务仍由 `[[service]]` 拉起、振动配置未变，但本次只验证了「服务在跑」，没有重新注入滑动 / 听感复测；下次刷机补一次。
 2. **下载页 / 纯文本网页 / AVB**：代码已随 0005 移植并编译通过，页面未逐项点；AVB 按用户要求不测试。
